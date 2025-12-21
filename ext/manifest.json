@@ -1,0 +1,69 @@
+{
+  "manifest_version": 3,
+  "name": "AriesxHit - Auto Checker",
+  "version": "2.0.0",
+  "description": "Stripe Auto Checker with CVV Bypass - Permission-Based Access Control",
+  
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "debugger",
+    "scripting"
+  ],
+  
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "assets/images/icons/icon16.png",
+      "48": "assets/images/icons/icon48.png",
+      "128": "assets/images/icons/icon128.png"
+    },
+    "default_title": "AriesxHit Auto Checker"
+  },
+  
+  "background": {
+    "service_worker": "scripts/background/background.js",
+    "type": "module"
+  },
+  
+  "content_scripts": [
+    {
+      "matches": [
+        "*://checkout.stripe.com/*",
+        "*://buy.stripe.com/*",
+        "*://*/*cs_live*",
+        "*://*/*"
+      ],
+      "js": [
+        "scripts/content/stripe-detector.js",
+        "scripts/content/form-injector.js",
+        "scripts/content/auto-fill.js",
+        "scripts/content/response-interceptor.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/images/*",
+        "assets/wallpapers/*",
+        "scripts/core/bypass.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  
+  "icons": {
+    "16": "assets/images/icons/icon16.png",
+    "48": "assets/images/icons/icon48.png",
+    "128": "assets/images/icons/icon128.png"
+  }
+}

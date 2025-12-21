@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Access Denied - AriesxHit</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 400px;
+      min-height: 500px;
+      font-family: 'Segoe UI', 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      text-align: center;
+      padding: 40px 30px;
+      background: rgba(20, 20, 30, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+    }
+
+    .icon {
+      width: 80px;
+      height: 80px;
+      background: rgba(255, 68, 68, 0.2);
+      border: 3px solid #ff4444;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 40px;
+    }
+
+    h1 {
+      font-size: 24px;
+      margin-bottom: 10px;
+      color: #ff4444;
+    }
+
+    p {
+      color: #888;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .reason {
+      background: rgba(255, 68, 68, 0.1);
+      border: 1px solid rgba(255, 68, 68, 0.3);
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #ff8888;
+    }
+
+    .action-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #FFD700, #FFA500);
+      color: #0a0a0f;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(255, 215, 0, 0.4);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      background: rgba(255, 68, 68, 0.2);
+      border: 1px solid #ff4444;
+      border-radius: 12px;
+      font-size: 11px;
+      color: #ff4444;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">🚫</div>
+    
+    <h1>Access Denied</h1>
+    
+    <p>You do not have permission to access this extension.</p>
+    
+    <div class="reason" id="reason">
+      <strong>Reason:</strong> <span id="reason-text">Your account is not approved</span>
+    </div>
+
+    <div class="status-badge" id="status-badge">
+      Status: Pending Approval
+    </div>
+    
+    <div class="action-buttons" style="margin-top: 25px;">
+      <a href="#" class="btn btn-primary" id="request-access-btn">
+        Request Access
+      </a>
+      <button class="btn btn-secondary" id="logout-btn">
+        Logout
+      </button>
+    </div>
+  </div>
+
+  <script src="scripts/utils/storage.js"></script>
+  <script src="scripts/utils/constants.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const reasonText = document.getElementById('reason-text');
+      const statusBadge = document.getElementById('status-badge');
+      const requestAccessBtn = document.getElementById('request-access-btn');
+      const logoutBtn = document.getElementById('logout-btn');
+
+      // Get user data
+      const userData = await Storage.getUserData();
+      
+      if (userData) {
+        // Update reason based on status
+        if (userData.status === 'pending') {
+          reasonText.textContent = 'Your account is pending admin approval';
+          statusBadge.textContent = 'Status: Pending Approval';
+        } else if (userData.status === 'blocked') {
+          reasonText.textContent = 'Your account has been blocked';
+          statusBadge.textContent = 'Status: Blocked';
+          statusBadge.style.background = 'rgba(255, 68, 68, 0.3)';
+        } else {
+          reasonText.textContent = 'You do not have the required permissions';
+          statusBadge.textContent = 'Status: No Permissions';
+        }
+      }
+
+      // Request access button
+      requestAccessBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        chrome.tabs.create({ 
+          url: 'https://your-registration-site.com' // Replace with actual URL
+        });
+      });
+
+      // Logout button
+      logoutBtn.addEventListener('click', async () => {
+        await Storage.clearAuth();
+        window.location.href = 'login.html';
+      });
+    });
+  </script>
+</body>
+</html>
