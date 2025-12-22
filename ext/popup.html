@@ -74,15 +74,14 @@
             <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
             <line x1="1" y1="10" x2="23" y2="10"></line>
           </svg>
-          Enter BIN
+          Enter BIN(s)
         </label>
-        <input 
-          type="text" 
+        <textarea 
           id="bin-input" 
-          placeholder="456789" 
-          maxlength="6"
-          pattern="[0-9]*"
-        >
+          placeholder="5865347834xxxxxx&#10;456474xxxxxxxxxx&#10;455747xxxxxxxxxx|10|25|xxx"
+          rows="3"
+        ></textarea>
+        <div class="input-hint">6-16 digits (x = random) | Optional: |MM|YY|CVV</div>
       </div>
       
       <!-- Proxy Input -->

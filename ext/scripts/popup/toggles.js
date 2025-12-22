@@ -192,13 +192,25 @@ const Toggles = {
     this.setToggleLoading(this.bypassToggle, true);
 
     try {
+      // Get BIN list from input
+      const binInput = document.getElementById('bin-input');
+      const bins = binInput ? this.parseBinList(binInput.value.trim()) : [];
+
       const response = await chrome.runtime.sendMessage({
-        type: 'START_BYPASS'
+        type: 'START_BYPASS',
+        data: {
+          bins: bins
+        }
       });
 
       if (response && response.success) {
         this.setToggleActive(this.bypassToggle, true);
-        Logger.addLog('success', 'Bypass mode enabled (CVV removal)');
+        
+        // Get current CVC mode from storage
+        const stored = await chrome.storage.local.get('settings_cvcModifier');
+        const cvcMode = stored.settings_cvcModifier || 'generate';
+        
+        Logger.addLog('success', `Bypass mode enabled (CVC: ${cvcMode})`);
         this.showToast('✅ Bypass Enabled', 'success');
       } else {
         const error = response?.error || 'Failed to start Bypass';
@@ -211,6 +223,21 @@ const Toggles = {
     } finally {
       this.setToggleLoading(this.bypassToggle, false);
     }
+  },
+
+  /**
+   * Parse BIN list from text
+   */
+  parseBinList(binText) {
+    if (!binText) return [];
+
+    return binText
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => {
+        const cleanedLine = line.split('|')[0].replace(/[^0-9xX]/g, '');
+        return cleanedLine.length >= 6;
+      });
   },
 
   /**

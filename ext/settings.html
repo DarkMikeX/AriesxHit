@@ -207,6 +207,99 @@
       
     </div>
     
+    <!-- Features Section -->
+    <div class="section">
+      <div class="section-header">
+        <h2 class="section-title">🔧 Features</h2>
+      </div>
+      
+      <!-- CVC Modifier -->
+      <div class="feature-item">
+        <div class="feature-info">
+          <span class="feature-label">CVC Modifier</span>
+          <span class="feature-description">How to handle CVV/CVC in requests</span>
+        </div>
+        <div class="feature-control">
+          <select id="cvc-modifier-select" class="feature-select">
+            <option value="remove">Remove</option>
+            <option value="generate" selected>Generate</option>
+            <option value="nothing">Nothing</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+      </div>
+      
+      <!-- Custom CVC Input (hidden by default) -->
+      <div class="feature-item custom-cvc-row" id="custom-cvc-row" style="display: none;">
+        <div class="feature-info">
+          <span class="feature-label">Custom CVC Value</span>
+          <span class="feature-description">Enter your custom CVC</span>
+        </div>
+        <div class="feature-control">
+          <input type="text" id="custom-cvc-input" class="feature-input" placeholder="123" maxlength="4">
+        </div>
+      </div>
+      
+      <!-- Remove Payment Agent -->
+      <div class="feature-item">
+        <div class="feature-info">
+          <span class="feature-label">Remove Payment Agent (Stripe)</span>
+          <span class="feature-description">Removes Stripe tracking metadata</span>
+        </div>
+        <div class="feature-control">
+          <label class="toggle-switch">
+            <input type="checkbox" id="remove-agent-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+      
+      <!-- 3D Secure Bypass -->
+      <div class="feature-item">
+        <div class="feature-info">
+          <span class="feature-label">3D Bypass (Stripe)</span>
+          <span class="feature-description">Removes fingerprints from 3DS requests</span>
+        </div>
+        <div class="feature-control">
+          <label class="toggle-switch">
+            <input type="checkbox" id="3ds-bypass-toggle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+      
+      <!-- Remove Zip Code -->
+      <div class="feature-item">
+        <div class="feature-info">
+          <span class="feature-label">Remove Zip Code</span>
+          <span class="feature-description">Removes postal/ZIP code from billing</span>
+        </div>
+        <div class="feature-control">
+          <label class="toggle-switch">
+            <input type="checkbox" id="remove-zip-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+      
+      <!-- Block Analytics -->
+      <div class="feature-item">
+        <div class="feature-info">
+          <span class="feature-label">
+            <span class="locked-icon">🔒</span> Block Analytics
+          </span>
+          <span class="feature-description">Block Stripe analytics/tracking</span>
+        </div>
+        <div class="feature-control">
+          <label class="toggle-switch">
+            <input type="checkbox" id="block-analytics-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+      
+    </div>
+    
     <!-- Logout Section -->
     <div class="section">
       <button class="action-btn danger full-width" id="logout-btn">

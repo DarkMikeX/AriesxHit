@@ -24,7 +24,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize
   initializeUI(userData, permissions);
   await loadWallpaper();
+  await loadFeatureSettings();
   setupEventListeners();
+  setupFeatureListeners();
 });
 
 /**
@@ -454,6 +456,174 @@ async function handleLogout() {
 
   // Redirect to login
   window.location.href = 'login.html';
+}
+
+/**
+ * Load feature settings from storage
+ */
+async function loadFeatureSettings() {
+  try {
+    const result = await chrome.storage.local.get([
+      'settings_cvcModifier',
+      'settings_customCvc',
+      'settings_remove3dsFingerprint',
+      'settings_removePaymentAgent',
+      'settings_removeZipCode',
+      'settings_blockAnalytics'
+    ]);
+
+    // CVC Modifier
+    const cvcSelect = document.getElementById('cvc-modifier-select');
+    if (cvcSelect) {
+      cvcSelect.value = result.settings_cvcModifier || 'generate';
+      toggleCustomCvcRow(cvcSelect.value === 'custom');
+    }
+
+    // Custom CVC
+    const customCvcInput = document.getElementById('custom-cvc-input');
+    if (customCvcInput && result.settings_customCvc) {
+      customCvcInput.value = result.settings_customCvc;
+    }
+
+    // Remove Payment Agent
+    const removeAgentToggle = document.getElementById('remove-agent-toggle');
+    if (removeAgentToggle) {
+      removeAgentToggle.checked = result.settings_removePaymentAgent === true;
+    }
+
+    // 3DS Bypass
+    const threeDsBypassToggle = document.getElementById('3ds-bypass-toggle');
+    if (threeDsBypassToggle) {
+      threeDsBypassToggle.checked = result.settings_remove3dsFingerprint !== false;
+    }
+
+    // Remove Zip Code
+    const removeZipToggle = document.getElementById('remove-zip-toggle');
+    if (removeZipToggle) {
+      removeZipToggle.checked = result.settings_removeZipCode === true;
+    }
+
+    // Block Analytics
+    const blockAnalyticsToggle = document.getElementById('block-analytics-toggle');
+    if (blockAnalyticsToggle) {
+      blockAnalyticsToggle.checked = result.settings_blockAnalytics === true;
+    }
+
+    console.log('[Settings] Feature settings loaded');
+  } catch (error) {
+    console.error('[Settings] Error loading feature settings:', error);
+  }
+}
+
+/**
+ * Setup feature setting listeners
+ */
+function setupFeatureListeners() {
+  // CVC Modifier Select
+  const cvcSelect = document.getElementById('cvc-modifier-select');
+  if (cvcSelect) {
+    cvcSelect.addEventListener('change', async (e) => {
+      const value = e.target.value;
+      await saveFeatureSetting('cvcModifier', value);
+      toggleCustomCvcRow(value === 'custom');
+      showToast(`✅ CVC Modifier: ${value}`, 'success');
+    });
+  }
+
+  // Custom CVC Input
+  const customCvcInput = document.getElementById('custom-cvc-input');
+  if (customCvcInput) {
+    customCvcInput.addEventListener('input', debounce(async (e) => {
+      const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+      e.target.value = value;
+      if (value.length >= 3) {
+        await saveFeatureSetting('customCvc', value);
+        showToast(`✅ Custom CVC: ${value}`, 'success');
+      }
+    }, 500));
+  }
+
+  // Remove Payment Agent Toggle
+  const removeAgentToggle = document.getElementById('remove-agent-toggle');
+  if (removeAgentToggle) {
+    removeAgentToggle.addEventListener('change', async (e) => {
+      await saveFeatureSetting('removePaymentAgent', e.target.checked);
+      showToast(`${e.target.checked ? '✅' : '⏹️'} Remove Payment Agent: ${e.target.checked ? 'ON' : 'OFF'}`, 'success');
+    });
+  }
+
+  // 3DS Bypass Toggle
+  const threeDsBypassToggle = document.getElementById('3ds-bypass-toggle');
+  if (threeDsBypassToggle) {
+    threeDsBypassToggle.addEventListener('change', async (e) => {
+      await saveFeatureSetting('remove3dsFingerprint', e.target.checked);
+      showToast(`${e.target.checked ? '✅' : '⏹️'} 3D Bypass: ${e.target.checked ? 'ON' : 'OFF'}`, 'success');
+    });
+  }
+
+  // Remove Zip Code Toggle
+  const removeZipToggle = document.getElementById('remove-zip-toggle');
+  if (removeZipToggle) {
+    removeZipToggle.addEventListener('change', async (e) => {
+      await saveFeatureSetting('removeZipCode', e.target.checked);
+      showToast(`${e.target.checked ? '✅' : '⏹️'} Remove Zip Code: ${e.target.checked ? 'ON' : 'OFF'}`, 'success');
+    });
+  }
+
+  // Block Analytics Toggle
+  const blockAnalyticsToggle = document.getElementById('block-analytics-toggle');
+  if (blockAnalyticsToggle) {
+    blockAnalyticsToggle.addEventListener('change', async (e) => {
+      await saveFeatureSetting('blockAnalytics', e.target.checked);
+      showToast(`${e.target.checked ? '✅' : '⏹️'} Block Analytics: ${e.target.checked ? 'ON' : 'OFF'}`, 'success');
+    });
+  }
+}
+
+/**
+ * Save feature setting to storage and notify background
+ */
+async function saveFeatureSetting(key, value) {
+  try {
+    // Save to storage
+    const storageKey = `settings_${key}`;
+    await chrome.storage.local.set({ [storageKey]: value });
+
+    // Notify background script
+    chrome.runtime.sendMessage({
+      type: 'UPDATE_SETTINGS',
+      settings: { [key]: value }
+    }).catch(() => {});
+
+    console.log(`[Settings] Saved ${key}:`, value);
+  } catch (error) {
+    console.error('[Settings] Error saving setting:', error);
+  }
+}
+
+/**
+ * Toggle custom CVC input row visibility
+ */
+function toggleCustomCvcRow(show) {
+  const customCvcRow = document.getElementById('custom-cvc-row');
+  if (customCvcRow) {
+    customCvcRow.style.display = show ? 'flex' : 'none';
+  }
+}
+
+/**
+ * Debounce utility
+ */
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
 }
 
 /**

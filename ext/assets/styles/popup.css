@@ -425,6 +425,14 @@ body::before {
   line-height: 1.5;
 }
 
+/* Input Hint */
+.input-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  padding-left: 2px;
+}
+
 /* Status Bar */
 .status-bar {
   background: var(--bg-glass);
