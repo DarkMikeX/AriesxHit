@@ -132,6 +132,14 @@ async function handleMessage(message, sender, sendResponse) {
       sendResponse(state.stats);
       break;
 
+    case 'GET_AUTO_HIT_STATE':
+      sendResponse({ active: state.autoHitActive });
+      break;
+
+    case 'GET_BYPASS_STATE':
+      sendResponse({ active: state.bypassActive });
+      break;
+
     case 'user_clicked_submit':
       state.userClickedSubmit = true;
       console.log('User clicked submit button');
@@ -147,6 +155,24 @@ async function handleMessage(message, sender, sendResponse) {
           timestamp: Date.now() 
         });
       }
+      sendResponse({ success: true });
+      break;
+
+    case 'STRIPE_RESPONSE':
+      // Handle Stripe response from response-interceptor.js
+      if (message.result) {
+        const result = message.result;
+        if (result.success) {
+          addLog({ type: 'success', message: `✅ Payment: ${result.message}`, timestamp: Date.now() });
+        } else if (result.code) {
+          addLog({ type: 'error', message: `❌ ${result.message} (${result.code})`, timestamp: Date.now() });
+        }
+      }
+      sendResponse({ success: true });
+      break;
+
+    case 'SUCCESS_PAGE_DETECTED':
+      addLog({ type: 'success', message: `🎉 Success page detected: ${message.url}`, timestamp: Date.now() });
       sendResponse({ success: true });
       break;
 

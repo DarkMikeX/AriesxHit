@@ -122,7 +122,7 @@ const APIClient = {
    */
   async verifyToken() {
     return await this.request(CONFIG.API.ENDPOINTS.VERIFY_TOKEN, {
-      method: 'POST'
+      method: 'GET'
     });
   },
 
