@@ -38,8 +38,8 @@
 
 /* Body */
 body {
-  width: 400px;
-  min-height: 550px;
+  width: 100%;
+  min-height: 100vh;
   font-family: 'Segoe UI', 'Roboto', 'Arial', sans-serif;
   color: var(--text-primary);
   background: var(--bg-dark);
