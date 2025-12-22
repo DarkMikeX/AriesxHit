@@ -1,157 +1,228 @@
 // ===================================
 // SERVER.JS
-// Main Express Server
+// Main Server Entry Point
 // AriesxHit Backend API
 // ===================================
 
 require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const rateLimit = require('express-rate-limit');
+const path = require('path');
+
+// Import database (initializes on require)
+require('./config/database');
 
 // Import routes
-const authRoutes = require('./routes/auth');
-const userRoutes = require('./routes/users');
-const adminRoutes = require('./routes/admin');
+const routes = require('./routes');
 
 // Import middleware
-const errorHandler = require('./middleware/errorHandler');
-
-// Import database
-const db = require('./config/database');
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const { apiLimiter } = require('./middleware/rateLimiter');
+const { trimBody } = require('./middleware/validateInput');
 
 // Initialize Express app
 const app = express();
 
 // ===================================
-// MIDDLEWARE SETUP
+// CONFIGURATION
 // ===================================
 
-// Security headers
-app.use(helmet());
+const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || 'localhost';
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const API_PREFIX = process.env.API_PREFIX || '/api';
 
-// CORS configuration
-app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests from Chrome extensions
-    if (!origin || origin.startsWith('chrome-extension://')) {
-      callback(null, true);
-    } else if (process.env.ALLOWED_ORIGINS && process.env.ALLOWED_ORIGINS.split(',').includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, true); // Allow all in development
-    }
-  },
-  credentials: true
+// ===================================
+// SECURITY MIDDLEWARE
+// ===================================
+
+// Helmet for security headers
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' }
 }));
 
-// Body parsing
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// CORS configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) {
+      return callback(null, true);
+    }
 
-// Logging
-if (process.env.NODE_ENV !== 'production') {
+    // Allow Chrome extensions
+    if (origin.startsWith('chrome-extension://')) {
+      return callback(null, true);
+    }
+
+    // Allow localhost in development
+    if (NODE_ENV === 'development') {
+      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        return callback(null, true);
+      }
+    }
+
+    // Check allowed origins from environment
+    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // Default: allow all in development, deny in production
+    if (NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Fingerprint', 'X-Requested-With'],
+  exposedHeaders: ['RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset']
+};
+
+app.use(cors(corsOptions));
+
+// ===================================
+// PARSING MIDDLEWARE
+// ===================================
+
+// Parse JSON bodies
+app.use(express.json({ limit: '10mb' }));
+
+// Parse URL-encoded bodies
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Trim whitespace from body fields
+app.use(trimBody);
+
+// ===================================
+// LOGGING MIDDLEWARE
+// ===================================
+
+// Request logging
+if (NODE_ENV === 'development') {
   app.use(morgan('dev'));
+} else {
+  app.use(morgan('combined'));
 }
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
+// Custom request logging
+app.use((req, res, next) => {
+  const start = Date.now();
+
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    if (NODE_ENV === 'development') {
+      console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
+    }
+  });
+
+  next();
 });
-app.use('/api/', limiter);
+
+// ===================================
+// RATE LIMITING
+// ===================================
+
+// Apply rate limiting to all API routes
+app.use(API_PREFIX, apiLimiter);
+
+// ===================================
+// TRUST PROXY
+// ===================================
+
+// Trust proxy for correct IP detection behind reverse proxy
+app.set('trust proxy', 1);
 
 // ===================================
 // ROUTES
 // ===================================
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
-
 // API routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/admin', adminRoutes);
+app.use(API_PREFIX, routes);
 
-// Root endpoint
+// Root route
 app.get('/', (req, res) => {
   res.json({
-    name: 'AriesxHit Backend API',
-    version: '1.0.0',
-    status: 'running',
-    endpoints: {
-      health: '/health',
-      auth: '/api/auth',
-      users: '/api/users',
-      admin: '/api/admin'
-    }
+    success: true,
+    message: 'AriesxHit API Server',
+    version: '2.0.0',
+    documentation: `${API_PREFIX}/health`
   });
 });
+
+// Favicon (prevent 404)
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).end();
+});
+
+// ===================================
+// ERROR HANDLING
+// ===================================
 
 // 404 handler
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route not found'
-  });
-});
+app.use(notFoundHandler);
 
-// Error handler (must be last)
+// Global error handler
 app.use(errorHandler);
 
 // ===================================
-// SERVER STARTUP
+// GRACEFUL SHUTDOWN
 // ===================================
 
-const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || 'localhost';
+function gracefulShutdown(signal) {
+  console.log(`\n${signal} received. Shutting down gracefully...`);
+  
+  server.close(() => {
+    console.log('HTTP server closed.');
+    
+    // Close database connection
+    const db = require('./config/database');
+    db.close();
+    console.log('Database connection closed.');
+    
+    process.exit(0);
+  });
 
-app.listen(PORT, HOST, () => {
-  console.log('\n' + '='.repeat(50));
-  console.log('🚀 AriesxHit Backend API Server Started!');
-  console.log('='.repeat(50));
-  console.log(`📡 Server running on: http://${HOST}:${PORT}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`💾 Database: SQLite`);
-  console.log(`📁 Database file: ${process.env.DATABASE_PATH || './database/ariesxhit.db'}`);
-  console.log('='.repeat(50));
-  console.log('\n📋 Available endpoints:');
-  console.log(`   GET  /health            - Health check`);
-  console.log(`   POST /api/auth/login    - User login`);
-  console.log(`   POST /api/auth/register - User registration`);
-  console.log(`   GET  /api/users/me      - Get current user`);
-  console.log(`   GET  /api/admin/users   - Get all users (admin)`);
-  console.log('='.repeat(50) + '\n');
+  // Force close after 10 seconds
+  setTimeout(() => {
+    console.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000);
+}
+
+// ===================================
+// START SERVER
+// ===================================
+
+const server = app.listen(PORT, HOST, () => {
+  console.log('\n===================================');
+  console.log('🔥 AriesxHit Backend API Server');
+  console.log('===================================');
+  console.log(`📡 Server:      http://${HOST}:${PORT}`);
+  console.log(`🌍 Environment: ${NODE_ENV}`);
+  console.log(`🔗 API Prefix:  ${API_PREFIX}`);
+  console.log(`❤️  Health:      http://${HOST}:${PORT}${API_PREFIX}/health`);
+  console.log('===================================\n');
 });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error('❌ UNHANDLED REJECTION! Shutting down...');
-  console.error(err.name, err.message);
+// Handle shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
   process.exit(1);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('👋 SIGTERM received. Shutting down gracefully...');
-  db.close();
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log('\n👋 SIGINT received. Shutting down gracefully...');
-  db.close();
-  process.exit(0);
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 module.exports = app;
