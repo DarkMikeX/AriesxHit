@@ -1,9 +1,9 @@
 // ===================================
 // DATABASE.JS
-// SQLite Database Configuration
+// SQLite Database Configuration (using sql.js - pure JS)
 // ===================================
 
-const Database = require('better-sqlite3');
+const initSqlJs = require('sql.js');
 const path = require('path');
 const fs = require('fs');
 
@@ -17,175 +17,278 @@ if (!fs.existsSync(DB_DIR)) {
   console.log('✅ Database directory created:', DB_DIR);
 }
 
-// Initialize database
-const db = new Database(DB_PATH, {
-  verbose: process.env.NODE_ENV !== 'production' ? console.log : null
-});
+// Database wrapper to provide better-sqlite3 compatible API
+class DatabaseWrapper {
+  constructor() {
+    this.db = null;
+    this.ready = false;
+    this.initPromise = this.initialize();
+  }
 
-// Enable foreign keys
-db.pragma('foreign_keys = ON');
-
-console.log('💾 Database connected:', DB_PATH);
-
-// ===================================
-// CREATE TABLES
-// ===================================
-
-function initializeTables() {
-  console.log('📋 Initializing database tables...');
-
-  // Users table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE NOT NULL,
-      fingerprint_hash TEXT UNIQUE NOT NULL,
-      password_hash TEXT,
-      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'active', 'blocked')),
-      permissions TEXT DEFAULT '{}',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      approved_at DATETIME,
-      last_login DATETIME,
-      approved_by INTEGER,
-      blocked_reason TEXT,
-      FOREIGN KEY (approved_by) REFERENCES users(id)
-    )
-  `);
-
-  // Sessions table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      token TEXT UNIQUE NOT NULL,
-      expires_at DATETIME NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
-
-  // Login attempts table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS login_attempts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT NOT NULL,
-      fingerprint_hash TEXT NOT NULL,
-      ip_address TEXT,
-      success INTEGER DEFAULT 0,
-      error_message TEXT,
-      attempted_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  // Create indexes for better performance
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-    CREATE INDEX IF NOT EXISTS idx_users_fingerprint ON users(fingerprint_hash);
-    CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
-    CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
-    CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
-    CREATE INDEX IF NOT EXISTS idx_login_attempts_username ON login_attempts(username);
-  `);
-
-  console.log('✅ Database tables initialized successfully!');
-}
-
-// Initialize tables on startup
-initializeTables();
-
-// ===================================
-// SEED DEFAULT ADMIN USER
-// ===================================
-
-function createDefaultAdmin() {
-  const bcrypt = require('bcryptjs');
-  
-  // Check if admin exists
-  const adminExists = db.prepare('SELECT id FROM users WHERE username = ?').get('admin');
-  
-  if (!adminExists) {
-    console.log('👤 Creating default admin user...');
+  async initialize() {
+    const SQL = await initSqlJs();
     
-    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
-    const passwordHash = bcrypt.hashSync(adminPassword, 10);
+    // Load existing database or create new one
+    if (fs.existsSync(DB_PATH)) {
+      const fileBuffer = fs.readFileSync(DB_PATH);
+      this.db = new SQL.Database(fileBuffer);
+      console.log('💾 Database loaded:', DB_PATH);
+    } else {
+      this.db = new SQL.Database();
+      console.log('💾 New database created:', DB_PATH);
+    }
     
-    // Create admin with a valid SHA-256 fingerprint hash
-    // This hash is for testing purposes - in production, admin should register properly
-    const insert = db.prepare(`
-      INSERT INTO users (username, fingerprint_hash, password_hash, status, permissions, approved_at)
-      VALUES (?, ?, ?, 'active', ?, CURRENT_TIMESTAMP)
+    this.ready = true;
+    this.initializeTables();
+    this.createDefaultAdmin();
+    this.save();
+    
+    return this;
+  }
+
+  // Save database to file
+  save() {
+    if (this.db) {
+      const data = this.db.export();
+      const buffer = Buffer.from(data);
+      fs.writeFileSync(DB_PATH, buffer);
+    }
+  }
+
+  // Prepare statement (returns object with run, get, all methods)
+  prepare(sql) {
+    const self = this;
+    return {
+      run(...params) {
+        try {
+          self.db.run(sql, params);
+          const result = {
+            changes: self.db.getRowsModified(),
+            lastInsertRowid: self.getLastInsertRowId()
+          };
+          self.save();
+          return result;
+        } catch (error) {
+          console.error('SQL Error:', error.message, '\nSQL:', sql);
+          throw error;
+        }
+      },
+      get(...params) {
+        try {
+          const stmt = self.db.prepare(sql);
+          stmt.bind(params);
+          if (stmt.step()) {
+            const row = stmt.getAsObject();
+            stmt.free();
+            return row;
+          }
+          stmt.free();
+          return undefined;
+        } catch (error) {
+          console.error('SQL Error:', error.message, '\nSQL:', sql);
+          throw error;
+        }
+      },
+      all(...params) {
+        try {
+          const results = [];
+          const stmt = self.db.prepare(sql);
+          stmt.bind(params);
+          while (stmt.step()) {
+            results.push(stmt.getAsObject());
+          }
+          stmt.free();
+          return results;
+        } catch (error) {
+          console.error('SQL Error:', error.message, '\nSQL:', sql);
+          throw error;
+        }
+      }
+    };
+  }
+
+  // Execute SQL directly
+  exec(sql) {
+    try {
+      this.db.run(sql);
+      this.save();
+    } catch (error) {
+      console.error('SQL Exec Error:', error.message, '\nSQL:', sql);
+      throw error;
+    }
+  }
+
+  // Get last insert row ID
+  getLastInsertRowId() {
+    const result = this.db.exec('SELECT last_insert_rowid() as id');
+    if (result.length > 0 && result[0].values.length > 0) {
+      return result[0].values[0][0];
+    }
+    return 0;
+  }
+
+  // Pragma command
+  pragma(sql) {
+    this.db.run('PRAGMA ' + sql);
+  }
+
+  // Close database
+  close() {
+    if (this.db) {
+      this.save();
+      this.db.close();
+      console.log('Database connection closed.');
+    }
+  }
+
+  // Initialize tables
+  initializeTables() {
+    console.log('📋 Initializing database tables...');
+
+    // Users table
+    this.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        fingerprint_hash TEXT UNIQUE NOT NULL,
+        password_hash TEXT,
+        status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'active', 'blocked')),
+        permissions TEXT DEFAULT '{}',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        approved_at DATETIME,
+        last_login DATETIME,
+        approved_by INTEGER,
+        blocked_reason TEXT,
+        FOREIGN KEY (approved_by) REFERENCES users(id)
+      )
     `);
+
+    // Sessions table
+    this.exec(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        token TEXT UNIQUE NOT NULL,
+        expires_at DATETIME NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Login attempts table
+    this.exec(`
+      CREATE TABLE IF NOT EXISTS login_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL,
+        fingerprint_hash TEXT NOT NULL,
+        ip_address TEXT,
+        success INTEGER DEFAULT 0,
+        error_message TEXT,
+        attempted_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create indexes
+    this.exec(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
+    this.exec(`CREATE INDEX IF NOT EXISTS idx_users_fingerprint ON users(fingerprint_hash)`);
+    this.exec(`CREATE INDEX IF NOT EXISTS idx_users_status ON users(status)`);
+    this.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`);
+    this.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
+    this.exec(`CREATE INDEX IF NOT EXISTS idx_login_attempts_username ON login_attempts(username)`);
+
+    console.log('✅ Database tables initialized successfully!');
+  }
+
+  // Create default admin user
+  createDefaultAdmin() {
+    const bcrypt = require('bcryptjs');
     
-    const permissions = JSON.stringify({
-      auto_hit: true,
-      bypass: true,
-      admin: true
-    });
+    // Check if admin exists
+    const adminExists = this.prepare('SELECT id FROM users WHERE username = ?').get('admin');
     
-    // Valid 64-character SHA-256 hash for testing
-    const adminFingerprint = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2';
+    if (!adminExists) {
+      console.log('👤 Creating default admin user...');
+      
+      const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+      const passwordHash = bcrypt.hashSync(adminPassword, 10);
+      
+      const permissions = JSON.stringify({
+        auto_hit: true,
+        bypass: true,
+        admin: true
+      });
+      
+      // Valid 64-character SHA-256 hash for testing
+      const adminFingerprint = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2';
+      
+      this.prepare(`
+        INSERT INTO users (username, fingerprint_hash, password_hash, status, permissions, approved_at)
+        VALUES (?, ?, ?, 'active', ?, CURRENT_TIMESTAMP)
+      `).run('admin', adminFingerprint, passwordHash, permissions);
+      
+      console.log('✅ Default admin user created!');
+      console.log('   Username: admin');
+      console.log('   Password:', adminPassword);
+      console.log('   ⚠️  CHANGE THIS PASSWORD IN PRODUCTION!');
+    }
+  }
+
+  // Get database info
+  getInfo() {
+    const userCount = this.prepare('SELECT COUNT(*) as count FROM users').get();
+    const sessionCount = this.prepare('SELECT COUNT(*) as count FROM sessions').get();
+    const attemptCount = this.prepare('SELECT COUNT(*) as count FROM login_attempts').get();
     
-    insert.run('admin', adminFingerprint, passwordHash, permissions);
+    let fileSize = 0;
+    let created = new Date();
+    if (fs.existsSync(DB_PATH)) {
+      const stats = fs.statSync(DB_PATH);
+      fileSize = stats.size;
+      created = stats.birthtime;
+    }
     
-    console.log('✅ Default admin user created!');
-    console.log('   Username: admin');
-    console.log('   Password:', adminPassword);
-    console.log('   ⚠️  CHANGE THIS PASSWORD IN PRODUCTION!');
+    return {
+      path: DB_PATH,
+      users: userCount?.count || 0,
+      sessions: sessionCount?.count || 0,
+      loginAttempts: attemptCount?.count || 0,
+      size: fileSize,
+      created: created
+    };
+  }
+
+  // Clean expired sessions
+  cleanExpiredSessions() {
+    const result = this.prepare('DELETE FROM sessions WHERE expires_at < CURRENT_TIMESTAMP').run();
+    return result.changes;
+  }
+
+  // Clean old login attempts
+  cleanOldLoginAttempts() {
+    const result = this.prepare(`
+      DELETE FROM login_attempts 
+      WHERE id NOT IN (
+        SELECT id FROM login_attempts 
+        ORDER BY attempted_at DESC 
+        LIMIT 1000
+      )
+    `).run();
+    return result.changes;
   }
 }
 
-// Create admin on first run
-createDefaultAdmin();
-
-// ===================================
-// HELPER FUNCTIONS
-// ===================================
-
-// Get database info
-db.getInfo = function() {
-  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
-  const sessionCount = db.prepare('SELECT COUNT(*) as count FROM sessions').get();
-  const attemptCount = db.prepare('SELECT COUNT(*) as count FROM login_attempts').get();
-  
-  return {
-    path: DB_PATH,
-    users: userCount.count,
-    sessions: sessionCount.count,
-    loginAttempts: attemptCount.count,
-    size: fs.statSync(DB_PATH).size,
-    created: fs.statSync(DB_PATH).birthtime
-  };
-};
-
-// Clean expired sessions
-db.cleanExpiredSessions = function() {
-  const result = db.prepare('DELETE FROM sessions WHERE expires_at < CURRENT_TIMESTAMP').run();
-  return result.changes;
-};
-
-// Clean old login attempts (keep last 1000)
-db.cleanOldLoginAttempts = function() {
-  const result = db.prepare(`
-    DELETE FROM login_attempts 
-    WHERE id NOT IN (
-      SELECT id FROM login_attempts 
-      ORDER BY attempted_at DESC 
-      LIMIT 1000
-    )
-  `).run();
-  return result.changes;
-};
+// Create singleton instance
+const db = new DatabaseWrapper();
 
 // Schedule cleanup tasks
 setInterval(() => {
-  const cleaned = db.cleanExpiredSessions();
-  if (cleaned > 0) {
-    console.log(`🧹 Cleaned ${cleaned} expired sessions`);
+  if (db.ready) {
+    const cleaned = db.cleanExpiredSessions();
+    if (cleaned > 0) {
+      console.log(`🧹 Cleaned ${cleaned} expired sessions`);
+    }
   }
 }, 60 * 60 * 1000); // Every hour
 
-// ===================================
-// EXPORT
-// ===================================
-
+// Export the database wrapper
 module.exports = db;

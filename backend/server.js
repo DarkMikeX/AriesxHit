@@ -12,11 +12,11 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
 
-// Import database (initializes on require)
-require('./config/database');
+// Import database
+const db = require('./config/database');
 
-// Import routes
-const routes = require('./routes');
+// Import routes (after db is set up)
+let routes;
 
 // Import middleware
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
@@ -139,11 +139,8 @@ app.use(API_PREFIX, apiLimiter);
 app.set('trust proxy', 1);
 
 // ===================================
-// ROUTES
+// STATIC ROUTES (before dynamic routes)
 // ===================================
-
-// API routes
-app.use(API_PREFIX, routes);
 
 // Root route
 app.get('/', (req, res) => {
@@ -161,27 +158,16 @@ app.get('/favicon.ico', (req, res) => {
 });
 
 // ===================================
-// ERROR HANDLING
-// ===================================
-
-// 404 handler
-app.use(notFoundHandler);
-
-// Global error handler
-app.use(errorHandler);
-
-// ===================================
 // GRACEFUL SHUTDOWN
 // ===================================
 
-function gracefulShutdown(signal) {
+function gracefulShutdown(signal, server) {
   console.log(`\n${signal} received. Shutting down gracefully...`);
   
   server.close(() => {
     console.log('HTTP server closed.');
     
     // Close database connection
-    const db = require('./config/database');
     db.close();
     console.log('Database connection closed.');
     
@@ -199,20 +185,45 @@ function gracefulShutdown(signal) {
 // START SERVER
 // ===================================
 
-const server = app.listen(PORT, HOST, () => {
-  console.log('\n===================================');
-  console.log('🔥 AriesxHit Backend API Server');
-  console.log('===================================');
-  console.log(`📡 Server:      http://${HOST}:${PORT}`);
-  console.log(`🌍 Environment: ${NODE_ENV}`);
-  console.log(`🔗 API Prefix:  ${API_PREFIX}`);
-  console.log(`❤️  Health:      http://${HOST}:${PORT}${API_PREFIX}/health`);
-  console.log('===================================\n');
-});
+async function startServer() {
+  // Wait for database to be ready
+  console.log('⏳ Waiting for database initialization...');
+  await db.initPromise;
+  console.log('✅ Database ready!');
+  
+  // Now load routes (they depend on db)
+  routes = require('./routes');
+  
+  // API routes
+  app.use(API_PREFIX, routes);
+  
+  // 404 handler
+  app.use(notFoundHandler);
+  
+  // Global error handler
+  app.use(errorHandler);
+  
+  const server = app.listen(PORT, HOST, () => {
+    console.log('\n===================================');
+    console.log('🔥 AriesxHit Backend API Server');
+    console.log('===================================');
+    console.log(`📡 Server:      http://${HOST}:${PORT}`);
+    console.log(`🌍 Environment: ${NODE_ENV}`);
+    console.log(`🔗 API Prefix:  ${API_PREFIX}`);
+    console.log(`❤️  Health:      http://${HOST}:${PORT}${API_PREFIX}/health`);
+    console.log('===================================\n');
+  });
 
-// Handle shutdown signals
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  // Handle shutdown signals
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM', server));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT', server));
+}
+
+// Start the server
+startServer().catch(error => {
+  console.error('Failed to start server:', error);
+  process.exit(1);
+});
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
