@@ -70,9 +70,25 @@ chrome.storage.local.get(['logs', 'stats', 'permissions'], (result) => {
   if (result.permissions) state.permissions = result.permissions;
 });
 
-// Open popup on icon click
-chrome.action.onClicked.addListener(() => {
-  chrome.tabs.create({ url: chrome.runtime.getURL('popup.html') });
+// Open in new tab when extension icon is clicked
+chrome.action.onClicked.addListener(async () => {
+  // Check if popup.html is already open
+  const tabs = await chrome.tabs.query({ url: chrome.runtime.getURL('popup.html') });
+  
+  if (tabs.length > 0) {
+    // Focus existing tab
+    chrome.tabs.update(tabs[0].id, { active: true });
+    chrome.windows.update(tabs[0].windowId, { focused: true });
+  } else {
+    // Check if user is logged in, open login or popup accordingly
+    const authData = await chrome.storage.local.get(['auth_token', 'user_data']);
+    
+    if (authData.auth_token && authData.user_data) {
+      chrome.tabs.create({ url: chrome.runtime.getURL('popup.html') });
+    } else {
+      chrome.tabs.create({ url: chrome.runtime.getURL('login.html') });
+    }
+  }
 });
 
 // ==================== PERMISSION CHECKS ====================

@@ -41,8 +41,11 @@
 
 /* Body */
 body {
-  width: 450px;
-  min-height: 600px;
+  width: 100%;
+  min-width: 450px;
+  max-width: 800px;
+  min-height: 100vh;
+  margin: 0 auto;
   font-family: 'Segoe UI', 'Roboto', 'Arial', sans-serif;
   color: var(--text-primary);
   background: var(--bg-default);
