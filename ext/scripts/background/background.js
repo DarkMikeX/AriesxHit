@@ -4,6 +4,43 @@
 // AriesxHit Auto Checker v2
 // ===================================
 
+// ==================== INLINE UTILITIES (Service Worker) ====================
+// These utilities are inlined because Service Workers can't import regular scripts
+
+const Formatters = {
+  maskCardNumber(cardNumber) {
+    const cleaned = String(cardNumber).replace(/\D/g, '');
+    if (cleaned.length < 10) return cleaned;
+    const first6 = cleaned.substring(0, 6);
+    const last4 = cleaned.substring(cleaned.length - 4);
+    return first6 + '...' + last4;
+  },
+  
+  formatTime(date = new Date()) {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
+  },
+  
+  formatResponseCode(code) {
+    const responses = {
+      'success': 'Success',
+      'generic_decline': 'Generic Decline',
+      'insufficient_funds': 'Insufficient Funds',
+      'card_expired': 'Card Expired',
+      'incorrect_cvc': 'Invalid CVV',
+      'do_not_honor': 'Do Not Honor',
+      'fraudulent': 'Fraudulent',
+      'lost_card': 'Lost Card',
+      'stolen_card': 'Stolen Card',
+      'incorrect_number': 'Invalid Number',
+      'processing_error': 'Processing Error'
+    };
+    return responses[code] || code;
+  }
+};
+
 // State Management
 let state = {
   autoHitActive: false,

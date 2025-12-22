@@ -95,7 +95,7 @@ const APIClient = {
       body: {
         username,
         password,
-        fingerprint_hash: fingerprint
+        fingerprintHash: fingerprint
       }
     });
   },
@@ -111,7 +111,7 @@ const APIClient = {
       method: 'POST',
       body: {
         username,
-        fingerprint_hash: fingerprint
+        fingerprintHash: fingerprint
       }
     });
   },

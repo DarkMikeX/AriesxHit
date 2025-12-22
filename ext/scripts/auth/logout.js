@@ -79,7 +79,7 @@ const Logout = {
 
     // Clear token manager cache
     if (typeof TokenManager !== 'undefined') {
-      TokenManager.clearCache();
+      TokenManager.tokenCache = null;
       TokenManager.stopAutoRefresh();
     }
 
