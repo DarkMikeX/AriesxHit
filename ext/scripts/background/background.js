@@ -453,14 +453,24 @@ function substituteCard(params, tabId) {
     params.set('payment_method_data[card][exp_year]', card.year);
   }
 
-  const maskedCard = Formatters.maskCardNumber(card.number);
+  // Get CVC modifier name for logging
+  const cvcModifierNames = {
+    'remove': 'Remove',
+    'generate': 'Generate', 
+    'nothing': 'Nothing',
+    'custom': 'Custom'
+  };
+  const cvcModeName = cvcModifierNames[state.settings.cvcModifier] || state.settings.cvcModifier;
+
+  // Log the card being used with modifier info
+  const fullCard = `${card.number}|${card.month}|${card.year}|${card.cvv}`;
   addLog({ 
     type: 'info', 
-    message: `💳 Using: ${maskedCard}|${card.month}|${card.year}|${card.cvv}`, 
+    message: `💳 ${fullCard} (gen) [CVC: ${cvcModeName}]`, 
     timestamp: Date.now() 
   });
 
-  return { modified: true, maskedCard };
+  return { modified: true, maskedCard: Formatters.maskCardNumber(card.number), fullCard };
 }
 
 function modifyCvc(params) {
@@ -826,18 +836,26 @@ function handleStripeResponse(result, tabId) {
   const tabInfo = tabState.get(tabId);
   const card = tabInfo?.currentCard;
 
-  if (result.success) {
+  // Log the gateway response
+  if (result.needsAction) {
+    addLog({ type: 'warning', message: `🔐 Stripe: 3D Secure Required`, timestamp: Date.now() });
+  } else if (result.success) {
+    addLog({ type: 'success', message: `✅ Stripe: Payment Successful`, timestamp: Date.now() });
     handleSuccess(tabId, card);
-  } else if (result.code) {
+  } else if (result.code || result.message) {
+    const responseMsg = result.code || result.message || 'Unknown Error';
+    addLog({ type: 'error', message: `❌ Stripe: ${responseMsg}`, timestamp: Date.now() });
     handleDecline(tabId, card, result);
   }
 }
 
 function handleSuccess(tabId, card) {
-  const masked = card ? Formatters.maskCardNumber(card.number) : 'Unknown';
   const cardString = card ? `${card.number}|${card.month}|${card.year}|${card.cvv}` : '';
 
-  addLog({ type: 'success', message: `✨ HIT: ${masked}`, timestamp: Date.now() });
+  // Log HIT DETECTED below the response
+  addLog({ type: 'success', message: `🎉 HIT DETECTED`, timestamp: Date.now() });
+  addLog({ type: 'success', message: `💎 ${cardString}`, timestamp: Date.now() });
+  
   state.stats.hits++;
 
   // Stop modes
@@ -859,9 +877,6 @@ function handleSuccess(tabId, card) {
 }
 
 function handleDecline(tabId, card, result) {
-  const masked = card ? Formatters.maskCardNumber(card.number) : 'Unknown';
-  
-  addLog({ type: 'error', message: `❌ ${masked}: ${result.code || result.message}`, timestamp: Date.now() });
   state.stats.declined++;
 
   // Move to next BIN in list

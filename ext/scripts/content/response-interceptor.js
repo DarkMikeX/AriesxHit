@@ -197,25 +197,11 @@
   }
 
   /**
-   * Parse decline code
+   * Parse decline code - return clean code for logging
    */
   function parseDeclineCode(code) {
-    const reasons = {
-      'generic_decline': 'Card declined (generic)',
-      'insufficient_funds': 'Insufficient funds',
-      'card_expired': 'Card expired',
-      'incorrect_cvc': 'Invalid CVV/CVC',
-      'incorrect_number': 'Invalid card number',
-      'invalid_expiry_year': 'Invalid expiry date',
-      'do_not_honor': 'Do not honor',
-      'fraudulent': 'Fraudulent transaction',
-      'lost_card': 'Lost card',
-      'stolen_card': 'Stolen card',
-      'processing_error': 'Processing error',
-      'card_not_supported': 'Card not supported'
-    };
-
-    return reasons[code] || code;
+    // Return the raw code for cleaner logs
+    return code ? code.replace(/_/g, ' ') : code;
   }
 
   /**

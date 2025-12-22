@@ -70,12 +70,7 @@ const Inputs = {
         this.validateBINInput();
       });
 
-      // Allow numbers, x/X (placeholder), | (separator), Enter (newline)
-      this.binInput.addEventListener('keypress', (e) => {
-        if (!/[0-9xX|]/.test(e.key) && e.key !== 'Enter' && e.key !== 'Backspace') {
-          e.preventDefault();
-        }
-      });
+      // No keypress restriction - allow any input, validation handles it
     }
 
     // Proxy input

@@ -49,7 +49,15 @@ const Validators = {
 
   /**
    * Validate a single BIN pattern
-   * @param {string} binPattern - BIN pattern (e.g., "456789xxxxxx|12|25|xxx")
+   * Supports any length from 6 to 16 characters
+   * Examples:
+   * - 456789 (6-digit BIN - will pad with x's)
+   * - 4567891234567890 (full 16-digit card pattern)
+   * - 456789xxxxxxxxxx (BIN with x placeholders)
+   * - 456789xxxxxxxxxx|12|25 (with expiry)
+   * - 456789xxxxxxxxxx|12|25|xxx (with expiry and CVV)
+   * 
+   * @param {string} binPattern - BIN pattern
    * @returns {Object} - { valid: boolean, error: string, bin: string }
    */
   validateSingleBIN(binPattern) {
@@ -69,7 +77,7 @@ const Validators = {
     // Clean BIN part - keep digits and x/X
     const cleanedBin = binPart.replace(/[^0-9xX]/g, '');
 
-    // Must be 6-16 characters
+    // Must be at least 6 characters, max 16
     if (cleanedBin.length < 6) {
       return { valid: false, error: 'BIN must be at least 6 characters' };
     }
@@ -78,15 +86,15 @@ const Validators = {
       return { valid: false, error: 'BIN cannot exceed 16 characters' };
     }
 
-    // First 4 characters should be digits (IIN prefix)
-    const firstFour = cleanedBin.substring(0, 4);
+    // At least first 4 characters should have digits
+    const firstFour = cleanedBin.substring(0, Math.min(4, cleanedBin.length));
     const digitCount = (firstFour.match(/\d/g) || []).length;
-    if (digitCount < 4) {
-      return { valid: false, error: 'First 4 characters must be digits' };
+    if (digitCount < 4 && cleanedBin.length >= 4) {
+      return { valid: false, error: 'First 4 characters should be digits' };
     }
 
     // Validate expiry month if provided
-    if (expMonth !== null) {
+    if (expMonth !== null && expMonth !== '') {
       if (!/^\d{1,2}$/.test(expMonth)) {
         return { valid: false, error: 'Invalid month format (use 01-12)' };
       }
@@ -97,14 +105,14 @@ const Validators = {
     }
 
     // Validate expiry year if provided
-    if (expYear !== null) {
+    if (expYear !== null && expYear !== '') {
       if (!/^\d{2,4}$/.test(expYear)) {
         return { valid: false, error: 'Invalid year format (use YY or YYYY)' };
       }
     }
 
     // Validate CVV pattern if provided
-    if (cvvPattern !== null) {
+    if (cvvPattern !== null && cvvPattern !== '') {
       const cleanedCvv = cvvPattern.replace(/[^0-9xX]/g, '');
       if (cleanedCvv.length < 3 || cleanedCvv.length > 4) {
         return { valid: false, error: 'CVV pattern must be 3-4 characters' };
