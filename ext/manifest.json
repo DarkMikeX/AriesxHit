@@ -8,8 +8,9 @@
     "activeTab",
     "storage",
     "tabs",
-    "debugger",
-    "scripting"
+    "scripting",
+    "webRequest",
+    "declarativeNetRequest"
   ],
   
   "host_permissions": [
@@ -34,11 +35,12 @@
       "matches": [
         "*://checkout.stripe.com/*",
         "*://buy.stripe.com/*",
-        "*://*/*cs_live*",
+        "*://invoice.stripe.com/*",
         "*://*/*"
       ],
       "js": [
         "scripts/content/stripe-detector.js",
+        "scripts/content/notification-ui.js",
         "scripts/content/form-injector.js",
         "scripts/content/auto-fill.js",
         "scripts/content/response-interceptor.js"
@@ -53,7 +55,9 @@
       "resources": [
         "assets/images/*",
         "assets/wallpapers/*",
-        "scripts/core/bypass.js"
+        "scripts/core/bypass.js",
+        "scripts/core/card-generator.js",
+        "scripts/core/stripe-interceptor.js"
       ],
       "matches": ["<all_urls>"]
     }

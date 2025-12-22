@@ -70,9 +70,9 @@ const Inputs = {
         this.validateBINInput();
       });
 
-      // Allow only numbers
+      // Allow numbers, x/X (placeholder), | (separator), Enter (newline)
       this.binInput.addEventListener('keypress', (e) => {
-        if (!/[0-9]/.test(e.key) && e.key !== 'Backspace') {
+        if (!/[0-9xX|]/.test(e.key) && e.key !== 'Enter' && e.key !== 'Backspace') {
           e.preventDefault();
         }
       });
@@ -165,29 +165,58 @@ const Inputs = {
 
   /**
    * Handle BIN input
+   * Supports formats:
+   * - 456789 (standard 6-8 digit BIN)
+   * - 456789xxxxxx (BIN with x placeholders)
+   * - 456789xxxxxx|12|25 (BIN with expiry)
+   * - 456789xxxxxx|12|25|xxx (BIN with expiry and CVV pattern)
+   * - Multiple BINs separated by newlines
    */
   handleBINInput(e) {
     const value = e.target.value;
 
-    // Limit to 8 digits
-    if (value.length > 8) {
-      e.target.value = value.substring(0, 8);
-    }
+    // Allow: digits, x/X (placeholder), | (separator), newlines
+    // Don't restrict input to allow full BIN patterns
 
-    // Format with spaces (optional)
-    // e.target.value = Formatters.formatBIN(e.target.value);
-
-    // Clear CC input if BIN is entered
-    if (value.trim() && this.ccInput) {
-      if (this.ccInput.value.trim()) {
-        this.ccInput.value = '';
-        this.showInfo('Card list cleared (using BIN mode)');
-      }
+    // Send BIN list to background on each change
+    if (value.trim()) {
+      this.sendBinListToBackground(value);
     }
   },
 
   /**
+   * Send BIN list to background script
+   */
+  sendBinListToBackground(binText) {
+    const bins = this.parseBinList(binText);
+    
+    if (bins.length > 0) {
+      chrome.runtime.sendMessage({
+        type: 'SET_BIN_LIST',
+        bins: bins
+      }).catch(() => {});
+    }
+  },
+
+  /**
+   * Parse BIN list from textarea
+   */
+  parseBinList(binText) {
+    if (!binText) return [];
+
+    return binText
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => {
+        // Must have at least 6 valid characters (digits or x)
+        const cleanedLine = line.split('|')[0].replace(/[^0-9xX]/g, '');
+        return cleanedLine.length >= 6;
+      });
+  },
+
+  /**
    * Validate BIN input
+   * Now supports extended BIN patterns
    */
   validateBINInput() {
     if (!this.binInput) return true;
@@ -199,15 +228,74 @@ const Inputs = {
       return true;
     }
 
-    const validation = Validators.validateBIN(value);
+    const bins = this.parseBinList(value);
 
-    if (!validation.valid) {
-      this.showInputError(this.binInput, validation.error);
+    if (bins.length === 0) {
+      this.showInputError(this.binInput, 'Enter at least 6 digits (can use x as placeholder)');
+      return false;
+    }
+
+    // Validate each BIN pattern
+    let invalidBins = [];
+    bins.forEach((bin, index) => {
+      const validation = this.validateSingleBin(bin);
+      if (!validation.valid) {
+        invalidBins.push(`Line ${index + 1}: ${validation.error}`);
+      }
+    });
+
+    if (invalidBins.length > 0) {
+      this.showInputError(this.binInput, invalidBins[0]);
       return false;
     }
 
     this.clearInputError(this.binInput);
+    this.showInputSuccess(this.binInput, `${bins.length} BIN pattern${bins.length > 1 ? 's' : ''} loaded`);
     return true;
+  },
+
+  /**
+   * Validate a single BIN pattern
+   */
+  validateSingleBin(bin) {
+    const parts = bin.split('|');
+    const binPattern = parts[0].trim();
+    
+    // Remove non-digit/x characters
+    const cleaned = binPattern.replace(/[^0-9xX]/g, '');
+    
+    // Must be 6-16 characters
+    if (cleaned.length < 6) {
+      return { valid: false, error: 'BIN must be at least 6 characters' };
+    }
+    
+    if (cleaned.length > 16) {
+      return { valid: false, error: 'BIN cannot exceed 16 characters' };
+    }
+
+    // First 6 characters should be mostly digits (at least 4)
+    const firstSix = cleaned.substring(0, 6);
+    const digitCount = (firstSix.match(/\d/g) || []).length;
+    if (digitCount < 4) {
+      return { valid: false, error: 'First 6 characters should have at least 4 digits' };
+    }
+
+    // Validate expiry if provided
+    if (parts[1]) {
+      const month = parseInt(parts[1], 10);
+      if (isNaN(month) || month < 1 || month > 12) {
+        return { valid: false, error: 'Invalid month (01-12)' };
+      }
+    }
+
+    if (parts[2]) {
+      const year = parseInt(parts[2], 10);
+      if (isNaN(year) || year < 0 || year > 99) {
+        return { valid: false, error: 'Invalid year (00-99)' };
+      }
+    }
+
+    return { valid: true };
   },
 
   /**
