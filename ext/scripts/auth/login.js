@@ -12,8 +12,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // Generate or get fingerprint
-  const fingerprint = await Crypto.getOrCreateFingerprint();
+  // Generate or get fingerprint (use Crypto or Fingerprint depending on which is available)
+  let fingerprint;
+  if (typeof Fingerprint !== 'undefined' && Fingerprint.getOrCreate) {
+    fingerprint = await Fingerprint.getOrCreate();
+  } else if (typeof Crypto !== 'undefined' && Crypto.getOrCreateFingerprint) {
+    fingerprint = await Crypto.getOrCreateFingerprint();
+  } else {
+    console.error('No fingerprint module available');
+    fingerprint = 'unknown-fingerprint';
+  }
   console.log('Device fingerprint generated:', fingerprint.substring(0, 16) + '...');
 
   // Elements
@@ -94,10 +102,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Call login API
       const response = await APIClient.login(username, password, fingerprint);
 
+      // Backend returns: { success: true, data: { token, user: { id, username, status, permissions } } }
+      const token = response.token || response.data?.token;
+      const user = response.user || response.data?.user;
+      
+      // Extract permissions from user object or response
+      let permissions = response.permissions || response.data?.permissions;
+      if (!permissions && user && user.permissions) {
+        permissions = typeof user.permissions === 'string' 
+          ? JSON.parse(user.permissions) 
+          : user.permissions;
+      }
+
       // Store auth data
-      await Storage.setToken(response.token);
-      await Storage.setUserData(response.user);
-      await Storage.setPermissions(response.permissions);
+      await Storage.setToken(token);
+      await Storage.setUserData(user);
+      await Storage.setPermissions(permissions || {});
 
       // Show success (optional, since we're redirecting)
       console.log('Login successful!');
