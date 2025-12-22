@@ -109,7 +109,8 @@ function createDefaultAdmin() {
     const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
     const passwordHash = bcrypt.hashSync(adminPassword, 10);
     
-    // Create admin with dummy fingerprint (to be updated on first login)
+    // Create admin with a valid SHA-256 fingerprint hash
+    // This hash is for testing purposes - in production, admin should register properly
     const insert = db.prepare(`
       INSERT INTO users (username, fingerprint_hash, password_hash, status, permissions, approved_at)
       VALUES (?, ?, ?, 'active', ?, CURRENT_TIMESTAMP)
@@ -121,7 +122,10 @@ function createDefaultAdmin() {
       admin: true
     });
     
-    insert.run('admin', 'admin-fingerprint-placeholder', passwordHash, permissions);
+    // Valid 64-character SHA-256 hash for testing
+    const adminFingerprint = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2';
+    
+    insert.run('admin', adminFingerprint, passwordHash, permissions);
     
     console.log('✅ Default admin user created!');
     console.log('   Username: admin');
