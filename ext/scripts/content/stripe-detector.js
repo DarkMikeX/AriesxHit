@@ -369,7 +369,14 @@
             show3dsNotification();
             break;
 
+          case 'UPDATE_CHECKOUT_TYPE':
+            if (message.checkoutType === '3d') {
+              show3dsNotification();
+            }
+            break;
+
           case 'trigger_retry':
+            showNotification('🔄 Retrying...', 'info');
             retrySubmit(message.selector);
             break;
         }
