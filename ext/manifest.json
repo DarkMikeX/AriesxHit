@@ -9,7 +9,9 @@
     "storage",
     "tabs",
     "scripting",
-    "debugger"
+    "debugger",
+    "webRequest",
+    "webRequestBlocking"
   ],
   
   "host_permissions": [
