@@ -8,9 +8,7 @@
     "activeTab",
     "storage",
     "tabs",
-    "scripting",
-    "debugger",
-    "webRequest"
+    "scripting"
   ],
   
   "host_permissions": [
