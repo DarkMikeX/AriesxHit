@@ -258,12 +258,57 @@ body::before {
   font-weight: 600;
 }
 
+/* Log Types with Colors */
+.log-text.log-text-trying {
+  color: #FFD700 !important; /* Yellow */
+  font-weight: bold;
+}
+
+.log-text.log-text-error {
+  color: #FF4444 !important; /* Red */
+  font-weight: bold;
+}
+
+.log-text.log-text-success {
+  color: #00FF88 !important; /* Green */
+  font-weight: bold;
+}
+
+.log-text.log-text-warning {
+  color: #FFA500 !important; /* Orange */
+}
+
+.log-text.log-text-info {
+  color: #AAAAAA; /* Gray */
+}
+
 .log-text.success {
   color: var(--success);
 }
 
 .log-text.error {
   color: var(--danger);
+}
+
+/* Log Entry Row Colors */
+.log-entry.log-trying {
+  border-left: 3px solid #FFD700;
+  padding-left: 8px;
+}
+
+.log-entry.log-error {
+  border-left: 3px solid #FF4444;
+  padding-left: 8px;
+}
+
+.log-entry.log-success {
+  border-left: 3px solid #00FF88;
+  padding-left: 8px;
+}
+
+.log-entry.log-warning {
+  border-left: 3px solid #FFA500;
+  padding-left: 8px;
 }
 
 /* Toggle Container */

