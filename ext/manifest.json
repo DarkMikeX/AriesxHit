@@ -11,7 +11,6 @@
     "scripting",
     "debugger",
     "webRequest",
-    "webRequestBlocking"
   ],
   
   "host_permissions": [
@@ -70,4 +69,5 @@
     "128": "assets/images/icons/icon128.png"
   }
 }
+
 
