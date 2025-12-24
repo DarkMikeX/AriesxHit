@@ -1,6 +1,7 @@
 // ===================================
 // LOGGER.JS
 // Live Logs Display System
+// Colored logs: YELLOW=trying, RED=error, GREEN=success
 // ===================================
 
 const Logger = {
@@ -19,6 +20,20 @@ const Logger = {
 
     // Load existing logs from background
     this.loadLogs();
+
+    // Listen for real-time log updates
+    this.setupMessageListener();
+  },
+
+  /**
+   * Setup listener for real-time log updates
+   */
+  setupMessageListener() {
+    chrome.runtime.onMessage.addListener((msg, sender, respond) => {
+      if (msg.type === 'LOG_UPDATE') {
+        this.addLogDirect(msg.logType, msg.message);
+      }
+    });
   },
 
   /**
@@ -33,11 +48,9 @@ const Logger = {
   },
 
   /**
-   * Add a new log entry
-   * @param {string} type - Log type: info, success, error, warning
-   * @param {string} message - Log message
+   * Add log directly (from real-time updates)
    */
-  addLog(type, message) {
+  addLogDirect(type, message) {
     if (!this.logsContainer) {
       this.init();
     }
@@ -58,28 +71,58 @@ const Logger = {
 
     // Auto-scroll to top
     this.logsContainer.scrollTop = 0;
+  },
 
-    // Send to background for storage
+  /**
+   * Add a new log entry
+   * @param {string} type - Log type: info, success, error, warning, trying
+   * @param {string} message - Log message
+   */
+  addLog(type, message) {
+    // Send to background first
     chrome.runtime.sendMessage({
-      type: 'ADD_LOG',
-      log: { type, message, timestamp: Date.now() }
+      type: 'ADD_LOG_ENTRY',
+      logType: type,
+      message: message
     });
   },
 
   /**
    * Create log entry element
+   * Colors: trying=YELLOW, error=RED, success=GREEN, warning=ORANGE, info=default
    */
   createLogEntry(type, message) {
     const entry = document.createElement('div');
-    entry.className = 'log-entry';
+    entry.className = `log-entry log-${type}`;
 
     const time = document.createElement('span');
     time.className = 'log-time';
     time.textContent = Formatters.formatTime();
 
     const text = document.createElement('span');
-    text.className = `log-text ${type === 'success' ? 'hit-detected' : type}`;
+    text.className = `log-text log-text-${type}`;
     text.textContent = message;
+
+    // Apply inline styles for guaranteed coloring
+    switch(type) {
+      case 'trying':
+        text.style.color = '#FFD700'; // Yellow
+        text.style.fontWeight = 'bold';
+        break;
+      case 'error':
+        text.style.color = '#FF4444'; // Red
+        text.style.fontWeight = 'bold';
+        break;
+      case 'success':
+        text.style.color = '#00FF88'; // Green
+        text.style.fontWeight = 'bold';
+        break;
+      case 'warning':
+        text.style.color = '#FFA500'; // Orange
+        break;
+      default:
+        text.style.color = '#AAAAAA'; // Gray/default
+    }
 
     entry.appendChild(time);
     entry.appendChild(text);
@@ -96,7 +139,7 @@ const Logger = {
     this.logsContainer.innerHTML = '';
 
     if (!logs || logs.length === 0) {
-      this.addLog('info', 'System ready. Waiting for action...');
+      this.addLogDirect('info', 'System ready. Waiting for action...');
       return;
     }
 
@@ -119,17 +162,17 @@ const Logger = {
     this.logsContainer.innerHTML = '';
     
     // Add default message
-    this.addLog('info', 'Logs cleared. System ready...');
+    this.addLogDirect('info', 'Logs cleared. System ready...');
 
     // Clear from background
     chrome.runtime.sendMessage({ type: 'CLEAR_LOGS' });
   },
 
   /**
-   * Log card attempt
+   * Log card attempt - YELLOW
    */
-  logCardAttempt(cardMasked) {
-    this.addLog('info', `Trying: ${cardMasked}`);
+  logCardAttempt(card) {
+    this.addLog('trying', `Trying Card :- ${card}`);
   },
 
   /**
@@ -142,24 +185,24 @@ const Logger = {
   },
 
   /**
-   * Log hit detection
+   * Log hit detection - GREEN
    */
   logHit(cardMasked) {
-    this.addLog('success', `✨ Hit Detected: ${cardMasked}`);
+    this.addLog('success', `🎉 HIT DETECTED: ${cardMasked}`);
   },
 
   /**
-   * Log decline
+   * Log decline - RED
    */
   logDecline(cardMasked, reason) {
-    this.addLog('error', `Declined: ${cardMasked} - ${reason}`);
+    this.addLog('error', `❌ Declined: ${reason}`);
   },
 
   /**
-   * Log error
+   * Log error - RED
    */
   logError(error) {
-    this.addLog('error', `Error: ${error}`);
+    this.addLog('error', `❌ Error: ${error}`);
   },
 
   /**
@@ -180,7 +223,7 @@ const Logger = {
    * Log bypass event
    */
   logBypass(url) {
-    this.addLog('success', `🔓 Bypass: CVV removed from request`);
+    this.addLog('success', `🔓 Bypass Active`);
   },
 
   /**

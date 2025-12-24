@@ -1,7 +1,6 @@
 // ===================================
 // BACKGROUND.JS
-// Main Service Worker - WebRequest API
-// AriesxHit Auto Checker v2
+// AriesxHit - No Debugger, Content Script Based
 // ===================================
 
 // ==================== INLINE UTILITIES (Service Worker) ====================
@@ -258,6 +257,7 @@ async function handleFetchPaused(tabId, params) {
     chrome.debugger.sendCommand({ tabId }, 'Fetch.continueRequest', { requestId });
     return;
   }
+});
 
   
   // Check if bypass/autohit is active
@@ -605,7 +605,9 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       break;
 
     case 'STOP_AUTO_HIT':
-      handleStopAutoHit(sendResponse);
+      state.autoHitActive = false;
+      addLog('info', '⏹️ Auto Hit OFF');
+      respond({ success: true });
       break;
 
     case 'START_BYPASS':
@@ -679,6 +681,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       break;
 
 
+    // ===== CHECKOUT DETECTION =====
     case 'CHECKOUT_DETECTED':
       if (tabId) tabCheckoutType.set(tabId, msg.checkoutType || '2d');
       log('info', `🔍 ${(msg.checkoutType || '2d').toUpperCase()} Checkout`);
