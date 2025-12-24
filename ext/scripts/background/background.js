@@ -155,14 +155,6 @@ chrome.storage.onChanged.addListener((changes) => {
 chrome.webRequest.onBeforeRequest.addListener(
   (details) => {
     const url = details.url;
-    
-    // Block Stripe analytics if enabled
-    if (state.settings.blockAnalytics) {
-      if (url.includes('r.stripe.com') || url.includes('m.stripe.com') || url.includes('q.stripe.com')) {
-        log('info', '🚫 Blocked analytics');
-        return { cancel: true };
-      }
-    }
 
     // Detect Stripe checkout
     if (url.includes('checkout.stripe.com') || url.includes('buy.stripe.com') || url.includes('js.stripe.com')) {
@@ -177,7 +169,7 @@ chrome.webRequest.onBeforeRequest.addListener(
     }
 
     
-    // Detect payment request (for logging)
+    // Detect payment request - attach debugger
     if (url.includes('stripe.com/v1/payment_methods') || url.includes('stripe.com/v1/tokens')) {
       if (!debuggerAttachedTabs.has(details.tabId) && details.tabId > 0) {
         attachDebugger(details.tabId);
@@ -185,10 +177,7 @@ chrome.webRequest.onBeforeRequest.addListener(
     }
     
 
-    return {};
-  },
-  { urls: ['<all_urls>'] },
-  ['blocking']
+  { urls: ['*://*.stripe.com/*'] }
 );
 
 // Observe responses to detect 3DS
@@ -725,4 +714,5 @@ chrome.action.onClicked.addListener(async () => {
 });
 
 console.log('[AriesxHit] Background Ready - WebRequest + Debugger API');
+
 
