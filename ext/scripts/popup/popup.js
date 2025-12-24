@@ -122,7 +122,9 @@ function setupEventListeners(permissions) {
   const clearLogsBtn = document.getElementById('clear-logs-btn');
   if (clearLogsBtn) {
     clearLogsBtn.addEventListener('click', () => {
-      Logger.clearLogs();
+      if (Logger && Logger.clearLogs) {
+        Logger.clearLogs();
+      }
     });
   }
 
@@ -254,9 +256,22 @@ function toggleBypass() {
  */
 function startBypass() {
   const toggle = document.getElementById('bypass-toggle');
+  
+  // Get BIN list from input
+  const binInput = document.getElementById('bin-input');
+  const binText = binInput ? binInput.value.trim() : '';
+  const bins = binText 
+    ? binText.split('\n').map(b => b.trim()).filter(b => {
+        const cleaned = b.split('|')[0].replace(/[^0-9xX]/g, '');
+        return cleaned.length >= 6;
+      })
+    : [];
 
   chrome.runtime.sendMessage({
-    type: 'START_BYPASS'
+    type: 'START_BYPASS',
+    data: {
+      bins: bins
+    }
   }, (response) => {
     if (response && response.success) {
       toggle.setAttribute('data-active', 'true');

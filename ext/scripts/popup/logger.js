@@ -115,8 +115,16 @@ const Logger = {
 
   clearLogs() {
     if (!this.logsContainer) return;
-    this.logsContainer.innerHTML = '';
-    chrome.runtime.sendMessage({ type: 'CLEAR_LOGS' });
+    
+    chrome.runtime.sendMessage({ type: 'CLEAR_LOGS' }, (response) => {
+      if (response && response.success) {
+        this.logsContainer.innerHTML = '';
+        const empty = document.createElement('div');
+        empty.style.cssText = 'color: #707070; text-align: center; padding: 20px;';
+        empty.textContent = 'Logs cleared. Waiting for cards...';
+        this.logsContainer.appendChild(empty);
+      }
+    });
   }
 };
 
