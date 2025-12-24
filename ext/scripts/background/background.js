@@ -5,7 +5,7 @@
 
 // Configuration
 const CONFIG = {
-  CARD_GENERATOR_URL: 'https://api.asheo.dev/asheogen?bin=',
+  CARD_GENERATOR_URL: 'https://drlabapis.onrender.com/api/ccgenerator?bin=',
   DEBUGGER_VERSION: '1.3',
   RETRY_DELAY: 2000
 };
@@ -565,3 +565,4 @@ chrome.action.onClicked.addListener(async () => {
 });
 
 console.log('[AriesxHit] Background Ready with Debugger API');
+
