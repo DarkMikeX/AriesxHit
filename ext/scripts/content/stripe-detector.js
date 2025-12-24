@@ -109,8 +109,10 @@
     persistentNotification = document.createElement('div');
     persistentNotification.id = 'ariesxhit-persistent-notification';
     
+
     let content = '';
     let borderColor = '#8A2BE2';  // Purple for 2D
+
     
     if (type === '3d') {
       borderColor = '#FF9800';  // Orange for 3D
@@ -129,14 +131,13 @@
         <div style="display: flex; align-items: center; gap: 10px;">
           <span style="font-size: 18px;">💳</span>
           <div>
-            <div style="font-size: 13px; font-weight: 700; color: #8A2BE2;">2D Checkout</div>
+                        <div style="font-size: 13px; font-weight: 700; color: #8A2BE2;">2D Checkout</div>
             <div style="font-size: 11px; color: #888;">AriesxHit Ready</div>
           </div>
           <span style="background: rgba(138, 43, 226, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 10px; color: #8A2BE2; margin-left: auto;">2D</span>
         </div>
       `;
     }
-
     persistentNotification.innerHTML = content;
     persistentNotification.style.cssText = `
       position: fixed;
@@ -180,6 +181,7 @@
     is3dsDetected = true;
     
     showPersistentNotification('3d');
+
     
     // Notify background
     if (typeof chrome !== 'undefined' && chrome.runtime) {
@@ -189,7 +191,7 @@
     console.log('[AriesxHit] 3D Checkout detected');
   }
 
-  /**
+/**
    * Show 2D Checkout notification
    */
   function show2dNotification() {
@@ -433,9 +435,12 @@
 
     // Show 2D notification by default, will change to 3D if detected
     if (!stripeNotificationShown) {
+
       setTimeout(() => {
         show2dNotification();
+
       }, 500);
+
     }
 
     // Check for 3DS immediately
