@@ -10,8 +10,7 @@
     "tabs",
     "scripting",
     "debugger",
-    "webRequest",
-    "webRequestBlocking"
+    "webRequest"
   ],
   
   "host_permissions": [

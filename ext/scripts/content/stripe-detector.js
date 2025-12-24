@@ -135,6 +135,7 @@
           <span style="background: rgba(138, 43, 226, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 10px; color: #8A2BE2; margin-left: auto;">2D</span>
         </div>
       `;
+    }
 
     persistentNotification.innerHTML = content;
     persistentNotification.style.cssText = `
