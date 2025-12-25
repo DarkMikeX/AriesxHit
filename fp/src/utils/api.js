@@ -50,7 +50,7 @@ export async function registerUser(userData) {
         username: userData.username,
         email: userData.email,
         telegram: userData.telegram,
-        fingerprint_hash: userData.fingerprint
+        fingerprintHash: userData.fingerprint
       })
     });
 
@@ -90,7 +90,7 @@ export async function checkExistingRegistration(fingerprint) {
         'X-Fingerprint': fingerprint
       },
       body: JSON.stringify({
-        fingerprint_hash: fingerprint
+        fingerprintHash: fingerprint
       })
     });
 
