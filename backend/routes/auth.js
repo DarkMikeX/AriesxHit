@@ -41,6 +41,27 @@ router.post(
   AuthController.login
 );
 
+/**
+ * @route   POST /api/auth/check
+ * @desc    Check if fingerprint is already registered
+ * @access  Public
+ */
+router.post(
+  '/check',
+  registerLimiter,
+  AuthController.check
+);
+
+/**
+ * @route   GET /api/auth/status
+ * @desc    Get user status by fingerprint
+ * @access  Public
+ */
+router.get(
+  '/status',
+  AuthController.getStatus
+);
+
 // ===================================
 // PROTECTED ROUTES
 // ===================================

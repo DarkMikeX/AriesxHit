@@ -20,7 +20,7 @@ class AuthController {
    */
   static async register(req, res) {
     try {
-      const { username, fingerprintHash } = req.body;
+      const { username, fingerprintHash, email, telegram } = req.body;
 
       // Validate input
       if (!username || !fingerprintHash) {
@@ -49,14 +49,16 @@ class AuthController {
       // Create pending user
       const user = User.create({ username, fingerprintHash });
 
+      // Format response (email and telegram are accepted but not stored in current schema)
+      const formattedUser = User.format(user);
+      if (email) formattedUser.email = email;
+      if (telegram) formattedUser.telegram = telegram;
+
       res.status(201).json({
         success: true,
         message: 'Registration successful. Waiting for admin approval.',
-        data: {
-          id: user.id,
-          username: user.username,
-          status: user.status
-        }
+        data: formattedUser,
+        user: formattedUser  // Also include 'user' key for compatibility
       });
 
     } catch (error) {
@@ -288,6 +290,96 @@ class AuthController {
       res.status(500).json({
         success: false,
         message: 'Failed to get user data',
+        error: error.message
+      });
+    }
+  }
+
+  // ===================================
+  // CHECK REGISTRATION
+  // ===================================
+
+  /**
+   * Check if fingerprint is already registered
+   * POST /api/auth/check
+   */
+  static async check(req, res) {
+    try {
+      const { fingerprintHash } = req.body;
+
+      if (!fingerprintHash) {
+        return res.status(400).json({
+          success: false,
+          message: 'Fingerprint hash is required'
+        });
+      }
+
+      // Find user by fingerprint
+      const user = User.findByFingerprint(fingerprintHash);
+
+      if (user) {
+        return res.json({
+          success: true,
+          exists: true,
+          user: User.format(user)
+        });
+      }
+
+      res.json({
+        success: true,
+        exists: false
+      });
+
+    } catch (error) {
+      console.error('Check error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to check registration',
+        error: error.message
+      });
+    }
+  }
+
+  // ===================================
+  // GET STATUS BY FINGERPRINT
+  // ===================================
+
+  /**
+   * Get user status by fingerprint (public endpoint)
+   * GET /api/auth/status
+   */
+  static async getStatus(req, res) {
+    try {
+      const fingerprintHash = req.headers['x-fingerprint'];
+
+      if (!fingerprintHash) {
+        return res.status(400).json({
+          success: false,
+          message: 'Fingerprint hash is required in X-Fingerprint header'
+        });
+      }
+
+      // Find user by fingerprint
+      const user = User.findByFingerprint(fingerprintHash);
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      res.json({
+        success: true,
+        status: user.status,
+        user: User.format(user)
+      });
+
+    } catch (error) {
+      console.error('Get status error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get status',
         error: error.message
       });
     }
