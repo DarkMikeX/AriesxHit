@@ -19,12 +19,38 @@ const Logger = {
   setupMessageListener() {
     chrome.runtime.onMessage.addListener((msg) => {
       if (msg.type === 'LOG_UPDATE') {
-        // ONLY show trying, error, success logs
+        // ONLY show trying, error, success logs in main display
         if (['trying', 'error', 'success'].includes(msg.logType)) {
           this.addLogDirect(msg.logType, msg.message);
         }
       }
     });
+  },
+
+  /**
+   * Public method to add logs (called from popup.js and other scripts)
+   * @param {string} type - Log type: 'info', 'trying', 'error', 'success', 'warning'
+   * @param {string} message - Log message
+   */
+  addLog(type, message) {
+    // Send to background script for storage
+    chrome.runtime.sendMessage({ 
+      type: 'ADD_LOG', 
+      logType: type, 
+      message: message 
+    }).catch(() => {});
+    
+    // For card-related logs (trying, error, success), also display directly
+    if (['trying', 'error', 'success'].includes(type)) {
+      this.addLogDirect(type, message);
+    }
+    
+    // For info/warning logs, log to console for debugging
+    if (type === 'info') {
+      console.log('[AriesxHit]', message);
+    } else if (type === 'warning') {
+      console.warn('[AriesxHit]', message);
+    }
   },
 
   loadLogs() {

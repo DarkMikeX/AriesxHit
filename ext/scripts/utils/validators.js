@@ -199,12 +199,18 @@ const Validators = {
       return { valid: false, error: 'Invalid CVV (3-4 digits)' };
     }
 
+    // Normalize year to 2-digit format (Stripe API expects 2-digit years)
+    let normalizedYear = year;
+    if (year.length === 4) {
+      normalizedYear = year.slice(-2);
+    }
+
     return {
       valid: true,
       parsed: {
         number: cleanNumber,
         month: month.padStart(2, '0'),
-        year: year.length === 2 ? '20' + year : year,
+        year: normalizedYear, // Always 2-digit for Stripe API compatibility
         cvv: cvv || ''
       }
     };
@@ -358,6 +364,7 @@ const Validators = {
 
   /**
    * Validate password
+   * Must match backend validation: 8+ chars with at least 1 letter and 1 number
    * @param {string} password - Password to validate
    * @returns {Object} - { valid: boolean, error: string }
    */
@@ -366,8 +373,20 @@ const Validators = {
       return { valid: false, error: 'Password cannot be empty' };
     }
 
-    if (password.length < 6) {
-      return { valid: false, error: 'Password must be at least 6 characters' };
+    if (password.length < 8) {
+      return { valid: false, error: 'Password must be at least 8 characters' };
+    }
+
+    if (password.length > 128) {
+      return { valid: false, error: 'Password must be less than 128 characters' };
+    }
+
+    // Check for at least one letter and one number (matching backend validation)
+    const hasLetter = /[a-zA-Z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+
+    if (!hasLetter || !hasNumber) {
+      return { valid: false, error: 'Password must contain at least one letter and one number' };
     }
 
     return { valid: true };
