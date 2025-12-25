@@ -1,0 +1,640 @@
+/* ===================================
+   APP STYLES
+   Component-specific styles
+   =================================== */
+
+/* Cards */
+.registration-card,
+.pending-card,
+.success-card,
+.error-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 30px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  animation: fadeIn 0.5s ease;
+}
+
+.card-header {
+  text-align: center;
+  margin-bottom: 25px;
+}
+
+.card-header h2 {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.card-header p {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* Progress Steps */
+.progress-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 30px;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.step-number {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-input);
+  border: 2px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.step.active .step-number {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #000;
+  box-shadow: 0 0 15px var(--primary-glow);
+}
+
+.step-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.step.active .step-label {
+  color: var(--primary);
+}
+
+.step-line {
+  width: 60px;
+  height: 2px;
+  background: var(--border-color);
+  margin: 0 15px;
+  margin-bottom: 20px;
+}
+
+/* Form */
+.registration-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.label-icon {
+  font-size: 14px;
+}
+
+.optional {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.form-group input {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 14px;
+  color: var(--text-primary);
+  transition: all 0.3s ease;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+.form-group input.error {
+  border-color: var(--error);
+}
+
+.form-group input::placeholder {
+  color: var(--text-muted);
+}
+
+.error-text {
+  font-size: 12px;
+  color: var(--error);
+  animation: slideIn 0.3s ease;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 24px;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #000;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px var(--primary-glow);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn-icon {
+  font-size: 16px;
+}
+
+/* Fingerprint Step */
+.fingerprint-step {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.step-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.step-actions .btn {
+  flex: 1;
+}
+
+/* Fingerprint Collector */
+.fingerprint-collector {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 25px;
+  text-align: center;
+}
+
+.fingerprint-header {
+  margin-bottom: 20px;
+}
+
+.fingerprint-icon {
+  font-size: 40px;
+  margin-bottom: 10px;
+}
+
+.fingerprint-icon.collecting {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.fingerprint-header h3 {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* Collecting Animation */
+.collecting-animation {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto;
+}
+
+.pulse-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 2px solid var(--primary);
+  border-radius: 50%;
+  animation: pulseRing 1.5s ease-out infinite;
+}
+
+.pulse-ring.delay-1 { animation-delay: 0.5s; }
+.pulse-ring.delay-2 { animation-delay: 1s; }
+
+@keyframes pulseRing {
+  0% { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* Fingerprint Details */
+.fingerprint-details {
+  text-align: left;
+}
+
+.fingerprint-hash {
+  background: var(--bg-dark);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hash-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.hash-value {
+  font-family: 'Courier New', monospace;
+  color: var(--primary);
+  font-size: 13px;
+}
+
+.device-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.info-item {
+  background: var(--bg-dark);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-icon {
+  font-size: 16px;
+}
+
+.info-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.info-value {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Pending Card */
+.pending-card {
+  text-align: center;
+}
+
+.pending-icon {
+  margin-bottom: 20px;
+}
+
+.clock-animation {
+  font-size: 50px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.pending-message {
+  color: var(--text-secondary);
+  margin-bottom: 25px;
+}
+
+.user-info-card {
+  background: var(--bg-input);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 25px;
+  text-align: left;
+}
+
+.user-info-card h3 {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.info-row .info-label {
+  color: var(--text-muted);
+}
+
+.info-row .info-value {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Status Badges */
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-badge.pending {
+  background: rgba(255, 165, 0, 0.2);
+  color: var(--warning);
+}
+
+.status-badge.approved {
+  background: rgba(0, 255, 136, 0.2);
+  color: var(--success);
+}
+
+.status-badge.rejected {
+  background: rgba(255, 68, 68, 0.2);
+  color: var(--error);
+}
+
+/* Pending Actions */
+.pending-actions {
+  margin-bottom: 25px;
+}
+
+.pending-actions .btn {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.last-checked {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Tips */
+.pending-tips,
+.next-steps,
+.error-help {
+  background: var(--bg-input);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: left;
+}
+
+.pending-tips h4,
+.next-steps h4,
+.error-help h4 {
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.pending-tips ul,
+.error-help ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pending-tips li,
+.error-help li {
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding-left: 20px;
+  position: relative;
+}
+
+.pending-tips li::before,
+.error-help li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: var(--primary);
+}
+
+.next-steps ol {
+  list-style: none;
+  counter-reset: step;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.next-steps li {
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding-left: 30px;
+  position: relative;
+  counter-increment: step;
+}
+
+.next-steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  background: var(--primary);
+  color: #000;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Success Card */
+.success-card {
+  text-align: center;
+}
+
+.success-icon {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, var(--success), #00CC6A);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+  animation: fadeIn 0.5s ease;
+}
+
+.checkmark {
+  font-size: 40px;
+  color: #000;
+}
+
+.success-message {
+  color: var(--text-secondary);
+  margin-bottom: 25px;
+}
+
+.user-info-card.success {
+  border: 1px solid rgba(0, 255, 136, 0.3);
+}
+
+.success-actions {
+  margin-top: 25px;
+}
+
+.success-actions .btn {
+  width: 100%;
+}
+
+/* Error Card */
+.error-card {
+  text-align: center;
+}
+
+.error-icon {
+  font-size: 50px;
+  margin-bottom: 20px;
+}
+
+.error-message {
+  color: var(--text-secondary);
+  margin-bottom: 25px;
+}
+
+.error-actions {
+  margin-bottom: 25px;
+}
+
+.error-actions .btn {
+  width: 100%;
+}
+
+/* Loading */
+.loading-container {
+  text-align: center;
+  padding: 40px;
+}
+
+.loading-spinner {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 20px;
+}
+
+.spinner-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 3px solid transparent;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.spinner-ring:nth-child(2) {
+  width: 80%;
+  height: 80%;
+  top: 10%;
+  left: 10%;
+  animation-delay: 0.15s;
+  border-top-color: var(--primary-dark);
+}
+
+.spinner-ring:nth-child(3) {
+  width: 60%;
+  height: 60%;
+  top: 20%;
+  left: 20%;
+  animation-delay: 0.3s;
+  border-top-color: rgba(255, 215, 0, 0.5);
+}
+
+.loading-message {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.spinner-small {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Spinner in button */
+.btn .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.btn.loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .app {
+    padding: 15px;
+  }
+
+  .registration-card,
+  .pending-card,
+  .success-card,
+  .error-card {
+    padding: 20px;
+  }
+
+  .device-info {
+    grid-template-columns: 1fr;
+  }
+
+  .step-actions {
+    flex-direction: column;
+  }
+}
