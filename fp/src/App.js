@@ -57,7 +57,9 @@ function App() {
   };
 
   const handleRegistrationError = (errorMsg) => {
-    setError(errorMsg);
+    // Handle both string and object error messages
+    const errorData = typeof errorMsg === 'object' ? errorMsg : { message: errorMsg };
+    setError(errorData);
     setStatus('error');
   };
 

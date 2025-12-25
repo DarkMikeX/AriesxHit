@@ -546,6 +546,27 @@
   width: 100%;
 }
 
+.rate-limit-info {
+  background: rgba(255, 165, 0, 0.1);
+  border: 1px solid rgba(255, 165, 0, 0.3);
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 20px;
+  animation: slideIn 0.3s ease;
+}
+
+.rate-limit-message {
+  color: var(--warning);
+  font-size: 14px;
+  margin: 0;
+}
+
+.rate-limit-message strong {
+  color: var(--primary);
+  font-size: 16px;
+  font-weight: 600;
+}
+
 /* Loading */
 .loading-container {
   text-align: center;

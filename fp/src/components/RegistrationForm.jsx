@@ -76,10 +76,20 @@ function RegistrationForm({ onSuccess, onError }) {
       if (result.success) {
         onSuccess(result.user, fingerprint);
       } else {
-        onError(result.message || 'Registration failed');
+        // Pass rate limit info if available
+        const errorData = {
+          message: result.message || 'Registration failed',
+          isRateLimited: result.isRateLimited || false,
+          retryAfter: result.retryAfter || null
+        };
+        onError(errorData);
       }
     } catch (err) {
-      onError(err.message || 'Network error. Please try again.');
+      onError({
+        message: err.message || 'Network error. Please try again.',
+        isRateLimited: false,
+        retryAfter: null
+      });
     } finally {
       setIsSubmitting(false);
     }
