@@ -27,10 +27,10 @@ function App() {
           setUserData(result.user);
           
           switch (result.user.status) {
-            case 'approved':
+            case 'active':
               setStatus('approved');
               break;
-            case 'rejected':
+            case 'blocked':
               setStatus('rejected');
               break;
             case 'pending':
