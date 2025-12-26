@@ -196,10 +196,20 @@ function validateParams(schema) {
 
     const errors = [];
 
+    // Handle schema with field names (like userId: { id: {...} })
     for (const [fieldName, rules] of Object.entries(schema)) {
-      const value = req.params[fieldName];
-      const fieldErrors = validateField(value, fieldName, rules);
-      errors.push(...fieldErrors);
+      // For route params like /:id, the param name is 'id', not the schema key name
+      // So if schema has { id: {...} }, check req.params.id
+      // If schema has { userId: {...} }, check req.params.userId
+      const paramName = fieldName === 'id' ? 'id' : fieldName;
+      const value = req.params[paramName];
+      
+      if (value !== undefined) {
+        const fieldErrors = validateField(value, fieldName, rules);
+        errors.push(...fieldErrors);
+      } else if (rules.required) {
+        errors.push(`${paramName} is required`);
+      }
     }
 
     if (errors.length > 0) {
