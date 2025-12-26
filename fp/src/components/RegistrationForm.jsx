@@ -58,6 +58,11 @@ function RegistrationForm({ onSuccess, onError }) {
   };
 
   const handleSubmit = async () => {
+    // Prevent multiple submissions
+    if (isSubmitting) {
+      return;
+    }
+
     if (!fingerprint) {
       onError('Fingerprint collection failed. Please try again.');
       return;
@@ -66,6 +71,12 @@ function RegistrationForm({ onSuccess, onError }) {
     setIsSubmitting(true);
 
     try {
+      console.log('Submitting registration:', {
+        username: formData.username,
+        email: formData.email,
+        fingerprintLength: fingerprint?.length
+      });
+
       const result = await registerUser({
         username: formData.username,
         email: formData.email,
@@ -73,20 +84,25 @@ function RegistrationForm({ onSuccess, onError }) {
         fingerprint: fingerprint
       });
 
+      console.log('Registration result:', result);
+
       if (result.success) {
         onSuccess(result.user, fingerprint);
       } else {
         // Pass rate limit info if available
         const errorData = {
-          message: result.message || 'Registration failed',
+          message: result.message || 'Registration failed. Please check your information and try again.',
           isRateLimited: result.isRateLimited || false,
-          retryAfter: result.retryAfter || null
+          retryAfter: result.retryAfter || null,
+          errors: result.errors || null
         };
+        console.error('Registration failed:', errorData);
         onError(errorData);
       }
     } catch (err) {
+      console.error('Registration error:', err);
       onError({
-        message: err.message || 'Network error. Please try again.',
+        message: err.message || 'Network error. Please check your connection and try again.',
         isRateLimited: false,
         retryAfter: null
       });

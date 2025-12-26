@@ -30,6 +30,13 @@ function ErrorMessage({ title, message, onRetry, showRetry = true }) {
     }
   }, [isRateLimited, retryAfterSeconds]);
 
+  // Extract validation errors if present
+  const validationErrors = errorData.errors || null;
+  const hasValidationErrors = validationErrors && (
+    (Array.isArray(validationErrors) && validationErrors.length > 0) ||
+    (typeof validationErrors === 'object' && Object.keys(validationErrors).length > 0)
+  );
+
   return (
     <div className="error-card">
       <div className="error-icon">
@@ -38,6 +45,25 @@ function ErrorMessage({ title, message, onRetry, showRetry = true }) {
 
       <h2>{title || 'Something went wrong'}</h2>
       <p className="error-message">{errorMessage}</p>
+
+      {hasValidationErrors && (
+        <div className="validation-errors">
+          <h4>Please fix the following:</h4>
+          <ul>
+            {Array.isArray(validationErrors) ? (
+              validationErrors.map((err, idx) => (
+                <li key={idx}>{err}</li>
+              ))
+            ) : (
+              Object.entries(validationErrors).map(([field, err]) => (
+                <li key={field}>
+                  <strong>{field}:</strong> {Array.isArray(err) ? err.join(', ') : err}
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
 
       {isRateLimited && countdown && (
         <div className="rate-limit-info">

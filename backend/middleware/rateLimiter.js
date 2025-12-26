@@ -131,13 +131,18 @@ const authLimiter = createRateLimiter({
 
 /**
  * Register rate limiter
- * 10 registration attempts per hour (increased for development)
+ * 20 registration attempts per hour (more lenient for better UX)
  */
 const registerLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000,
-  max: 10,
+  max: 20,
   message: 'Too many registration attempts, please try again later',
-  skipFailedRequests: true // Don't count failed attempts
+  skipFailedRequests: true, // Don't count failed attempts
+  keyGenerator: (req) => {
+    // Use fingerprint if available, otherwise fall back to IP
+    const fingerprint = req.body?.fingerprintHash || req.headers['x-fingerprint'];
+    return fingerprint ? `register:${fingerprint}` : `register:${req.ip}`;
+  }
 });
 
 /**

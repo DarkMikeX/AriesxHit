@@ -22,11 +22,35 @@ class AuthController {
     try {
       const { username, fingerprintHash, email, telegram } = req.body;
 
+      console.log('Registration attempt:', {
+        username,
+        fingerprintLength: fingerprintHash?.length,
+        hasEmail: !!email,
+        hasTelegram: !!telegram,
+        ip: req.ip
+      });
+
       // Validate input
       if (!username || !fingerprintHash) {
         return res.status(400).json({
           success: false,
-          message: 'Username and fingerprint are required'
+          message: 'Username and fingerprint are required',
+          errors: {
+            username: !username ? 'Username is required' : null,
+            fingerprint: !fingerprintHash ? 'Fingerprint is required' : null
+          }
+        });
+      }
+
+      // Validate fingerprint format
+      const sha256Regex = /^[a-f0-9]{64}$/i;
+      if (!sha256Regex.test(fingerprintHash)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid fingerprint format. Expected SHA-256 hash.',
+          errors: {
+            fingerprint: 'Invalid fingerprint format'
+          }
         });
       }
 
@@ -34,7 +58,10 @@ class AuthController {
       if (User.exists(username)) {
         return res.status(400).json({
           success: false,
-          message: 'Username already taken'
+          message: 'Username already taken',
+          errors: {
+            username: 'This username is already registered'
+          }
         });
       }
 
@@ -42,7 +69,10 @@ class AuthController {
       if (User.fingerprintExists(fingerprintHash)) {
         return res.status(400).json({
           success: false,
-          message: 'Device already registered'
+          message: 'Device already registered',
+          errors: {
+            fingerprint: 'This device is already registered'
+          }
         });
       }
 
@@ -53,6 +83,11 @@ class AuthController {
       const formattedUser = User.format(user);
       if (email) formattedUser.email = email;
       if (telegram) formattedUser.telegram = telegram;
+
+      console.log('Registration successful:', {
+        userId: user.id,
+        username: user.username
+      });
 
       res.status(201).json({
         success: true,
@@ -65,8 +100,8 @@ class AuthController {
       console.error('Register error:', error);
       res.status(500).json({
         success: false,
-        message: 'Registration failed',
-        error: error.message
+        message: 'Registration failed. Please try again.',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
   }

@@ -32,36 +32,89 @@ async function handleAPIError(response, defaultMessage) {
   }
 
   const data = await parseJSONResponse(response);
+  
+  // Extract detailed error information
+  let errorMessage = data.message || defaultMessage || 'An error occurred';
+  
+  // If there are validation errors, include them
+  if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
+    errorMessage = data.errors.join('. ');
+  } else if (data.errors && typeof data.errors === 'object') {
+    const errorList = Object.values(data.errors).flat();
+    if (errorList.length > 0) {
+      errorMessage = errorList.join('. ');
+    }
+  }
+  
   return {
     success: false,
-    message: data.message || defaultMessage || 'An error occurred'
+    message: errorMessage,
+    errors: data.errors || null,
+    isRateLimited: response.status === 429
   };
 }
 
 export async function registerUser(userData) {
   try {
+    // Validate fingerprint format before sending
+    if (!userData.fingerprint || typeof userData.fingerprint !== 'string') {
+      return {
+        success: false,
+        message: 'Invalid fingerprint. Please refresh the page and try again.'
+      };
+    }
+
+    // Ensure fingerprint is 64 characters (SHA-256)
+    if (userData.fingerprint.length !== 64) {
+      console.error('Invalid fingerprint length:', userData.fingerprint.length);
+      return {
+        success: false,
+        message: 'Fingerprint generation failed. Please refresh the page and try again.'
+      };
+    }
+
+    const requestBody = {
+      username: userData.username,
+      fingerprintHash: userData.fingerprint
+    };
+
+    // Only include email and telegram if they exist
+    if (userData.email) {
+      requestBody.email = userData.email;
+    }
+    if (userData.telegram) {
+      requestBody.telegram = userData.telegram;
+    }
+
+    console.log('Sending registration request:', {
+      url: `${API_BASE_URL}/auth/register`,
+      username: userData.username,
+      hasEmail: !!userData.email,
+      hasTelegram: !!userData.telegram,
+      fingerprintLength: userData.fingerprint.length
+    });
+
     const response = await fetch(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Fingerprint': userData.fingerprint
       },
-      body: JSON.stringify({
-        username: userData.username,
-        email: userData.email,
-        telegram: userData.telegram,
-        fingerprintHash: userData.fingerprint
-      })
+      body: JSON.stringify(requestBody)
     });
+
+    console.log('Registration response status:', response.status);
 
     if (!response.ok) {
       return await handleAPIError(response, 'Registration failed');
     }
 
     const data = await parseJSONResponse(response);
+    console.log('Registration success:', data);
+    
     return {
       success: true,
-      user: data.user || data.data
+      user: data.user || data.data?.user || data.data
     };
   } catch (error) {
     console.error('Registration error:', error);
