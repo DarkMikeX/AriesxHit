@@ -4,39 +4,45 @@
 // ===================================
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Check authentication
-  const isAuth = await Storage.isAuthenticated();
-  if (!isAuth) {
-    // Not logged in, redirect to login
+  try {
+    // Check authentication
+    const isAuth = await Storage.isAuthenticated();
+    if (!isAuth) {
+      // Not logged in, redirect to login
+      window.location.href = 'login.html';
+      return;
+    }
+
+    // Get user data and permissions
+    const userData = await Storage.getUserData();
+    const permissions = await Storage.getPermissions();
+
+    if (!userData || !permissions) {
+      // Invalid session, redirect to login
+      await Storage.clearAuth();
+      window.location.href = 'login.html';
+      return;
+    }
+
+    // Initialize UI
+    initializeUI(userData, permissions);
+
+    // Load wallpaper settings
+    await loadWallpaper();
+
+    // Load saved inputs
+    await loadSavedInputs();
+
+    // Set up event listeners
+    setupEventListeners(permissions);
+
+    // Update status bar
+    updateStatusBar(userData);
+  } catch (error) {
+    console.error('[Popup] Initialization error:', error);
+    // Redirect to login on error
     window.location.href = 'login.html';
-    return;
   }
-
-  // Get user data and permissions
-  const userData = await Storage.getUserData();
-  const permissions = await Storage.getPermissions();
-
-  if (!userData || !permissions) {
-    // Invalid session, redirect to login
-    await Storage.clearAuth();
-    window.location.href = 'login.html';
-    return;
-  }
-
-  // Initialize UI
-  initializeUI(userData, permissions);
-
-  // Load wallpaper settings
-  await loadWallpaper();
-
-  // Load saved inputs
-  await loadSavedInputs();
-
-  // Set up event listeners
-  setupEventListeners(permissions);
-
-  // Update status bar
-  updateStatusBar(userData);
 });
 
 /**
@@ -71,13 +77,17 @@ function initializeUI(userData, permissions) {
  * Load wallpaper settings
  */
 async function loadWallpaper() {
-  const wallpaperSettings = await Storage.getWallpaper();
-  
-  if (wallpaperSettings) {
-    WallpaperManager.applyWallpaper(wallpaperSettings);
-  } else {
-    // Apply default
-    WallpaperManager.applyDefault();
+  try {
+    const wallpaperSettings = await Storage.getWallpaper();
+    
+    if (wallpaperSettings && typeof WallpaperManager !== 'undefined') {
+      WallpaperManager.applyWallpaper(wallpaperSettings);
+    } else if (typeof WallpaperManager !== 'undefined') {
+      // Apply default
+      WallpaperManager.applyDefault();
+    }
+  } catch (error) {
+    console.error('[Popup] Error loading wallpaper:', error);
   }
 }
 
@@ -85,24 +95,28 @@ async function loadWallpaper() {
  * Load saved inputs (BIN, Proxy, CC)
  */
 async function loadSavedInputs() {
-  const savedInputs = await Storage.getInputs();
-  
-  if (savedInputs) {
-    const binInput = document.getElementById('bin-input');
-    const proxyInput = document.getElementById('proxy-input');
-    const ccInput = document.getElementById('cc-input');
+  try {
+    const savedInputs = await Storage.getInputs();
+    
+    if (savedInputs) {
+      const binInput = document.getElementById('bin-input');
+      const proxyInput = document.getElementById('proxy-input');
+      const ccInput = document.getElementById('cc-input');
 
-    if (binInput && savedInputs.bin) {
-      binInput.value = savedInputs.bin;
-    }
+      if (binInput && savedInputs.bin) {
+        binInput.value = savedInputs.bin;
+      }
 
-    if (proxyInput && savedInputs.proxy) {
-      proxyInput.value = savedInputs.proxy;
-    }
+      if (proxyInput && savedInputs.proxy) {
+        proxyInput.value = savedInputs.proxy;
+      }
 
-    if (ccInput && savedInputs.cards) {
-      ccInput.value = savedInputs.cards;
+      if (ccInput && savedInputs.cards) {
+        ccInput.value = savedInputs.cards;
+      }
     }
+  } catch (error) {
+    console.error('[Popup] Error loading saved inputs:', error);
   }
 }
 
@@ -173,6 +187,10 @@ function setupEventListeners(permissions) {
  */
 function toggleAutoHit() {
   const toggle = document.getElementById('auto-hit-toggle');
+  if (!toggle) {
+    console.error('[Popup] Auto Hit toggle not found');
+    return;
+  }
   const isActive = toggle.getAttribute('data-active') === 'true';
 
   if (isActive) {
@@ -189,6 +207,10 @@ function toggleAutoHit() {
  */
 async function startAutoHit() {
   const toggle = document.getElementById('auto-hit-toggle');
+  if (!toggle) {
+    console.error('[Popup] Auto Hit toggle not found');
+    return;
+  }
   
   // Validate inputs
   const validation = validateInputs();
@@ -206,8 +228,17 @@ async function startAutoHit() {
       cards: validation.data.cards
     }
   }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error('[Popup] Error sending message:', chrome.runtime.lastError);
+      Logger.addLog('error', 'Failed to communicate with background script');
+      showToast('❌ Communication error', 'error');
+      return;
+    }
+    
     if (response && response.success) {
-      toggle.setAttribute('data-active', 'true');
+      if (toggle) {
+        toggle.setAttribute('data-active', 'true');
+      }
       updateModeStatus('Auto Hit Active');
       Logger.addLog('success', 'Auto Hit started');
       showToast('✅ Auto Hit Started', 'success');
@@ -228,7 +259,14 @@ function stopAutoHit() {
   chrome.runtime.sendMessage({
     type: 'STOP_AUTO_HIT'
   }, (response) => {
-    toggle.setAttribute('data-active', 'false');
+    if (chrome.runtime.lastError) {
+      console.error('[Popup] Error sending message:', chrome.runtime.lastError);
+      return;
+    }
+    
+    if (toggle) {
+      toggle.setAttribute('data-active', 'false');
+    }
     updateModeStatus('Idle');
     Logger.addLog('info', 'Auto Hit stopped');
     showToast('🛑 Auto Hit Stopped', 'info');
@@ -240,6 +278,10 @@ function stopAutoHit() {
  */
 function toggleBypass() {
   const toggle = document.getElementById('bypass-toggle');
+  if (!toggle) {
+    console.error('[Popup] Bypass toggle not found');
+    return;
+  }
   const isActive = toggle.getAttribute('data-active') === 'true';
 
   if (isActive) {
@@ -273,8 +315,17 @@ function startBypass() {
       bins: bins
     }
   }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error('[Popup] Error sending message:', chrome.runtime.lastError);
+      Logger.addLog('error', 'Failed to communicate with background script');
+      showToast('❌ Communication error', 'error');
+      return;
+    }
+    
     if (response && response.success) {
-      toggle.setAttribute('data-active', 'true');
+      if (toggle) {
+        toggle.setAttribute('data-active', 'true');
+      }
       Logger.addLog('success', 'Bypass mode enabled');
       showToast('✅ Bypass Enabled (CVV Removal)', 'success');
     } else {
@@ -294,7 +345,14 @@ function stopBypass() {
   chrome.runtime.sendMessage({
     type: 'STOP_BYPASS'
   }, (response) => {
-    toggle.setAttribute('data-active', 'false');
+    if (chrome.runtime.lastError) {
+      console.error('[Popup] Error sending message:', chrome.runtime.lastError);
+      return;
+    }
+    
+    if (toggle) {
+      toggle.setAttribute('data-active', 'false');
+    }
     Logger.addLog('info', 'Bypass mode disabled');
     showToast('🛑 Bypass Disabled', 'info');
   });
@@ -308,9 +366,9 @@ function validateInputs() {
   const proxyInput = document.getElementById('proxy-input');
   const ccInput = document.getElementById('cc-input');
 
-  const bin = binInput.value.trim();
-  const proxy = proxyInput.value.trim();
-  const cards = ccInput.value.trim();
+  const bin = binInput ? binInput.value.trim() : '';
+  const proxy = proxyInput ? proxyInput.value.trim() : '';
+  const cards = ccInput ? ccInput.value.trim() : '';
 
   // Must have either BIN or cards
   if (!bin && !cards) {
@@ -363,9 +421,9 @@ async function saveInputs() {
   const ccInput = document.getElementById('cc-input');
 
   await Storage.setInputs({
-    bin: binInput.value.trim(),
-    proxy: proxyInput.value.trim(),
-    cards: ccInput.value.trim()
+    bin: binInput ? binInput.value.trim() : '',
+    proxy: proxyInput ? proxyInput.value.trim() : '',
+    cards: ccInput ? ccInput.value.trim() : ''
   });
 }
 
@@ -382,6 +440,11 @@ function updateStatusBar(userData) {
 
   // Get hits from storage or background
   chrome.runtime.sendMessage({ type: 'GET_STATS' }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error('[Popup] Error getting stats:', chrome.runtime.lastError);
+      return;
+    }
+    
     if (response && hitsCount) {
       hitsCount.textContent = response.hits || 0;
     }
