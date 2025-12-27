@@ -61,7 +61,9 @@ class DatabaseWrapper {
     return {
       run(...params) {
         try {
-          self.db.run(sql, params);
+          // sql.js run method: run(sql, params) where params is an array
+          const paramArray = params.length === 1 && Array.isArray(params[0]) ? params[0] : params;
+          self.db.run(sql, paramArray);
           const result = {
             changes: self.db.getRowsModified(),
             lastInsertRowid: self.getLastInsertRowId()
@@ -76,7 +78,10 @@ class DatabaseWrapper {
       get(...params) {
         try {
           const stmt = self.db.prepare(sql);
-          stmt.bind(params);
+          // sql.js bind accepts an array or individual arguments
+          if (params.length > 0) {
+            stmt.bind(params.length === 1 && Array.isArray(params[0]) ? params[0] : params);
+          }
           if (stmt.step()) {
             const row = stmt.getAsObject();
             stmt.free();
@@ -93,7 +98,10 @@ class DatabaseWrapper {
         try {
           const results = [];
           const stmt = self.db.prepare(sql);
-          stmt.bind(params);
+          // sql.js bind accepts an array or individual arguments
+          if (params.length > 0) {
+            stmt.bind(params.length === 1 && Array.isArray(params[0]) ? params[0] : params);
+          }
           while (stmt.step()) {
             results.push(stmt.getAsObject());
           }
@@ -120,11 +128,16 @@ class DatabaseWrapper {
 
   // Get last insert row ID
   getLastInsertRowId() {
-    const result = this.db.exec('SELECT last_insert_rowid() as id');
-    if (result.length > 0 && result[0].values.length > 0) {
-      return result[0].values[0][0];
+    try {
+      const result = this.db.exec('SELECT last_insert_rowid() as id');
+      if (result.length > 0 && result[0].values.length > 0) {
+        return result[0].values[0][0];
+      }
+      return 0;
+    } catch (error) {
+      console.error('Error getting last insert rowid:', error);
+      return 0;
     }
-    return 0;
   }
 
   // Pragma command
