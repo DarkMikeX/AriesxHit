@@ -15,16 +15,39 @@ const APIConfig = {
     REGISTER: '/auth/register',
     VERIFY: '/auth/verify',
     LOGOUT: '/auth/logout',
+    CHECK: '/auth/check',
+    STATUS: '/auth/status',
+    ME: '/auth/me',
+    REFRESH: '/auth/refresh',
+    CHANGE_PASSWORD: '/auth/change-password',
     
     // User endpoints
     GET_USER: '/users/me',
+    UPDATE_USER: '/users/me',
+    USER_STATUS: '/users/status',
     GET_PERMISSIONS: '/users/permissions',
-    UPDATE_USER: '/users/update',
+    CHECK_PERMISSION: '/users/permissions',
+    USER_SESSIONS: '/users/sessions',
+    VERIFY_FINGERPRINT: '/users/verify-fingerprint',
     
-    // Admin endpoints (if applicable)
+    // Admin endpoints
     ADMIN_USERS: '/admin/users',
-    ADMIN_APPROVE: '/admin/users/approve',
-    ADMIN_BLOCK: '/admin/users/block'
+    ADMIN_PENDING_USERS: '/admin/users/pending',
+    ADMIN_ACTIVE_USERS: '/admin/users/active',
+    ADMIN_BLOCKED_USERS: '/admin/users/blocked',
+    ADMIN_USER: '/admin/users',
+    ADMIN_APPROVE: '/admin/users',
+    ADMIN_REJECT: '/admin/users',
+    ADMIN_BLOCK: '/admin/users',
+    ADMIN_UNBLOCK: '/admin/users',
+    ADMIN_UPDATE_PERMISSIONS: '/admin/users',
+    ADMIN_RESET_PASSWORD: '/admin/users',
+    ADMIN_STATS: '/admin/stats',
+    ADMIN_LOGIN_ATTEMPTS: '/admin/login-attempts',
+    ADMIN_SESSIONS: '/admin/sessions',
+    
+    // Health check
+    HEALTH: '/health'
   },
   
   // Request timeout in milliseconds
@@ -66,13 +89,22 @@ const APIConfig = {
    */
   async checkConnection() {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
       const response = await fetch(this.BASE_URL + '/health', {
         method: 'GET',
-        timeout: 5000
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       return response.ok;
     } catch (error) {
-      console.error('[APIConfig] Connection check failed:', error);
+      if (error.name === 'AbortError') {
+        console.error('[APIConfig] Connection check timeout');
+      } else {
+        console.error('[APIConfig] Connection check failed:', error);
+      }
       return false;
     }
   }

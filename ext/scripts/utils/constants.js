@@ -8,12 +8,34 @@ const CONFIG = {
   API: {
     BASE_URL: 'http://localhost:3000/api', // Change to your backend URL
     ENDPOINTS: {
+      // Auth endpoints
       LOGIN: '/auth/login',
       REGISTER: '/auth/register',
       VERIFY_TOKEN: '/auth/verify',
       LOGOUT: '/auth/logout',
+      CHECK: '/auth/check',
+      STATUS: '/auth/status',
+      ME: '/auth/me',
+      REFRESH: '/auth/refresh',
+      CHANGE_PASSWORD: '/auth/change-password',
+      
+      // User endpoints
       GET_USER: '/users/me',
-      UPDATE_PERMISSIONS: '/users/permissions'
+      UPDATE_USER: '/users/me',
+      USER_STATUS: '/users/status',
+      GET_PERMISSIONS: '/users/permissions',
+      UPDATE_PERMISSIONS: '/users/permissions',
+      USER_SESSIONS: '/users/sessions',
+      VERIFY_FINGERPRINT: '/users/verify-fingerprint',
+      
+      // Admin endpoints
+      ADMIN_USERS: '/admin/users',
+      ADMIN_PENDING_USERS: '/admin/users/pending',
+      ADMIN_ACTIVE_USERS: '/admin/users/active',
+      ADMIN_BLOCKED_USERS: '/admin/users/blocked',
+      ADMIN_APPROVE: '/admin/users',
+      ADMIN_BLOCK: '/admin/users',
+      ADMIN_STATS: '/admin/stats'
     },
     TIMEOUT: 10000 // 10 seconds
   },

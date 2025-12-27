@@ -47,7 +47,17 @@ const APIClient = {
       clearTimeout(timeoutId);
       
       // Parse JSON response
-      const data = await response.json();
+      let data;
+      try {
+        const text = await response.text();
+        data = text ? JSON.parse(text) : {};
+      } catch (parseError) {
+        throw {
+          status: response.status,
+          message: 'Invalid JSON response from server',
+          error: parseError.message
+        };
+      }
       
       // Check if response is ok
       if (!response.ok) {

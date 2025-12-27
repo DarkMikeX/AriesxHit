@@ -428,7 +428,9 @@ function handleTabRemoval(tabId) {
       state.debuggerAttachedTabs.delete(tabId);
       state.tabCardDetailsMap.delete(tabId);
       state.tabSuccessUrlMap.delete(tabId);
-      state.requestIdMap.delete(tabId);
+      // Note: requestIdMap stores requestId -> networkId mappings
+      // These are short-lived and will be garbage collected automatically
+      // No need to manually clean them up by tabId
     });
   }
 }
