@@ -42,15 +42,215 @@
 /* Body */
 body {
   width: 100%;
-  min-width: 450px;
-  max-width: 800px;
-  min-height: 100vh;
-  margin: 0 auto;
+  min-width: 360px;
+  max-width: 420px;
+  min-height: 400px;
+  margin: 0;
   font-family: 'Segoe UI', 'Roboto', 'Arial', sans-serif;
   color: var(--text-primary);
   background: var(--bg-default);
   overflow-x: hidden;
   position: relative;
+}
+
+/* ===== AUTO HITTER PANEL ===== */
+.popup-panel {
+  padding: 16px;
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.panel-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: 0.5px;
+}
+
+.settings-link {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 18px;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.settings-link:hover {
+  color: var(--primary);
+  background: var(--bg-glass);
+}
+
+.panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.panel-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.panel-textarea {
+  background: var(--bg-glass);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: 'Courier New', monospace;
+  resize: none;
+  min-height: 80px;
+}
+
+.panel-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.panel-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.panel-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.panel-actions {
+  flex-direction: row;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn-primary,
+.btn-secondary {
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border-color);
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  flex: 1;
+  background: var(--bg-glass);
+  color: var(--text-secondary);
+}
+
+.btn-primary:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn-primary[data-active="true"] {
+  background: rgba(255, 215, 0, 0.15);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.btn-primary[data-active="true"] .btn-dot {
+  background: var(--primary);
+  box-shadow: 0 0 8px var(--primary-glow);
+}
+
+.btn-secondary {
+  background: rgba(255, 68, 68, 0.15);
+  color: #ff6b6b;
+  padding: 10px 14px;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 68, 68, 0.25);
+}
+
+.panel-logs {
+  flex: 1;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-logs-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.panel-logs-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.panel-logs-empty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 24px 16px;
+  font-size: 12px;
+}
+
+.panel-logs-empty.hidden {
+  display: none;
+}
+
+.panel-footer {
+  display: flex;
+  gap: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.panel-stat {
+  flex: 1;
+  text-align: center;
+}
+
+.panel-stat-label {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.panel-stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.panel-stat-success {
+  color: var(--success);
 }
 
 /* Wallpaper Layer */
@@ -309,6 +509,181 @@ body::before {
 .log-entry.log-warning {
   border-left: 3px solid #FFA500;
   padding-left: 8px;
+}
+
+/* ===== AUTO HITTER - Card Trying (Dark Box) ===== */
+.section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.toggle-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.clear-btn {
+  background: rgba(255, 68, 68, 0.2);
+  border: 1px solid rgba(255, 68, 68, 0.5);
+  color: #ff6b6b;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.clear-btn:hover {
+  background: rgba(255, 68, 68, 0.3);
+}
+
+.logs-section {
+  background: var(--bg-glass);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 16px;
+  max-height: 280px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.logs-section .logs-header {
+  margin-bottom: 10px;
+}
+
+.logs-section .logs-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.logs-empty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 24px;
+  font-size: 13px;
+}
+
+.logs-empty.hidden {
+  display: none;
+}
+
+/* Card Trying - Dark rounded box */
+.log-card-trying {
+  background: linear-gradient(135deg, #2a2a2e 0%, #1e1e22 100%);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  animation: slideIn 0.3s ease;
+}
+
+.log-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.log-card-attempt {
+  font-size: 11px;
+  color: #888;
+  font-weight: 500;
+}
+
+.log-card-copy {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 6px;
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #aaa;
+  transition: background 0.2s, color 0.2s;
+}
+
+.log-card-copy:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.log-card-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.log-card-emoji {
+  font-size: 18px;
+}
+
+.log-card-data {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 0.3px;
+}
+
+/* Card Error - White pill with red accent */
+.log-card-error {
+  background: #fff;
+  border-radius: 999px;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border-left: 4px solid #e53935;
+  border-top: 1px solid rgba(229, 57, 53, 0.3);
+  animation: slideIn 0.3s ease;
+}
+
+.log-card-error-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #e53935;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.log-card-error-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+/* Card Hit - Success style */
+.log-card-hit {
+  background: linear-gradient(135deg, rgba(0, 255, 136, 0.15) 0%, rgba(0, 200, 120, 0.1) 100%);
+  border: 1px solid rgba(0, 255, 136, 0.4);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 4px 12px rgba(0, 255, 136, 0.1);
+  animation: slideIn 0.3s ease;
+}
+
+.log-card-hit-label {
+  font-size: 11px;
+  color: #00FF88;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 /* Toggle Container */

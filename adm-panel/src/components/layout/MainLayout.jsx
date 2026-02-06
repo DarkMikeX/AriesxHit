@@ -1,178 +1,137 @@
-import React from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 
 function MainLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [particles, setParticles] = useState([]);
+
+  useEffect(() => {
+    // Generate floating particles
+    const generateParticles = () => {
+      const newParticles = Array.from({ length: 20 }, (_, i) => ({
+        id: i,
+        left: Math.random() * 100,
+        delay: Math.random() * 10,
+        duration: 10 + Math.random() * 10,
+      }));
+      setParticles(newParticles);
+    };
+    generateParticles();
+  }, []);
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
 
+  const navItems = [
+    { path: '/dashboard', icon: '⚡', label: 'Dashboard', id: 'dashboard' },
+    { path: '/users/pending', icon: '⏳', label: 'Pending Users', id: 'pending' },
+    { path: '/users/active', icon: '✅', label: 'Active Users', id: 'active' },
+  ];
+
   return (
-    <div style={styles.layout}>
+    <div className="futuristic-layout">
+      {/* Animated Background Particles */}
+      <div className="particles-container">
+        {particles.map(particle => (
+          <div
+            key={particle.id}
+            className="particle"
+            style={{
+              left: `${particle.left}%`,
+              animationDelay: `${particle.delay}s`,
+              animationDuration: `${particle.duration}s`,
+            }}
+          />
+        ))}
+      </div>
+
       {/* Sidebar */}
-      <aside style={styles.sidebar}>
-        <div style={styles.logo}>
-          <span style={styles.logoIcon}>🔥</span>
-          <span style={styles.logoText}>AriesxHit</span>
-        </div>
-
-        <nav style={styles.nav}>
-          <NavLink 
-            to="/dashboard" 
-            style={({ isActive }) => ({
-              ...styles.navLink,
-              ...(isActive ? styles.navLinkActive : {}),
-            })}
-          >
-            📊 Dashboard
-          </NavLink>
-          <NavLink 
-            to="/users/pending" 
-            style={({ isActive }) => ({
-              ...styles.navLink,
-              ...(isActive ? styles.navLinkActive : {}),
-            })}
-          >
-            ⏳ Pending Users
-          </NavLink>
-          <NavLink 
-            to="/users/active" 
-            style={({ isActive }) => ({
-              ...styles.navLink,
-              ...(isActive ? styles.navLinkActive : {}),
-            })}
-          >
-            ✅ Active Users
-          </NavLink>
-        </nav>
-
-        <div style={styles.userSection}>
-          <div style={styles.userInfo}>
-            <div style={styles.userAvatar}>
-              {user?.username?.charAt(0).toUpperCase() || 'A'}
+      <aside className={`futuristic-sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
+        <div className="sidebar-content">
+          {/* Logo Section */}
+          <div className="logo-section">
+            <div className="logo-icon-wrapper">
+              <div className="logo-glow"></div>
+              <span className="logo-icon">⚡</span>
             </div>
-            <div>
-              <p style={styles.userName}>{user?.username || 'Admin'}</p>
-              <p style={styles.userRole}>Administrator</p>
+            <div className="logo-text-wrapper">
+              <span className="logo-text">AriesxHit</span>
+              <span className="logo-subtitle">Admin Portal</span>
             </div>
+            <button 
+              className="sidebar-toggle"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              aria-label="Toggle sidebar"
+            >
+              <span className={sidebarOpen ? 'icon-close' : 'icon-open'}>☰</span>
+            </button>
           </div>
-          <button onClick={handleLogout} style={styles.logoutBtn}>
-            🚪 Logout
-          </button>
+
+          {/* Navigation */}
+          <nav className="futuristic-nav">
+            {navItems.map((item, index) => {
+              const isActive = location.pathname === item.path;
+              return (
+                <NavLink
+                  key={item.id}
+                  to={item.path}
+                  className={`nav-item ${isActive ? 'active' : ''}`}
+                  style={{ animationDelay: `${index * 0.1}s` }}
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  <span className="nav-label">{item.label}</span>
+                  {isActive && <div className="nav-indicator"></div>}
+                  <div className="nav-glow"></div>
+                </NavLink>
+              );
+            })}
+          </nav>
+
+          {/* User Section */}
+          <div className="sidebar-user-section">
+            <div className="user-card glass">
+              <div className="user-avatar-wrapper">
+                <div className="avatar-ring"></div>
+                <div className="user-avatar">
+                  {user?.username?.charAt(0).toUpperCase() || 'A'}
+                </div>
+              </div>
+              <div className="user-info">
+                <p className="user-name">{user?.username || 'Admin'}</p>
+                <p className="user-role">Administrator</p>
+                <div className="user-status">
+                  <span className="status-dot"></span>
+                  <span>Online</span>
+                </div>
+              </div>
+            </div>
+            
+            <button 
+              onClick={handleLogout} 
+              className="logout-btn"
+            >
+              <span className="btn-icon">🚪</span>
+              <span className="btn-text">Logout</span>
+              <div className="btn-shine"></div>
+            </button>
+          </div>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main style={styles.main}>
-        <Outlet />
+      <main className="futuristic-main">
+        <div className="main-content-wrapper">
+          <Outlet />
+        </div>
       </main>
     </div>
   );
 }
-
-const styles = {
-  layout: {
-    display: 'flex',
-    minHeight: '100vh',
-    background: '#0a0a0f',
-  },
-  sidebar: {
-    width: '260px',
-    background: 'rgba(26, 26, 46, 0.8)',
-    backdropFilter: 'blur(10px)',
-    borderRight: '1px solid rgba(255, 255, 255, 0.1)',
-    display: 'flex',
-    flexDirection: 'column',
-    padding: '20px',
-  },
-  logo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    marginBottom: '40px',
-    paddingLeft: '8px',
-  },
-  logoIcon: {
-    fontSize: '28px',
-  },
-  logoText: {
-    fontSize: '20px',
-    fontWeight: '700',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-  },
-  nav: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    flex: 1,
-  },
-  navLink: {
-    padding: '12px 16px',
-    borderRadius: '8px',
-    color: '#888',
-    textDecoration: 'none',
-    fontSize: '14px',
-    fontWeight: '500',
-    transition: 'all 0.2s',
-  },
-  navLinkActive: {
-    background: 'rgba(102, 126, 234, 0.2)',
-    color: '#fff',
-  },
-  userSection: {
-    borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-    paddingTop: '20px',
-  },
-  userInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    marginBottom: '16px',
-  },
-  userAvatar: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '50%',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '16px',
-    fontWeight: '700',
-    color: '#fff',
-  },
-  userName: {
-    margin: 0,
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#fff',
-  },
-  userRole: {
-    margin: 0,
-    fontSize: '12px',
-    color: '#888',
-  },
-  logoutBtn: {
-    width: '100%',
-    padding: '10px',
-    borderRadius: '8px',
-    border: '1px solid rgba(239, 68, 68, 0.3)',
-    background: 'rgba(239, 68, 68, 0.1)',
-    color: '#ef4444',
-    fontSize: '14px',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  main: {
-    flex: 1,
-    overflow: 'auto',
-  },
-};
 
 export default MainLayout;

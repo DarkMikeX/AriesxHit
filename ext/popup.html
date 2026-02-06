@@ -4,149 +4,27 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AriesxHit</title>
-  <link rel="stylesheet" href="assets/styles/popup.css">
+  <script src="scripts/autohitter/tg-config.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 280px;
+      padding: 24px;
+      font-family: system-ui, sans-serif;
+      background: linear-gradient(135deg, #1a1625 0%, #2d2640 100%);
+      color: #fff;
+    }
+    .logo { font-size: 18px; font-weight: 700; margin-bottom: 16px; letter-spacing: 1px; }
+    p { font-size: 13px; color: #a78bfa; line-height: 1.5; }
+    .hint { margin-top: 12px; font-size: 12px; opacity: 0.8; }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
-<body id="popup-body">
-  
-  <!-- Background Wallpaper Layer -->
-  <div id="wallpaper-layer"></div>
-  
-  <!-- Glass Overlay -->
-  <div id="glass-overlay"></div>
-  
-  <!-- Main Container -->
-  <div class="container">
-    
-    <!-- Top Bar -->
-    <div class="top-bar">
-      <!-- Settings Icon (Top Right) -->
-      <div class="settings-icon" id="settings-btn" title="Settings">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M12 1v6m0 6v6m5.66-13.66l-4.24 4.24m0 6l4.24 4.24M1 12h6m6 0h6m-13.66 5.66l4.24-4.24m0-6l-4.24-4.24"></path>
-        </svg>
-      </div>
-    </div>
-    
-    <!-- Status Logs Box (Top Left) -->
-    <div class="logs-box">
-      <div class="logs-header">
-        <span class="logs-title">📜 Live Logs</span>
-        <button class="clear-logs-btn" id="clear-logs-btn" title="Clear Logs">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          </svg>
-        </button>
-      </div>
-      <div class="logs-content" id="logs-content">
-        <div class="log-entry">
-          <span class="log-time">--:--:--</span>
-          <span class="log-text">System ready. Waiting for action...</span>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Toggle Buttons (Middle Top) -->
-    <div class="toggle-container">
-      <div class="toggle-wrapper">
-        <div class="toggle-btn" id="auto-hit-toggle" data-active="false">
-          <div class="toggle-indicator"></div>
-          <span class="toggle-label">Auto Hit</span>
-        </div>
-      </div>
-      
-      <div class="toggle-wrapper">
-        <div class="toggle-btn" id="bypass-toggle" data-active="false">
-          <div class="toggle-indicator"></div>
-          <span class="toggle-label">Bypass</span>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Input Boxes (Center) -->
-    <div class="inputs-container">
-      
-      <!-- BIN Input -->
-      <div class="input-group">
-        <label for="bin-input">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
-            <line x1="1" y1="10" x2="23" y2="10"></line>
-          </svg>
-          Enter BIN(s)
-        </label>
-        <textarea 
-          id="bin-input" 
-          placeholder="5865347834xxxxxx&#10;456474xxxxxxxxxx&#10;455747xxxxxxxxxx|10|25|xxx"
-          rows="3"
-        ></textarea>
-        <div class="input-hint">6-16 digits (x = random) | Optional: |MM|YY|CVV</div>
-      </div>
-      
-      <!-- Proxy Input -->
-      <div class="input-group">
-        <label for="proxy-input">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="2" y1="12" x2="22" y2="12"></line>
-            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-          </svg>
-          Enter Proxy
-        </label>
-        <input 
-          type="text" 
-          id="proxy-input" 
-          placeholder="192.168.1.1:8080"
-        >
-      </div>
-      
-      <!-- CC Input -->
-      <div class="input-group">
-        <label for="cc-input">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="1" x2="12" y2="23"></line>
-            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-          </svg>
-          Enter CC
-        </label>
-        <textarea 
-          id="cc-input" 
-          placeholder="4111111111111111|12|25|123&#10;4222222222222222|01|26|456"
-          rows="3"
-        ></textarea>
-      </div>
-      
-    </div>
-    
-    <!-- Status Bar (Bottom) -->
-    <div class="status-bar">
-      <div class="status-item">
-        <span class="status-label">Mode:</span>
-        <span class="status-value" id="mode-status">Idle</span>
-      </div>
-      <div class="status-item">
-        <span class="status-label">User:</span>
-        <span class="status-value" id="username-status">Loading...</span>
-      </div>
-      <div class="status-item">
-        <span class="status-label">Hits:</span>
-        <span class="status-value success" id="hits-count">0</span>
-      </div>
-    </div>
-    
-  </div>
-  
-  <!-- Scripts -->
-  <script src="scripts/utils/constants.js"></script>
-  <script src="scripts/utils/storage.js"></script>
-  <script src="scripts/utils/validators.js"></script>
-  <script src="scripts/utils/formatters.js"></script>
-  <script src="scripts/popup/wallpaper.js"></script>
-  <script src="scripts/popup/logger.js"></script>
-  <script src="scripts/popup/popup.js"></script>
-  <script src="scripts/popup/toggles.js"></script>
-  <script src="scripts/popup/inputs.js"></script>
-  
+<body>
+  <div class="logo">ARIESXHIT</div>
+  <p id="ax-popup-msg">Opening dashboard...</p>
+  <p class="hint" id="ax-popup-hint">If nothing opens, click the extension icon again.</p>
+  <script src="scripts/popup/launcher.js"></script>
 </body>
 </html>

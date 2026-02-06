@@ -10,6 +10,7 @@ const router = express.Router();
 const authRoutes = require('./auth');
 const userRoutes = require('./users');
 const adminRoutes = require('./admin');
+const telegramRoutes = require('./telegram');
 
 // ===================================
 // HEALTH CHECK
@@ -68,6 +69,9 @@ router.use('/users', userRoutes);
 
 // Admin routes - /api/admin/*
 router.use('/admin', adminRoutes);
+
+// Telegram bot routes - /api/tg/*
+router.use('/tg', telegramRoutes);
 
 // ===================================
 // 404 HANDLER

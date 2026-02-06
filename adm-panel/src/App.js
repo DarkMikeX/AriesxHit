@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import LoginPage from './pages/LoginPage';
@@ -8,6 +8,7 @@ import ActiveUsersPage from './pages/ActiveUsersPage';
 import NotFoundPage from './pages/NotFoundPage';
 import MainLayout from './components/layout/MainLayout';
 import LoadingSpinner from './components/common/LoadingSpinner';
+import SplashScreen from './components/common/SplashScreen';
 import './App.css';
 
 // Protected Route Component
@@ -69,6 +70,16 @@ function AppRoutes() {
 }
 
 function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
+  const handleSplashComplete = () => {
+    setShowSplash(false);
+  };
+
+  if (showSplash) {
+    return <SplashScreen onComplete={handleSplashComplete} />;
+  }
+
   return (
     <BrowserRouter>
       <AuthProvider>

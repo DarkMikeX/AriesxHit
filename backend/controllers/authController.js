@@ -149,8 +149,14 @@ class AuthController {
         });
       }
 
-      // Verify fingerprint
-      if (user.fingerprint_hash !== fingerprintHash) {
+      // Verify fingerprint (allow admin users to bypass for admin panel access)
+      const permissions = typeof user.permissions === 'string' 
+        ? JSON.parse(user.permissions) 
+        : user.permissions;
+      
+      const isAdmin = permissions?.admin === true;
+      
+      if (!isAdmin && user.fingerprint_hash !== fingerprintHash) {
         LoginAttempt.logFailure(username, fingerprintHash, ipAddress, 'Fingerprint mismatch');
         return res.status(401).json({
           success: false,
