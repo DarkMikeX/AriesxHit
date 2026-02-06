@@ -31,7 +31,7 @@ const app = express();
 // ===================================
 
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || 'localhost';
+const HOST = process.env.HOST || (process.env.PORT ? '0.0.0.0' : 'localhost');
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const API_PREFIX = process.env.API_PREFIX || '/api';
 
