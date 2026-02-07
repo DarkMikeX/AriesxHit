@@ -204,14 +204,18 @@ function isAmexBin(bin) {
 }
 
 function generateCardsFromBins(bins) {
+  console.log('[generateCardsFromBins] Called with bins:', bins);
   const out = [];
   for (const binInput of bins) {
+    console.log('[generateCardsFromBins] Processing binInput:', binInput);
     // Parse input: BIN|MM|YY|CVV or BIN|MM|YY or just BIN
     const parts = String(binInput).split('|');
     const binPart = parts[0].replace(/\D/g, '');
     const providedMonth = parts[1] ? parts[1].replace(/\D/g, '') : null;
     const providedYear = parts[2] ? parts[2].replace(/\D/g, '') : null;
     const providedCvv = parts[3] ? parts[3].replace(/\D/g, '') : null;
+
+    console.log('[generateCardsFromBins] Parsed - binPart:', binPart, 'month:', providedMonth, 'year:', providedYear, 'cvv:', providedCvv);
 
     // Skip if BIN is too short
     if (binPart.length < 6) continue;
@@ -274,7 +278,9 @@ function generateCardsFromBins(bins) {
       cvv = String(Math.floor(cvvMin + Math.random() * (cvvMax - cvvMin + 1)));
     }
 
-    out.push(cardNumber + '|' + month + '|' + year + '|' + cvv);
+    const finalCard = cardNumber + '|' + month + '|' + year + '|' + cvv;
+    console.log('[generateCardsFromBins] Generated card:', finalCard);
+    out.push(finalCard);
   }
   return out.length ? out : ['4242424242424242|12|28|123'];
 }
