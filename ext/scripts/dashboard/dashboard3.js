@@ -172,39 +172,32 @@
   }
 
   function copyToClipboard(text) {
-    return new Promise((resolve, reject) => {
-      // Try modern clipboard API first
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(resolve).catch(() => {
-          // Fallback to old method
-          fallbackCopy(text);
-          resolve();
-        });
-      } else {
-        // Fallback for older browsers/extensions
-        fallbackCopy(text);
-        resolve();
-      }
-    });
-  }
-
-  function fallbackCopy(text) {
+    // Create a temporary textarea element
     const textArea = document.createElement('textarea');
     textArea.value = text;
     textArea.style.position = 'fixed';
     textArea.style.left = '-9999px';
     textArea.style.top = '-9999px';
+    textArea.style.opacity = '0';
     document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
 
     try {
-      document.execCommand('copy');
+      // Select and copy the text
+      textArea.focus();
+      textArea.select();
+      const successful = document.execCommand('copy');
+      if (successful) {
+        showToast('Copied successfully!');
+      } else {
+        showToast('Copy failed - try again');
+      }
     } catch (err) {
-      console.warn('Fallback copy failed:', err);
+      console.error('Copy failed:', err);
+      showToast('Copy failed - try again');
+    } finally {
+      // Clean up
+      document.body.removeChild(textArea);
     }
-
-    document.body.removeChild(textArea);
   }
 
   function showToast(msg) {
@@ -262,8 +255,10 @@
       const logs = r?.logs || [];
       const cards = logs.filter((l) => l.subtype === 'hit' && l.card).map((l) => l.card);
       if (cards.length) {
-        copyToClipboard(cards.join('\n')).then(() => showToast('Copied ' + cards.length + ' card(s)'));
-      } else showToast('No cards to copy');
+        copyToClipboard(cards.join('\n'));
+      } else {
+        showToast('No cards to copy');
+      }
     });
   });
 
