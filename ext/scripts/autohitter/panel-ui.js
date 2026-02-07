@@ -525,7 +525,7 @@
     box.querySelectorAll('.ax-toast-copy, .ax-copy-btn').forEach((btn) => {
       btn.onclick = (e) => { e.stopPropagation(); navigator.clipboard?.writeText(cardStr).then(() => showInfoToastStyled('Copied!')).catch(() => {}); };
     });
-    const delay = type === 'trying' ? 1500 : type === 'error' ? 2500 : type === 'hit' ? 20000 : 3000;
+    const delay = type === 'trying' ? 1500 : type === 'error' ? 1500 : type === 'hit' ? 20000 : 3000;
     setTimeout(removeAndNext, delay);
   }
 
