@@ -129,6 +129,12 @@
   }
 
   function createUI() {
+    // Remove existing UI to prevent duplicates
+    const existingUI = document.getElementById('ariesxhit-ui');
+    if (existingUI) {
+      existingUI.remove();
+    }
+
     const wrap = document.createElement('div');
     wrap.id = 'ariesxhit-ui';
 
@@ -200,19 +206,46 @@
         doStop();
       }
     };
-    document.getElementById('ax-ctrl-play').onclick = (e) => {
-      e.stopPropagation();
-      console.log('PLAY BUTTON clicked');
-      if (state.paused && state.active) { state.paused = false; updateStatusUI(); [0, 300, 600].forEach((ms) => setTimeout(() => { if (state.active && !state.paused) clickPayButton(); }, ms)); return; }
-      if (state.active) { state.paused = true; updateStatusUI(); return; }
-      handleStart();
-    };
-    document.getElementById('ax-ctrl-mode').onclick = (e) => {
-      e.stopPropagation();
-      console.log('MODE BUTTON clicked');
-      const next = state.mode === 'BIN' ? 'CC' : 'BIN';
-      setMode(next);
-    };
+    // Use event delegation on the control buttons container
+    const controlButtons = document.querySelector('.ax-control-buttons');
+    if (controlButtons) {
+      controlButtons.addEventListener('click', (e) => {
+        e.stopPropagation();
+
+        const target = e.target.closest('.ax-ctrl-btn');
+        if (!target) return;
+
+        const buttonId = target.id;
+        console.log('Control button clicked:', buttonId, 'target element:', e.target.tagName, 'closest button:', target.tagName);
+
+        if (buttonId === 'ax-ctrl-play') {
+          console.log('PLAY BUTTON functionality triggered');
+          if (state.paused && state.active) {
+            state.paused = false;
+            updateStatusUI();
+            [0, 300, 600].forEach((ms) => setTimeout(() => {
+              if (state.active && !state.paused) clickPayButton();
+            }, ms));
+            return;
+          }
+          if (state.active) {
+            state.paused = true;
+            updateStatusUI();
+            return;
+          }
+          handleStart();
+        } else if (buttonId === 'ax-ctrl-mode') {
+          console.log('MODE BUTTON functionality triggered');
+          const next = state.mode === 'BIN' ? 'CC' : 'BIN';
+          setMode(next);
+        } else if (buttonId === 'ax-ctrl-stop') {
+          console.log('STOP BUTTON functionality triggered');
+          doStop();
+        }
+      });
+    } else {
+      console.error('Control buttons container not found!');
+    }
     const ipEl = document.getElementById('ax-ip-value');
     chrome.runtime.sendMessage({ type: 'GET_IP' }, (r) => { state.userIP = r?.ip || ''; if (ipEl) ipEl.textContent = state.userIP || '—'; });
   }
