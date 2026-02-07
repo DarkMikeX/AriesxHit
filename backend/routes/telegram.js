@@ -230,8 +230,7 @@ router.post('/webhook', async (req, res) => {
       if (!token) token = generateLoginToken(tgId, firstName);
       const text = `👤 <b>PROFILE</b>\n` +
         `─────────────────\n` +
-        `Code :- \n\n` +
-        `<code>${token}</code>\n\n` +
+        `Code :- <code>${token}</code> \n\n` +
         `─────────────────\n` +
         `Name: ${firstName}\n` +
         `--------------\n` +

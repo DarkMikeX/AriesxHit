@@ -105,12 +105,21 @@ body {
 }
 
 .app-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 24px;
   font-weight: 800;
   letter-spacing: 1px;
   color: var(--text-primary);
   text-shadow: 0 0 20px rgba(96, 165, 250, 0.4);
   animation: titleGlow 4s ease-in-out infinite;
+}
+
+.app-title-logo {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
 }
 
 @keyframes titleGlow {

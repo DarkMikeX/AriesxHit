@@ -86,14 +86,20 @@ body::before {
 }
 
 .ax-dash-logo {
-  font-size: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 700;
   letter-spacing: 3px;
   color: var(--ax-text);
   text-shadow: 0 0 40px rgba(34,211,238,0.25);
 }
 
-.ax-dash-logo::first-letter { color: var(--ax-accent); }
+.ax-dash-logo-img {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+}
 
 .ax-dash-ver {
   font-size: 12px;
@@ -585,14 +591,11 @@ body::before {
   opacity: 0.6;
 }
 
-.ax-login-header .ax-login-logo {
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: 3px;
-  background: linear-gradient(135deg, var(--ax-text) 0%, var(--ax-accent) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.ax-login-header .ax-login-logo-img {
+  height: 56px;
+  width: auto;
+  display: block;
+  object-fit: contain;
 }
 
 .ax-login-header .ax-dash-ver {
