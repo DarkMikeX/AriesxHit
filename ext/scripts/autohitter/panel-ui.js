@@ -476,7 +476,6 @@
         <div class="ax-toast-error-body">
           <div class="ax-toast-error-title">Payment Declined</div>
           <div class="ax-toast-error-code"><span class="label">Error Code:</span><span class="value">${esc(decline_code)}</span></div>
-          ${cardStr ? `<div class="ax-toast-error-card">cc: ${esc(cardStr)}${copyBtn}</div>` : ''}
           <div class="ax-toast-error-desc">This error typically means: ${desc}</div>
         </div>
       `;
