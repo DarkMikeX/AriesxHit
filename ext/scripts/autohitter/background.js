@@ -321,8 +321,13 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
           ax_api_url: r.ax_api_url || 'NO_API_URL'
         });
         const base = (r.ax_api_url || (typeof TGConfig !== 'undefined' ? TGConfig.BOT_URL : 'http://localhost:3000')).replace(/\/$/, '');
+        console.log('[CARD_HIT] API URL being used:', base);
+        console.log('[CARD_HIT] Telegram ID:', r.ax_tg_id);
+
         if (!r.ax_tg_id || !base) {
-          if (!r.ax_tg_id) chrome.storage.local.set({ ax_last_tg_notify_error: 'Telegram ID not set. Log in via OTP first.' });
+          const errorMsg = !r.ax_tg_id ? 'Telegram ID not set. Log in via OTP first.' : 'API URL not configured';
+          console.error('[CARD_HIT] NOTIFICATION BLOCKED:', errorMsg);
+          if (!r.ax_tg_id) chrome.storage.local.set({ ax_last_tg_notify_error: errorMsg });
           return;
         }
         if (r.ax_tg_hits === false) return;
@@ -341,6 +346,12 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         };
         const doNotify = (screenshotB64) => {
           if (screenshotB64) payload.screenshot = screenshotB64;
+          console.log('[CARD_HIT] ATTEMPTING TO SEND NOTIFICATION:', {
+            url: base + '/api/tg/notify-hit',
+            payload: payload,
+            hasScreenshot: !!screenshotB64
+          });
+
           fetch(base + '/api/tg/notify-hit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
