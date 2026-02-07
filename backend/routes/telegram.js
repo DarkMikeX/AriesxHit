@@ -181,28 +181,45 @@ router.post('/webhook', async (req, res) => {
       await answerCallbackQuery(BOT_TOKEN, cb.id, 'Token generated!');
       const text = `🔑 <b>LOGIN CODE</b>\n` +
         `─────────────────\n\n` +
-        `Copy and paste in extension:\n\n` +
+        ` Token :- \n\n` +
         `<code>${token}</code>\n\n` +
-        `Valid 24 hours`;
+        `─────────────────\n` +
+        `Use To Log In Hitter 💗`;
       await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
-    } else if (cb.data === 'my_stats' || cb.data === 'my_hits') {
+    } else if (cb.data === 'my_stats') {
       const hits = getUserHits(tgId);
-      const rank = getUserRank(tgId);
-      const rankStr = rank ? `\n🏅 Rank: #${rank}` : '';
+      const global = getGlobalHits();
       const text = `📈 <b>YOUR STATS</b>\n` +
-        `─────────────────\n\n` +
+        `────────────────────\n\n` +
         `👤 ${firstName}\n\n` +
-        `🎯 Hits: ${hits}${rankStr}\n` +
-        `🌍 Global: ${getGlobalHits()}`;
+        `🎯 Hits: ${hits}\n` +
+        `🌍 Global: ${global}\n\n` +
+        `────────────────────\n` +
+        `Join :- @Ariesxhit 💗`;
+      await answerCallbackQuery(BOT_TOKEN, cb.id);
+      await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
+    } else if (cb.data === 'my_hits') {
+      const hits = getUserHits(tgId);
+      const global = getGlobalHits();
+      const text = `📈 <b>YOUR HITS</b>\n` +
+        `────────────────────\n\n` +
+        `👤 ${firstName}\n\n` +
+        `🎯 Hits: ${hits}\n` +
+        `🌍 Global: ${global}\n\n` +
+        `────────────────────\n` +
+        `Join :- @Ariesxhit 💗`;
       await answerCallbackQuery(BOT_TOKEN, cb.id);
       await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
     } else if (cb.data === 'scoreboard') {
       const top = getTopUsers(10);
       const rows = top.length ? top.map((u, i) => `${i + 1}. ${u.name}: ${u.hits}`).join('\n') : 'No hits yet.';
+      const global = getGlobalHits();
       const text = `🏆 <b>SCOREBOARD</b>\n` +
         `─────────────────\n\n` +
         `${rows}\n\n` +
-        `🌍 Global: ${getGlobalHits()}`;
+        `🌍 Global: ${global}\n\n` +
+        `─────────────────\n` +
+        `Join :- @Ariesxhit 💗`;
       await answerCallbackQuery(BOT_TOKEN, cb.id);
       await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
     } else if (cb.data === 'profile') {
@@ -211,27 +228,37 @@ router.post('/webhook', async (req, res) => {
       const rankStr = rank ? `#${rank}` : '—';
       let token = getLoginTokenForUser(tgId);
       if (!token) token = generateLoginToken(tgId, firstName);
-      const tokenBlock = `\n🔑 <b>Login Code</b>\n` +
-        `Copy and paste in extension:\n\n` +
-        `<code>${token}</code>\n\n` +
-        `Valid 24 hours`;
       const text = `👤 <b>PROFILE</b>\n` +
-        `─────────────────\n\n` +
-        `Name: ${firstName}\n\n` +
-        `🎯 Hits: ${hits}\n` +
-        `🏅 Rank: ${rankStr}` +
-        tokenBlock;
+        `─────────────────\n` +
+        `Code :- \n\n` +
+        `<code>${token}</code>\n\n` +
+        `─────────────────\n` +
+        `Name: ${firstName}\n` +
+        `--------------\n` +
+        `Hits: ${hits}\n` +
+        `Rank: ${rankStr}\n` +
+        `--------------\n` +
+        `Join :- @Ariesxhit\n` +
+        `Thanks For Using AriesxHit 💗\n\n` +
+        `─────────────────`;
       await answerCallbackQuery(BOT_TOKEN, cb.id, 'Profile');
       await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
     } else if (cb.data === 'help') {
       const text = `❓ <b>HELP</b>\n` +
         `─────────────────\n\n` +
-        `🔑 <b>Generate Token</b>\n` +
-        `Get 12-char code for extension login\n\n` +
-        `📱 Enter code in extension → Login\n\n` +
+        `🔑 Generate Token\n` +
+        `Get  token for hitter login\n` +
+        `----------------\n` +
+        `Enter code in hitter → Login\n` +
+        `----------------\n` +
         `📈 My Stats / My Hits – Your hits & rank\n` +
+        `----------------\n` +
         `🏆 Scoreboard – Top users\n` +
-        `👤 Profile – Your info`;
+        `----------------\n` +
+        `👤 Profile – Your info\n\n` +
+        `─────────────────\n` +
+        `Join :- @Ariesxhit\n` +
+        `Thanks For Using AriesxHit 💗`;
       await answerCallbackQuery(BOT_TOKEN, cb.id);
       await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
     }
