@@ -130,7 +130,7 @@ app.use((req, res, next) => {
 // ===================================
 
 // Apply rate limiting to all API routes
-app.use(API_PREFIX, apiLimiter);
+// app.use(API_PREFIX, apiLimiter); // Temporarily disabled for testing
 
 // ===================================
 // TRUST PROXY

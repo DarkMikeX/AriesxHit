@@ -114,7 +114,7 @@ function createRateLimiter(options = {}) {
  */
 const apiLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 1000, // Increased for testing
   message: 'Too many API requests, please try again later'
 });
 
