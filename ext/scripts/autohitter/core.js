@@ -620,15 +620,9 @@ sendHitOnce(card);
   // ===================================
 
   function setupHCaptchaAutoClicker() {
-    // Check if hCaptcha auto-clicker is enabled
-    chrome.storage.local.get(['ax_hcaptcha_autoclick'], (r) => {
-      if (r.ax_hcaptcha_autoclick !== false) { // Default to enabled
-        console.log('[HCaptcha] Setting up auto-clicker...');
-        initHCaptchaObserver();
-      } else {
-        console.log('[HCaptcha] Auto-clicker disabled by user');
-      }
-    });
+    // hCaptcha auto-clicker is always enabled (configurable via background script)
+    console.log('[HCaptcha] Setting up auto-clicker...');
+    initHCaptchaObserver();
   }
 
   function initHCaptchaObserver() {
@@ -664,9 +658,13 @@ sendHitOnce(card);
         'div[role="checkbox"][aria-labelledby*="aiy_label"]',
         '.h-captcha div[role="checkbox"]',
         'iframe[src*="hcaptcha.com"]',
+        'iframe[title*="hcaptcha" i]',
+        'iframe[title*="HCaptcha" i]',
         '.hcaptcha-box',
         '[data-sitekey]',
-        '.challenge-container'
+        '.challenge-container',
+        '#HCaptcha-root iframe',
+        '.HCaptcha-container iframe'
       ];
 
       let foundHCaptcha = false;
@@ -680,18 +678,12 @@ sendHitOnce(card);
           // Try to find and click the checkbox
           for (const element of elements) {
             if (selector.includes('iframe')) {
-              // Handle iframe case
+              // Handle iframe case - focus iframe and send keyboard event
               try {
-                const iframeDoc = element.contentDocument || element.contentWindow?.document;
-                if (iframeDoc) {
-                  const checkbox = iframeDoc.querySelector('div[role="checkbox"]');
-                  if (checkbox && checkbox.getAttribute('aria-checked') !== 'true') {
-                    console.log('[HCaptcha] Found checkbox in iframe, attempting click...');
-                    clickHCaptchaCheckbox(checkbox);
-                  }
-                }
+                console.log('[HCaptcha] Found hCaptcha iframe, attempting activation...');
+                activateHCaptchaIframe(element);
               } catch (e) {
-                console.log('[HCaptcha] Could not access iframe:', e.message);
+                console.log('[HCaptcha] Could not activate iframe:', e.message);
               }
             } else {
               // Direct element
@@ -715,6 +707,61 @@ sendHitOnce(card);
 
     } catch (e) {
       console.error('[HCaptcha] Error in checkForHCaptcha:', e);
+    }
+  }
+
+  function activateHCaptchaIframe(iframe) {
+    try {
+      console.log('[HCaptcha] Attempting to activate iframe...');
+
+      // Add random delay to seem more human-like
+      const delay = Math.random() * 1000 + 500; // 500-1500ms
+      setTimeout(() => {
+        try {
+          // Focus the iframe
+          iframe.focus();
+
+          // Send keyboard events to activate (spacebar or enter)
+          const keyEvents = [
+            new KeyboardEvent('keydown', { key: ' ', keyCode: 32, bubbles: true }),
+            new KeyboardEvent('keyup', { key: ' ', keyCode: 32, bubbles: true })
+          ];
+
+          for (const event of keyEvents) {
+            iframe.dispatchEvent(event);
+          }
+
+          // Also try clicking on the iframe
+          const clickEvent = new MouseEvent('click', {
+            view: window,
+            bubbles: true,
+            cancelable: true,
+            clientX: iframe.getBoundingClientRect().left + iframe.offsetWidth / 2,
+            clientY: iframe.getBoundingClientRect().top + iframe.offsetHeight / 2,
+            button: 0,
+            buttons: 1
+          });
+          iframe.dispatchEvent(clickEvent);
+
+          console.log('[HCaptcha] Iframe activation events dispatched');
+
+          // Check if it worked after a delay
+          setTimeout(() => {
+            // Try to detect if captcha is completed by checking for changes
+            console.log('[HCaptcha] Checking if iframe activation worked...');
+            // We can't directly check iframe content, but we can check if the iframe still exists or has changed
+            if (iframe.parentNode) {
+              console.log('[HCaptcha] Iframe still present, may need manual completion');
+            }
+          }, 2000);
+
+        } catch (e) {
+          console.error('[HCaptcha] Error activating iframe:', e);
+        }
+      }, delay);
+
+    } catch (e) {
+      console.error('[HCaptcha] Error in activateHCaptchaIframe:', e);
     }
   }
 
