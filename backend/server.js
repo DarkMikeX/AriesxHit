@@ -153,6 +153,16 @@ app.get('/', (req, res) => {
   });
 });
 
+// Health check route
+app.get(API_PREFIX + '/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    bot_token_configured: !!process.env.TELEGRAM_BOT_TOKEN,
+    database_ready: !!db && db.ready
+  });
+});
+
 // Favicon (prevent 404)
 app.get('/favicon.ico', (req, res) => {
   res.status(204).end();

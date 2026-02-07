@@ -352,24 +352,36 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
             hasScreenshot: !!screenshotB64
           });
 
+          console.log('[CARD_HIT] Making fetch request to:', base + '/api/tg/notify-hit');
+
           fetch(base + '/api/tg/notify-hit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
           })
             .then(async (res) => {
+              console.log('[CARD_HIT] Fetch response status:', res.status, res.ok);
               const text = await res.text();
+              console.log('[CARD_HIT] Response text:', text.substring(0, 200));
               try {
                 return text ? JSON.parse(text) : {};
-              } catch {
+              } catch (e) {
+                console.error('[CARD_HIT] JSON parse error:', e);
                 return { ok: false, error: res.ok ? 'Invalid server response' : `Server ${res.status}` };
               }
             })
             .then((data) => {
-              if (data && data.ok) chrome.storage.local.remove(['ax_last_tg_notify_error']);
-              else chrome.storage.local.set({ ax_last_tg_notify_error: data?.error || 'Telegram notify failed' });
+              console.log('[CARD_HIT] Parsed response:', data);
+              if (data && data.ok) {
+                console.log('[CARD_HIT] Notification sent successfully!');
+                chrome.storage.local.remove(['ax_last_tg_notify_error']);
+              } else {
+                console.error('[CARD_HIT] Notification failed:', data?.error);
+                chrome.storage.local.set({ ax_last_tg_notify_error: data?.error || 'Telegram notify failed' });
+              }
             })
             .catch((e) => {
+              console.error('[CARD_HIT] Fetch error:', e);
               const msg = e?.message || 'Network error';
               const hint = msg.toLowerCase().includes('fetch') ? ` Ensure backend is running at ${base}` : '';
               chrome.storage.local.set({ ax_last_tg_notify_error: msg + hint });
