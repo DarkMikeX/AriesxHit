@@ -39,33 +39,9 @@
   function tryExtractAmount() {
     try {
       const txt = (document.body && document.body.innerText) || '';
-
-      // Look for various price formats
-      const patterns = [
-        /\$[\d,]+\.?\d*/,  // $123.45 or $123
-        /USD\s*[\d,]+\.?\d*/i,  // USD 123.45
-        /€[\d,]+\.?\d*/,  // €123.45
-        /£[\d,]+\.?\d*/,  // £123.45
-        /([\d,]+\.?\d*)\s*(usd|eur|gbp|usd|eur|gbp)/i,  // 123.45 USD
-        /total:?\s*\$?[\d,]+\.?\d*/i,  // Total: $123.45
-        /amount:?\s*\$?[\d,]+\.?\d*/i,  // Amount: $123.45
-        /price:?\s*\$?[\d,]+\.?\d*/i,  // Price: $123.45
-      ];
-
-      for (const pattern of patterns) {
-        const match = txt.match(pattern);
-        if (match && match[0]) {
-          console.log('Amount found with pattern:', pattern, 'result:', match[0]);
-          return match[0].trim();
-        }
-      }
-
-      console.log('No amount found in page text');
-      return '';
-    } catch (e) {
-      console.error('Error extracting amount:', e);
-      return '';
-    }
+      const m = txt.match(/\$[\d,]+\.?\d*/) || txt.match(/USD\s*[\d,]+\.?\d*/i) || txt.match(/€[\d,]+\.?\d*/) || txt.match(/£[\d,]+\.?\d*/) || txt.match(/(\d+\.?\d*)\s*(usd|eur|gbp)/i);
+      return m ? m[0] : '';
+    } catch (_) { return ''; }
   }
 
   function extractCheckoutUrl() {
@@ -110,16 +86,11 @@
     if (state.hitSent) return;
     state.hitSent = true;
     const checkoutUrl = extractCheckoutUrl();
-    const amount = tryExtractAmount();
-    console.log('[sendHitOnce] HIT DETECTED! Sending data:', {
-      card: card || 'NO_CARD',
-      success_url: checkoutUrl || 'NO_URL',
-      amount: amount || 'NO_AMOUNT'
-    });
+    console.log('[sendHitOnce] Sending hit with card:', card, 'URL:', checkoutUrl);
     send('CARD_HIT', {
       card,
       success_url: checkoutUrl,
-      amount,
+      amount: tryExtractAmount(),
     });
   }
   function send(type, data) {
