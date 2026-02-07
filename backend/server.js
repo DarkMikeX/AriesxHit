@@ -31,7 +31,8 @@ const app = express();
 // ===================================
 
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || (process.env.PORT ? '0.0.0.0' : 'localhost');
+// Bind to 0.0.0.0 so Render/Heroku etc can reach the server (localhost blocks external traffic)
+const HOST = '0.0.0.0';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const API_PREFIX = process.env.API_PREFIX || '/api';
 
