@@ -14,6 +14,7 @@ function setDatabase(databaseInstance) {
 }
 
 async function sendMessage(botToken, chatId, text, opts = {}) {
+  console.log('sendMessage: Attempting to send message to', chatId);
   if (!botToken || !chatId) {
     console.error('sendMessage: Missing bot token or chat_id');
     return { ok: false, error: 'Missing bot token or chat_id' };
@@ -235,23 +236,31 @@ function getGlobalHits() {
 }
 
 function incrementUserHits(tgId) {
-  if (!db) return;
+  console.log('[DATABASE] incrementUserHits called for user:', tgId);
+  if (!db) {
+    console.error('[DATABASE] Database not available');
+    return;
+  }
   const id = String(tgId);
   try {
     // First ensure user exists
+    console.log('[DATABASE] Ensuring user exists in database');
     db.prepare(`
       INSERT OR IGNORE INTO telegram_users (tg_id, name, hits)
       VALUES (?, ?, 0)
     `).run(id, getUserName(tgId));
 
     // Then increment hits
-    db.prepare(`
+    console.log('[DATABASE] Incrementing hits for user:', id);
+    const result = db.prepare(`
       UPDATE telegram_users
       SET hits = hits + 1, updated_at = CURRENT_TIMESTAMP
       WHERE tg_id = ?
     `).run(id);
+
+    console.log('[DATABASE] Update result:', result);
   } catch (error) {
-    console.error('Error incrementing user hits:', error);
+    console.error('[DATABASE] Error incrementing user hits:', error);
   }
 }
 

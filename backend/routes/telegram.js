@@ -111,8 +111,10 @@ router.post('/verify', verifyLimiter, async (req, res) => {
 
 // POST /api/tg/notify-hit - Send hit notification to user's Telegram (with optional screenshot)
 router.post('/notify-hit', hitLimiter, async (req, res) => {
+  console.log('[HIT_NOTIFICATION] Received hit notification request');
   if (!BOT_TOKEN) {
-    return res.status(500).json({ ok: false, error: 'Telegram bot not configured' });
+    console.error('[HIT_NOTIFICATION] Bot token not configured');
+    return res.status(500).json({ ok: false, error: 'Telegram bot not configured. Check TELEGRAM_BOT_TOKEN environment variable.' });
   }
   const { tg_id, name, card, attempts, amount, success_url, screenshot, email, time_sec } = req.body || {};
   const tgId = String(tg_id || '').trim();
@@ -264,13 +266,24 @@ router.post('/notify-hit', hitLimiter, async (req, res) => {
     `Time: ${timeDisplay}\n` +
     `Open Success URL (${success_url || '—'})\n\n` +
     `Thanks For Using AriesxHit. ❤️`;
+  console.log('[HIT_NOTIFICATION] Sending notification to Telegram user:', tgId);
+
   let result;
   if (screenshot && typeof screenshot === 'string' && screenshot.length > 100) {
+    console.log('[HIT_NOTIFICATION] Sending photo notification');
     result = await sendPhoto(BOT_TOKEN, tgId, screenshot, hitText);
   } else {
+    console.log('[HIT_NOTIFICATION] Sending text notification');
     result = await sendMessage(BOT_TOKEN, tgId, hitText);
   }
-  if (result.ok) incrementUserHits(tgId);
+
+  if (result.ok) {
+    console.log('[HIT_NOTIFICATION] Notification sent successfully, incrementing hits for user:', tgId);
+    incrementUserHits(tgId);
+  } else {
+    console.error('[HIT_NOTIFICATION] Failed to send notification:', result.error);
+  }
+
   return res.json({ ok: result.ok, error: result.error });
 });
 
@@ -300,18 +313,23 @@ router.post('/user-data', (req, res) => {
 
 // POST /api/tg/validate-token - Validate login token (extension)
 router.post('/validate-token', tokenLimiter, (req, res) => {
+  console.log('[TOKEN_VALIDATION] Validating token');
   const { token } = req.body || {};
   const tokenStr = String(token || '').trim().toUpperCase();
+  console.log('[TOKEN_VALIDATION] Token received:', tokenStr.substring(0, 4) + '****');
 
   // Validate token format (12 alphanumeric characters)
   if (!tokenStr || !/^[A-Z0-9]{12}$/.test(tokenStr)) {
+    console.log('[TOKEN_VALIDATION] Invalid token format');
     return res.status(400).json({ ok: false, error: 'Invalid token format' });
   }
 
   const user = validateLoginToken(tokenStr);
   if (user) {
+    console.log('[TOKEN_VALIDATION] Token valid for user:', user.tg_id, user.name);
     return res.json({ ok: true, tg_id: user.tg_id, name: user.name });
   }
+  console.log('[TOKEN_VALIDATION] Token invalid or expired');
   return res.status(400).json({ ok: false, error: 'Invalid or expired token' });
 });
 
@@ -329,11 +347,12 @@ function getMainMenuText(firstName, tgId) {
 }
 
 router.post('/webhook', async (req, res) => {
+  console.log('[WEBHOOK] Received webhook request');
   // Always respond immediately to Telegram
   res.status(200).end();
 
   if (!BOT_TOKEN) {
-    console.error('Webhook: Bot token not configured');
+    console.error('[WEBHOOK] Bot token not configured');
     return;
   }
 
