@@ -250,10 +250,9 @@
     if (state.hitSent) return;
     state.hitSent = true;
     const checkoutUrl = extractCheckoutUrl();
-    console.log('[sendHitOnce] Sending hit with card:', card, 'URL:', checkoutUrl);
+    console.log('[sendHitOnce] Sending hit with card:', card);
     send('CARD_HIT', {
       card,
-      success_url: checkoutUrl,
       amount: tryExtractAmount(),
     });
   }

