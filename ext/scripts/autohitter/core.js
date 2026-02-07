@@ -74,16 +74,41 @@
 
       // Check for other possible parameters that might contain checkout URLs
       for (const [key, value] of url.searchParams.entries()) {
-        if (key.toLowerCase().includes('url') || key.toLowerCase().includes('referrer')) {
-          const decoded = decodeURIComponent(value);
+        const decoded = decodeURIComponent(value);
+        // Check if this parameter value contains a checkout URL
+        if (decoded.includes('checkout.stripe.com') && /\/c\/pay\//.test(decoded)) {
+          console.log('[extractCheckoutUrl] Found checkout URL in param:', key, decoded);
+          return decoded.split('#')[0];
+        }
+        // Also check if the parameter name suggests it might contain a URL
+        if (key.toLowerCase().includes('url') || key.toLowerCase().includes('referrer') ||
+            key.toLowerCase().includes('redirect') || key.toLowerCase().includes('return')) {
           if (decoded.includes('checkout.stripe.com') && /\/c\/pay\//.test(decoded)) {
-            console.log('[extractCheckoutUrl] Found checkout URL in param:', key);
+            console.log('[extractCheckoutUrl] Found checkout URL in URL-related param:', key);
             return decoded.split('#')[0];
           }
         }
       }
     } catch (e) {
       console.error('[extractCheckoutUrl] Error parsing current URL:', e);
+    }
+
+    // 2.5. Try to extract from URL path or hash that might contain session info
+    try {
+      // Check if URL contains session information that could point to checkout
+      if (currentUrl.includes('billing.stripe.com') && currentUrl.includes('/p/session/')) {
+        // This might be a billing page with session info - try to construct checkout URL
+        const sessionMatch = currentUrl.match(/\/p\/session\/([^/?#]+)/);
+        if (sessionMatch) {
+          const sessionId = sessionMatch[1];
+          // Try common checkout URL patterns based on session ID
+          const possibleCheckoutUrl = `https://checkout.stripe.com/c/pay/${sessionId}`;
+          console.log('[extractCheckoutUrl] Attempting to construct checkout URL from session:', possibleCheckoutUrl);
+          return possibleCheckoutUrl;
+        }
+      }
+    } catch (e) {
+      console.error('[extractCheckoutUrl] Error extracting from session info:', e);
     }
 
     // 3. Check document.referrer
@@ -96,15 +121,69 @@
       }
     }
 
-    // 4. Try to find checkout URLs in page content
+    // 4. Try to find checkout URLs in page content (more thorough search)
     try {
       if (typeof document !== 'undefined') {
+        // Check all links for checkout URLs
         const links = document.querySelectorAll('a[href*="checkout.stripe.com"]');
         for (const link of links) {
           const href = link.href;
           if (href.includes('checkout.stripe.com') && /\/c\/pay\//.test(href)) {
             console.log('[extractCheckoutUrl] Found checkout URL in page link:', href);
             return href.split('#')[0];
+          }
+        }
+
+        // Check form actions
+        const forms = document.querySelectorAll('form[action*="checkout.stripe.com"]');
+        for (const form of forms) {
+          const action = form.action;
+          if (action.includes('checkout.stripe.com') && /\/c\/pay\//.test(action)) {
+            console.log('[extractCheckoutUrl] Found checkout URL in form action:', action);
+            return action.split('#')[0];
+          }
+        }
+
+        // Check script content for checkout URLs
+        const scripts = document.querySelectorAll('script');
+        for (const script of scripts) {
+          const content = script.textContent || script.innerText || '';
+          const checkoutMatches = content.match(/https?:\/\/[^"'\s]*checkout\.stripe\.com[^"'\s]*\/c\/pay\/[^"'\s]*/g);
+          if (checkoutMatches) {
+            for (const match of checkoutMatches) {
+              console.log('[extractCheckoutUrl] Found checkout URL in script content:', match);
+              return match.split('#')[0];
+            }
+          }
+        }
+
+        // Check all text content on page for checkout URLs
+        const allText = document.body ? document.body.innerText : '';
+        const textMatches = allText.match(/https?:\/\/[^"'\s]*checkout\.stripe\.com[^"'\s]*\/c\/pay\/[^"'\s]*/g);
+        if (textMatches) {
+          for (const match of textMatches) {
+            console.log('[extractCheckoutUrl] Found checkout URL in page text:', match);
+            return match.split('#')[0];
+          }
+        }
+
+        // Check meta tags for canonical or redirect URLs
+        const metaTags = document.querySelectorAll('meta[content*="checkout.stripe.com"]');
+        for (const meta of metaTags) {
+          const content = meta.content;
+          if (content.includes('checkout.stripe.com') && /\/c\/pay\//.test(content)) {
+            console.log('[extractCheckoutUrl] Found checkout URL in meta tag:', content);
+            return content.split('#')[0];
+          }
+        }
+
+        // Check for URLs in data attributes
+        const elements = document.querySelectorAll('[data-url], [data-href], [data-link]');
+        for (const element of elements) {
+          const url = element.dataset.url || element.dataset.href || element.dataset.link;
+          if (url && url.includes('checkout.stripe.com') && /\/c\/pay\//.test(url)) {
+            console.log('[extractCheckoutUrl] Found checkout URL in data attribute:', url);
+            return url.split('#')[0];
           }
         }
       }
@@ -512,12 +591,10 @@
       const url = location.href;
       const urlLower = url.toLowerCase();
 
-      // More comprehensive checkout URL detection
+      // More specific checkout URL detection - avoid matching Stripe JS controllers
       if (urlLower.includes('checkout.stripe.com') ||
-          urlLower.includes('stripe.com/c/pay') ||
-          /\/c\/pay\//.test(url) ||
-          /\/pay\//.test(url) ||
-          (urlLower.includes('stripe') && /checkout|billing|payment/i.test(url))) {
+          (urlLower.includes('stripe.com') && /\/c\/pay\//.test(url)) ||
+          (urlLower.includes('billing.stripe.com') && /\/p\/session\//.test(url))) {
 
         state.originalCheckoutUrl = url.split('#')[0]; // Store without fragment
         console.log('[init] Stored original checkout URL:', state.originalCheckoutUrl);
