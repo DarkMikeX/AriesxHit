@@ -127,7 +127,7 @@
       btn.addEventListener('click', (ev) => {
         ev.stopPropagation();
         const card = btn.dataset.card;
-        if (card) navigator.clipboard.writeText(card).then(() => showToast('Copied'));
+        if (card) copyToClipboard(card).then(() => showToast('Copied'));
       });
     });
     el.querySelectorAll('.log-action-button[data-clear]').forEach((btn) => {
@@ -150,6 +150,42 @@
     if (declinesEl) declinesEl.textContent = declined;
     if (attemptsEl) attemptsEl.textContent = tested;
     if (rateEl) rateEl.textContent = tested > 0 ? Math.round((hits / tested) * 100) + '%' : '—';
+  }
+
+  function copyToClipboard(text) {
+    return new Promise((resolve, reject) => {
+      // Try modern clipboard API first
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(resolve).catch(() => {
+          // Fallback to old method
+          fallbackCopy(text);
+          resolve();
+        });
+      } else {
+        // Fallback for older browsers/extensions
+        fallbackCopy(text);
+        resolve();
+      }
+    });
+  }
+
+  function fallbackCopy(text) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    textArea.style.top = '-9999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+      document.execCommand('copy');
+    } catch (err) {
+      console.warn('Fallback copy failed:', err);
+    }
+
+    document.body.removeChild(textArea);
   }
 
   function showToast(msg) {
@@ -208,8 +244,7 @@
       const logs = r?.logs || [];
       const cards = logs.filter((l) => l.subtype === 'hit' && l.card).map((l) => l.card);
       if (cards.length) {
-        navigator.clipboard.writeText(cards.join('\n'));
-        showToast('Copied ' + cards.length + ' card(s)');
+        copyToClipboard(cards.join('\n')).then(() => showToast('Copied ' + cards.length + ' card(s)'));
       } else showToast('No cards to copy');
     });
   });
