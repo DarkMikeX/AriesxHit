@@ -44,11 +44,48 @@
     } catch (_) { return ''; }
   }
 
+  function extractCheckoutUrl() {
+    // Try to extract checkout URL from various sources
+    const currentUrl = typeof location !== 'undefined' ? location.href : '';
+
+    // 1. Check if we're already on a checkout URL
+    if (currentUrl.includes('checkout.stripe.com') && /\/c\/pay\//.test(currentUrl)) {
+      return currentUrl.split('#')[0]; // Remove fragment
+    }
+
+    // 2. Try to extract from referrer parameter in Stripe controller URLs
+    try {
+      const url = new URL(currentUrl);
+      const referrer = url.searchParams.get('referrer');
+      if (referrer) {
+        const decodedReferrer = decodeURIComponent(referrer);
+        if (decodedReferrer.includes('checkout.stripe.com') && /\/c\/pay\//.test(decodedReferrer)) {
+          return decodedReferrer.split('#')[0]; // Remove fragment
+        }
+      }
+    } catch (e) {}
+
+    // 3. Check document.referrer
+    if (typeof document !== 'undefined' && document.referrer) {
+      const referrer = document.referrer;
+      if (referrer.includes('checkout.stripe.com') && /\/c\/pay\//.test(referrer)) {
+        return referrer.split('#')[0]; // Remove fragment
+      }
+    }
+
+    // 4. Use stored URL if available
+    if (state.originalCheckoutUrl) {
+      return state.originalCheckoutUrl;
+    }
+
+    // 5. Fallback to current URL
+    return currentUrl;
+  }
+
   function sendHitOnce(card) {
     if (state.hitSent) return;
     state.hitSent = true;
-    // Use stored checkout URL if available, otherwise fallback to current location
-    const checkoutUrl = state.originalCheckoutUrl || (typeof location !== 'undefined' ? location.href : '');
+    const checkoutUrl = extractCheckoutUrl();
     console.log('[sendHitOnce] Sending hit with card:', card, 'URL:', checkoutUrl);
     send('CARD_HIT', {
       card,
@@ -389,7 +426,7 @@
     if (typeof location !== 'undefined' && location.href) {
       const url = location.href.toLowerCase();
       if (url.includes('checkout.stripe.com') || url.includes('stripe.com/c/pay') || /\/c\/pay\/|\/pay\/|checkout|billing/i.test(location.href)) {
-        state.originalCheckoutUrl = location.href;
+        state.originalCheckoutUrl = location.href.split('#')[0]; // Store without fragment
       }
     }
   }

@@ -161,13 +161,28 @@ router.post('/notify-hit', hitLimiter, async (req, res) => {
   let fullCheckoutUrl = '—';
   if (success_url) {
     try {
-      const u = new URL(success_url);
+      // Clean the URL by removing fragments and query parameters that might contain sensitive data
+      let cleanUrl = success_url.split('#')[0]; // Remove fragment
+      const u = new URL(cleanUrl);
+
       businessUrl = u.hostname.replace(/^www\./, '');
-      // Show full URL for Stripe checkout pages
+
+      // Show full URL for Stripe checkout pages (but clean sensitive parameters)
       if (u.hostname.includes('checkout.stripe.com') || u.pathname.includes('/c/pay/')) {
-        fullCheckoutUrl = success_url;
+        // Remove potentially sensitive parameters
+        const url = new URL(cleanUrl);
+        const sensitiveParams = ['apiKey', 'stripeJsId', 'stripeObjId', 'controllerId'];
+        sensitiveParams.forEach(param => url.searchParams.delete(param));
+
+        // If there are still parameters, keep them as they might be important for the checkout
+        fullCheckoutUrl = url.toString();
+      } else {
+        // For non-checkout URLs, just show hostname
+        fullCheckoutUrl = '—';
       }
-    } catch (_) {}
+    } catch (_) {
+      console.warn('Failed to parse success_url:', success_url);
+    }
   }
   const cardDisplay = (card && card.trim()) ? card.replace(/\|/g, ' | ') : '—';
   // Debug logging for card data
