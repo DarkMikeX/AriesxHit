@@ -113,8 +113,8 @@ router.post('/verify', verifyLimiter, async (req, res) => {
 router.post('/notify-hit', hitLimiter, async (req, res) => {
   console.log('[HIT_NOTIFICATION] Received hit notification request');
   if (!BOT_TOKEN) {
-    console.error('[HIT_NOTIFICATION] Bot token not configured');
-    return res.status(500).json({ ok: false, error: 'Telegram bot not configured. Check TELEGRAM_BOT_TOKEN environment variable.' });
+    console.warn('[HIT_NOTIFICATION] Bot token not configured - notifications will fail');
+    // Don't reject, just log warning
   }
   const { tg_id, name, card, attempts, amount, success_url, screenshot, email, time_sec } = req.body || {};
   const tgId = String(tg_id || '').trim();
@@ -132,34 +132,14 @@ router.post('/notify-hit', hitLimiter, async (req, res) => {
   });
   console.log('[HIT_NOTIFICATION] Raw request body:', req.body);
 
-  // Validate Telegram ID
-  if (!tgId || !/^\d{5,15}$/.test(tgId)) {
-    return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
+  // Validate Telegram ID (less strict)
+  if (!tgId || tgId.length < 5) {
+    console.warn('[HIT_NOTIFICATION] Invalid Telegram ID:', tgId);
+    return res.status(400).json({ ok: false, error: 'Invalid Telegram ID' });
   }
 
-  // Validate card data format (basic validation) - made more lenient
-  if (card && typeof card === 'string') {
-    const cardParts = card.split('|');
-    if (cardParts.length !== 4) {
-      console.warn('Invalid card format - expected 4 parts separated by |, got:', card);
-      // Don't reject, just log and continue with empty card
-      card = '';
-    } else {
-      const [cardNum, month, year, cvv] = cardParts;
-      // More lenient validation - just check they're not empty and contain digits
-      if (!cardNum || !month || !year || !cvv ||
-          !/\d/.test(cardNum) || !/\d/.test(month) || !/\d/.test(year) || !/\d/.test(cvv)) {
-        console.warn('Invalid card data format - parts missing or non-numeric:', { cardNum, month, year, cvv });
-        // Don't reject, just log and continue with empty card
-        card = '';
-      }
-    }
-  }
-
-  // Validate attempts
-  if (attempts !== undefined && (typeof attempts !== 'number' || attempts < 0)) {
-    return res.status(400).json({ ok: false, error: 'Invalid attempts value' });
-  }
+  // Don't validate - just accept whatever data we get
+  console.log('Processing hit notification with data:', { card, attempts, amount, email });
   const userName = name || 'User';
   const tgIdNum = String(tgId).replace(/\D/g, '');
   const nameLink = tgIdNum ? `<a href="tg://user?id=${tgIdNum}">${userName}</a>` : userName;
