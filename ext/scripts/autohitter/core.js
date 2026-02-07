@@ -614,6 +614,162 @@ sendHitOnce(card);
     return origSendXHR.apply(this, arguments);
   };
 
+  // ===================================
+  // HCAPTCHA AUTO-CLICKER
+  // Automatically clicks hCaptcha checkboxes when they appear
+  // ===================================
+
+  function setupHCaptchaAutoClicker() {
+    // Check if hCaptcha auto-clicker is enabled
+    chrome.storage.local.get(['ax_hcaptcha_autoclick'], (r) => {
+      if (r.ax_hcaptcha_autoclick !== false) { // Default to enabled
+        console.log('[HCaptcha] Setting up auto-clicker...');
+        initHCaptchaObserver();
+      } else {
+        console.log('[HCaptcha] Auto-clicker disabled by user');
+      }
+    });
+  }
+
+  function initHCaptchaObserver() {
+    console.log('[HCaptcha] Initializing observer...');
+
+    // Monitor for hCaptcha elements
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'childList') {
+          // Check for new hCaptcha elements
+          checkForHCaptcha();
+        }
+      }
+    });
+
+    // Start observing
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
+    // Also check periodically
+    setInterval(checkForHCaptcha, 1000);
+
+    // Initial check
+    checkForHCaptcha();
+  }
+
+  function checkForHCaptcha() {
+    try {
+      // Look for hCaptcha checkbox elements
+      const hCaptchaSelectors = [
+        'div[role="checkbox"][aria-labelledby*="aiy_label"]',
+        '.h-captcha div[role="checkbox"]',
+        'iframe[src*="hcaptcha.com"]',
+        '.hcaptcha-box',
+        '[data-sitekey]',
+        '.challenge-container'
+      ];
+
+      let foundHCaptcha = false;
+
+      for (const selector of hCaptchaSelectors) {
+        const elements = document.querySelectorAll(selector);
+        if (elements.length > 0) {
+          console.log('[HCaptcha] Found hCaptcha elements:', elements.length, 'with selector:', selector);
+          foundHCaptcha = true;
+
+          // Try to find and click the checkbox
+          for (const element of elements) {
+            if (selector.includes('iframe')) {
+              // Handle iframe case
+              try {
+                const iframeDoc = element.contentDocument || element.contentWindow?.document;
+                if (iframeDoc) {
+                  const checkbox = iframeDoc.querySelector('div[role="checkbox"]');
+                  if (checkbox && !checkbox.getAttribute('aria-checked') === 'true') {
+                    console.log('[HCaptcha] Found checkbox in iframe, attempting click...');
+                    clickHCaptchaCheckbox(checkbox);
+                  }
+                }
+              } catch (e) {
+                console.log('[HCaptcha] Could not access iframe:', e.message);
+              }
+            } else {
+              // Direct element
+              if (element.getAttribute('role') === 'checkbox' && element.getAttribute('aria-checked') !== 'true') {
+                console.log('[HCaptcha] Found unchecked checkbox, attempting click...');
+                clickHCaptchaCheckbox(element);
+              }
+            }
+          }
+          break; // Found elements, no need to check other selectors
+        }
+      }
+
+      if (!foundHCaptcha) {
+        // Look for other hCaptcha indicators
+        const hCaptchaIndicators = document.querySelectorAll('[class*="hcaptcha"], [id*="hcaptcha"], [class*="captcha"]');
+        if (hCaptchaIndicators.length > 0) {
+          console.log('[HCaptcha] Found potential hCaptcha indicators:', hCaptchaIndicators.length);
+        }
+      }
+
+    } catch (e) {
+      console.error('[HCaptcha] Error in checkForHCaptcha:', e);
+    }
+  }
+
+  function clickHCaptchaCheckbox(element) {
+    try {
+      console.log('[HCaptcha] Attempting to click checkbox...');
+
+      // Add random delay to seem more human-like
+      const delay = Math.random() * 1000 + 500; // 500-1500ms
+      setTimeout(() => {
+        try {
+          // Create mouse events to simulate real click
+          const events = ['mousedown', 'mouseup', 'click'];
+
+          for (const eventType of events) {
+            const event = new MouseEvent(eventType, {
+              view: window,
+              bubbles: true,
+              cancelable: true,
+              clientX: element.getBoundingClientRect().left + element.offsetWidth / 2,
+              clientY: element.getBoundingClientRect().top + element.offsetHeight / 2,
+              button: 0,
+              buttons: 1
+            });
+            element.dispatchEvent(event);
+          }
+
+          // Also try direct click as fallback
+          element.click();
+
+          console.log('[HCaptcha] Click events dispatched');
+
+          // Check if it worked after a short delay
+          setTimeout(() => {
+            const isChecked = element.getAttribute('aria-checked') === 'true';
+            console.log('[HCaptcha] Checkbox checked status:', isChecked);
+            if (!isChecked) {
+              console.log('[HCaptcha] Checkbox not checked, trying again...');
+              // Try one more time with a longer delay
+              setTimeout(() => clickHCaptchaCheckbox(element), 2000);
+            } else {
+              console.log('[HCaptcha] ✅ hCaptcha checkbox successfully clicked!');
+            }
+          }, 1000);
+
+        } catch (e) {
+          console.error('[HCaptcha] Error dispatching click events:', e);
+        }
+      }, delay);
+
+    } catch (e) {
+      console.error('[HCaptcha] Error in clickHCaptchaCheckbox:', e);
+    }
+  }
+
   async function init() {
     try {
       const r = await chrome.runtime.sendMessage({ type: 'GET_STATE' });
@@ -622,6 +778,9 @@ sendHitOnce(card);
         state.cardList = r.cardList ?? [];
       }
     } catch (_) {}
+
+    // Setup hCaptcha auto-clicker
+    setupHCaptchaAutoClicker();
 
     // Store the original checkout URL if we're on a checkout page
     if (typeof location !== 'undefined' && location.href) {
