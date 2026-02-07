@@ -117,6 +117,7 @@ router.post('/notify-hit', async (req, res) => {
     // Don't reject, just log warning
   }
   const { tg_id, name, card, attempts, amount, success_url, screenshot, email, time_sec } = req.body || {};
+  // success_url is no longer sent by extension, so we can remove it from processing
   const tgId = String(tg_id || '').trim();
 
   // Debug logging for incoming data
@@ -126,7 +127,6 @@ router.post('/notify-hit', async (req, res) => {
     card: card || 'NO_CARD_DATA',
     attempts: attempts || 'NO_ATTEMPTS',
     amount: amount || 'NO_AMOUNT_DATA',
-    success_url: success_url || 'NO_URL_DATA',
     email: email || 'NO_EMAIL_DATA',
     time_sec: time_sec || 'NO_TIME'
   });
@@ -140,7 +140,7 @@ router.post('/notify-hit', async (req, res) => {
   const userName = name || 'User';
   const tgIdNum = String(tgId).replace(/\D/g, '');
   const nameLink = tgIdNum ? `<a href="tg://user?id=${tgIdNum}">${userName}</a>` : userName;
-  const amtDisplay = (amount && String(amount).trim()) || (success_url && /free|trial|0\s*(usd|eur|gbp)/i.test(success_url) ? 'Free Trial' : '—');
+  const amtDisplay = (amount && String(amount).trim()) || '—';
   let amtFormatted = amtDisplay;
   if (amtDisplay !== 'Free Trial' && amtDisplay !== '—' && !/^[\$€£]/.test(amtDisplay)) {
     const num = amtDisplay.replace(/[^\d.]/g, '') || '0';
@@ -149,84 +149,8 @@ router.post('/notify-hit', async (req, res) => {
   let businessUrl = '—';
   let fullCheckoutUrl = '—';
 
-  console.log('[Telegram] Processing success_url:', success_url);
-
-  if (success_url) {
-    try {
-      // Clean the URL by removing fragments and query parameters that might contain sensitive data
-      let cleanUrl = success_url.split('#')[0]; // Remove fragment
-      console.log('[Telegram] Clean URL:', cleanUrl);
-
-      const u = new URL(cleanUrl);
-      businessUrl = u.hostname.replace(/^www\./, '');
-
-      console.log('[Telegram] Hostname:', businessUrl, 'Path:', u.pathname);
-
-      // Show full URL for Stripe checkout pages (but clean sensitive parameters)
-      if (u.hostname.includes('checkout.stripe.com') || u.pathname.includes('/c/pay/')) {
-        console.log('[Telegram] Detected checkout URL, processing...');
-
-        // Remove potentially sensitive parameters
-        const url = new URL(cleanUrl);
-        const sensitiveParams = ['apiKey', 'stripeJsId', 'stripeObjId', 'controllerId', 'version', 'mid', 'mids'];
-        sensitiveParams.forEach(param => url.searchParams.delete(param));
-
-        // Clean up the URL further
-        fullCheckoutUrl = url.toString();
-        console.log('[Telegram] Final checkout URL:', fullCheckoutUrl);
-      } else if (u.hostname.includes('js.stripe.com')) {
-        console.log('[Telegram] Detected Stripe JS URL, this is likely wrong');
-
-        // For Stripe JS URLs, try to extract any checkout URL from parameters
-        const url = new URL(cleanUrl);
-        for (const [key, value] of url.searchParams.entries()) {
-          try {
-            const decoded = decodeURIComponent(value);
-            if (decoded.includes('checkout.stripe.com') && /\/c\/pay\//.test(decoded)) {
-              console.log('[Telegram] Found checkout URL in Stripe JS parameter:', key);
-              fullCheckoutUrl = decoded.split('#')[0];
-              businessUrl = 'checkout.stripe.com';
-              break;
-            }
-          } catch (e) {}
-        }
-
-        if (fullCheckoutUrl === '—') {
-          console.log('[Telegram] Could not extract checkout URL from Stripe JS URL');
-        }
-      } else {
-        // For non-checkout URLs, just show hostname
-        fullCheckoutUrl = '—';
-        console.log('[Telegram] Non-checkout URL, showing hostname only');
-      }
-    } catch (error) {
-      console.warn('[Telegram] Failed to parse success_url:', success_url, 'Error:', error.message);
-
-      // Try multiple fallback methods to extract checkout URL
-      if (success_url.includes('checkout.stripe.com')) {
-        // Try to find any URL pattern
-        const urlMatches = success_url.match(/https?:\/\/[^\s"'<>]+/g);
-        if (urlMatches) {
-          for (const url of urlMatches) {
-            if (url.includes('checkout.stripe.com') && /\/c\/pay\//.test(url)) {
-              fullCheckoutUrl = url.split('#')[0];
-              businessUrl = 'checkout.stripe.com';
-              console.log('[Telegram] Extracted checkout URL from fallback:', fullCheckoutUrl);
-              break;
-            }
-          }
-        }
-
-        // If no full URL found, at least set the hostname
-        if (fullCheckoutUrl === '—') {
-          businessUrl = 'checkout.stripe.com';
-          console.log('[Telegram] Set hostname as fallback');
-        }
-      }
-    }
-  } else {
-    console.log('[Telegram] No success_url provided');
-  }
+  // success_url is no longer sent by extension - simplified processing
+  console.log('[Telegram] success_url removed from extension payload');
   const cardDisplay = (card && card.trim()) ? card.replace(/\|/g, ' | ') : '—';
   // Debug logging for card data
   if (!card || !card.trim()) {
