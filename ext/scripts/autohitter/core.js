@@ -685,7 +685,7 @@ sendHitOnce(card);
                 const iframeDoc = element.contentDocument || element.contentWindow?.document;
                 if (iframeDoc) {
                   const checkbox = iframeDoc.querySelector('div[role="checkbox"]');
-                  if (checkbox && !checkbox.getAttribute('aria-checked') === 'true') {
+                  if (checkbox && checkbox.getAttribute('aria-checked') !== 'true') {
                     console.log('[HCaptcha] Found checkbox in iframe, attempting click...');
                     clickHCaptchaCheckbox(checkbox);
                   }
