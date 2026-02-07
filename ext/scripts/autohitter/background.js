@@ -360,7 +360,6 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       console.log('[CARD_HIT] RECEIVED HIT DATA:', {
         card: msg.card || 'NO_CARD_DATA',
         amount: msg.amount || 'NO_AMOUNT_DATA',
-        success_url: msg.success_url || 'NO_URL_DATA',
         attempts: state.stats.tested,
         full_msg: msg
       });
@@ -390,7 +389,6 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
           card: msg.card,
           attempts: state.stats.tested,
           amount: msg.amount || '',
-          success_url: msg.success_url || tab?.url || '',
           email: r.ax_fill_email || '',
           time_sec: durationSec,
         };
