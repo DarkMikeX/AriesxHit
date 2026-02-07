@@ -200,12 +200,16 @@
         doStop();
       }
     };
-    document.getElementById('ax-ctrl-play').onclick = () => {
+    document.getElementById('ax-ctrl-play').onclick = (e) => {
+      e.stopPropagation();
+      console.log('PLAY BUTTON clicked');
       if (state.paused && state.active) { state.paused = false; updateStatusUI(); [0, 300, 600].forEach((ms) => setTimeout(() => { if (state.active && !state.paused) clickPayButton(); }, ms)); return; }
       if (state.active) { state.paused = true; updateStatusUI(); return; }
       handleStart();
     };
-    document.getElementById('ax-ctrl-mode').onclick = () => {
+    document.getElementById('ax-ctrl-mode').onclick = (e) => {
+      e.stopPropagation();
+      console.log('MODE BUTTON clicked');
       const next = state.mode === 'BIN' ? 'CC' : 'BIN';
       setMode(next);
     };
