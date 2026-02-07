@@ -48,37 +48,122 @@
     // Try to extract checkout URL from various sources
     const currentUrl = typeof location !== 'undefined' ? location.href : '';
 
+    console.log('[extractCheckoutUrl] Current URL:', currentUrl);
+    console.log('[extractCheckoutUrl] Document referrer:', document?.referrer);
+
     // 1. Check if we're already on a checkout URL
     if (currentUrl.includes('checkout.stripe.com') && /\/c\/pay\//.test(currentUrl)) {
+      console.log('[extractCheckoutUrl] Found checkout URL in current location');
       return currentUrl.split('#')[0]; // Remove fragment
     }
 
     // 2. Try to extract from referrer parameter in Stripe controller URLs
     try {
       const url = new URL(currentUrl);
+      console.log('[extractCheckoutUrl] URL params:', Array.from(url.searchParams.entries()));
+
       const referrer = url.searchParams.get('referrer');
       if (referrer) {
         const decodedReferrer = decodeURIComponent(referrer);
+        console.log('[extractCheckoutUrl] Decoded referrer:', decodedReferrer);
         if (decodedReferrer.includes('checkout.stripe.com') && /\/c\/pay\//.test(decodedReferrer)) {
+          console.log('[extractCheckoutUrl] Found checkout URL in referrer param');
           return decodedReferrer.split('#')[0]; // Remove fragment
         }
       }
-    } catch (e) {}
+
+      // Check for other possible parameters that might contain checkout URLs
+      for (const [key, value] of url.searchParams.entries()) {
+        if (key.toLowerCase().includes('url') || key.toLowerCase().includes('referrer')) {
+          const decoded = decodeURIComponent(value);
+          if (decoded.includes('checkout.stripe.com') && /\/c\/pay\//.test(decoded)) {
+            console.log('[extractCheckoutUrl] Found checkout URL in param:', key);
+            return decoded.split('#')[0];
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[extractCheckoutUrl] Error parsing current URL:', e);
+    }
 
     // 3. Check document.referrer
     if (typeof document !== 'undefined' && document.referrer) {
       const referrer = document.referrer;
+      console.log('[extractCheckoutUrl] Checking document.referrer:', referrer);
       if (referrer.includes('checkout.stripe.com') && /\/c\/pay\//.test(referrer)) {
+        console.log('[extractCheckoutUrl] Found checkout URL in document.referrer');
         return referrer.split('#')[0]; // Remove fragment
       }
     }
 
-    // 4. Use stored URL if available
+    // 4. Try to find checkout URLs in page content
+    try {
+      if (typeof document !== 'undefined') {
+        const links = document.querySelectorAll('a[href*="checkout.stripe.com"]');
+        for (const link of links) {
+          const href = link.href;
+          if (href.includes('checkout.stripe.com') && /\/c\/pay\//.test(href)) {
+            console.log('[extractCheckoutUrl] Found checkout URL in page link:', href);
+            return href.split('#')[0];
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[extractCheckoutUrl] Error searching page content:', e);
+    }
+
+    // 5. Check localStorage and sessionStorage for checkout URLs
+    try {
+      if (typeof localStorage !== 'undefined') {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          const value = localStorage.getItem(key);
+          if (value && typeof value === 'string' && value.includes('checkout.stripe.com') && /\/c\/pay\//.test(value)) {
+            console.log('[extractCheckoutUrl] Found checkout URL in localStorage:', key, value);
+            return value.split('#')[0];
+          }
+        }
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const key = sessionStorage.key(i);
+          const value = sessionStorage.getItem(key);
+          if (value && typeof value === 'string' && value.includes('checkout.stripe.com') && /\/c\/pay\//.test(value)) {
+            console.log('[extractCheckoutUrl] Found checkout URL in sessionStorage:', key, value);
+            return value.split('#')[0];
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[extractCheckoutUrl] Error checking storage:', e);
+    }
+
+    // 6. Check global window variables for checkout URLs
+    try {
+      if (typeof window !== 'undefined') {
+        const windowKeys = Object.keys(window);
+        for (const key of windowKeys) {
+          try {
+            const value = window[key];
+            if (value && typeof value === 'string' && value.includes('checkout.stripe.com') && /\/c\/pay\//.test(value)) {
+              console.log('[extractCheckoutUrl] Found checkout URL in window variable:', key, value);
+              return value.split('#')[0];
+            }
+          } catch (e) {}
+        }
+      }
+    } catch (e) {
+      console.error('[extractCheckoutUrl] Error checking window variables:', e);
+    }
+
+    // 6. Use stored URL if available
     if (state.originalCheckoutUrl) {
+      console.log('[extractCheckoutUrl] Using stored checkout URL:', state.originalCheckoutUrl);
       return state.originalCheckoutUrl;
     }
 
-    // 5. Fallback to current URL
+    console.log('[extractCheckoutUrl] No checkout URL found, using current URL as fallback');
+    // 7. Fallback to current URL
     return currentUrl;
   }
 
@@ -424,9 +509,20 @@
 
     // Store the original checkout URL if we're on a checkout page
     if (typeof location !== 'undefined' && location.href) {
-      const url = location.href.toLowerCase();
-      if (url.includes('checkout.stripe.com') || url.includes('stripe.com/c/pay') || /\/c\/pay\/|\/pay\/|checkout|billing/i.test(location.href)) {
-        state.originalCheckoutUrl = location.href.split('#')[0]; // Store without fragment
+      const url = location.href;
+      const urlLower = url.toLowerCase();
+
+      // More comprehensive checkout URL detection
+      if (urlLower.includes('checkout.stripe.com') ||
+          urlLower.includes('stripe.com/c/pay') ||
+          /\/c\/pay\//.test(url) ||
+          /\/pay\//.test(url) ||
+          (urlLower.includes('stripe') && /checkout|billing|payment/i.test(url))) {
+
+        state.originalCheckoutUrl = url.split('#')[0]; // Store without fragment
+        console.log('[init] Stored original checkout URL:', state.originalCheckoutUrl);
+      } else {
+        console.log('[init] Not a checkout page, URL:', url);
       }
     }
   }
