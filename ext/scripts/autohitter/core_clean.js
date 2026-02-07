@@ -129,8 +129,8 @@
         }
       }
 
-      console.log('[tryExtractAmount] No amount found in page content, returning Free Trial');
-      return 'Free Trial';
+      console.log('[tryExtractAmount] No amount found in page content');
+      return '';
     } catch (e) {
       console.error('[tryExtractAmount] Error:', e);
       return '';

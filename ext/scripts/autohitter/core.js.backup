@@ -915,8 +915,6 @@ sendHitOnce(card);
       }
     } catch (_) {}
 
-    // Setup hCaptcha auto-clicker
-    setupHCaptchaAutoClicker();
 
     // Store the original checkout URL if we're on a checkout page
     if (typeof location !== 'undefined' && location.href) {
