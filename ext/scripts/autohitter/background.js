@@ -373,7 +373,8 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         console.log('[CARD_HIT] Retrieved from storage:', {
           ax_tg_id: r.ax_tg_id || 'NO_TG_ID',
           ax_fill_email: r.ax_fill_email || 'NO_EMAIL',
-          ax_api_url: r.ax_api_url || 'NO_API_URL'
+          ax_api_url: r.ax_api_url || 'NO_API_URL',
+          full_email_value: r.ax_fill_email
         });
         const base = (r.ax_api_url || (typeof TGConfig !== 'undefined' ? TGConfig.BOT_URL : 'http://localhost:3000')).replace(/\/$/, '');
         console.log('[CARD_HIT] API URL being used:', base);
