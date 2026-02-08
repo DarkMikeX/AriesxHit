@@ -143,10 +143,16 @@
   }
 
   function loadData() {
+    console.log('[DASHBOARD] Loading data from background...');
     send('GET_LOGS').then((r) => {
-      if (!r) return;
+      console.log('[DASHBOARD] Received logs response:', r);
+      if (!r) {
+        console.log('[DASHBOARD] No response from GET_LOGS');
+        return;
+      }
       const logs = r.logs || [];
       const stats = r.stats || { hits: 0, tested: 0, declined: 0 };
+      console.log('[DASHBOARD] Rendering logs:', logs.length, 'entries, stats:', stats);
       renderLogs(logs);
       renderStats(stats);
     });

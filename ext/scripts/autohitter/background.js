@@ -80,8 +80,18 @@ function clearProxy() {
 chrome.storage.local.get(['cardList', 'binList', 'logs', 'stats', 'autoHitActive', 'ax_proxy', 'ax_proxy_enabled', 'ax_proxy_index'], (r) => {
   if (r.cardList) state.cardList = r.cardList;
   if (r.binList) state.binList = r.binList;
-  if (r.logs) state.logs = r.logs;
-  if (r.stats) state.stats = r.stats;
+  if (r.logs) {
+    state.logs = r.logs;
+    console.log('[AriesxHit] Loaded logs from storage:', state.logs.length, 'entries');
+  } else {
+    console.log('[AriesxHit] No logs found in storage');
+  }
+  if (r.stats) {
+    state.stats = r.stats;
+    console.log('[AriesxHit] Loaded stats from storage:', state.stats);
+  } else {
+    console.log('[AriesxHit] No stats found in storage');
+  }
   if (r.autoHitActive !== undefined) state.autoHitActive = r.autoHitActive;
   state.proxyList = parseProxies(r.ax_proxy);
   state.proxyEnabled = r.ax_proxy_enabled === true;
@@ -93,7 +103,7 @@ chrome.storage.local.get(['cardList', 'binList', 'logs', 'stats', 'autoHitActive
     clearProxy();
   }
   setupWebRequest();
-  console.log('[AriesxHit] Auto Hitter ready');
+  console.log('[AriesxHit] Auto Hitter ready - logs loaded:', state.logs.length, 'stats:', state.stats);
 });
 
 function setupWebRequest() {
@@ -509,6 +519,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       break;
 
     case 'GET_LOGS':
+      console.log('[GET_LOGS] Sending logs to dashboard:', state.logs.length, 'entries, stats:', state.stats);
       respond({ logs: state.logs, stats: state.stats });
       break;
 
@@ -684,9 +695,8 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   return true;
 });
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.set({ logs: [], stats: { hits: 0, tested: 0, declined: 0 } });
-});
+// Removed onInstalled listener that was clearing logs on every extension reload
+// Logs should persist across extension reloads for better user experience
 
 chrome.action.onClicked.addListener(() => {
   chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
