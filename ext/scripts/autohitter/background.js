@@ -90,7 +90,8 @@ chrome.storage.local.get(['cardList', 'binList', 'logs', 'stats', 'autoHitActive
     state.stats = r.stats;
     console.log('[AriesxHit] Loaded stats from storage:', state.stats);
   } else {
-    console.log('[AriesxHit] No stats found in storage');
+    console.log('[AriesxHit] No stats found in storage, initializing empty stats');
+    state.stats = { hits: 0, tested: 0, declined: 0 };
   }
   if (r.autoHitActive !== undefined) state.autoHitActive = r.autoHitActive;
   state.proxyList = parseProxies(r.ax_proxy);
@@ -180,9 +181,9 @@ function injectAutoHitter(tabId, forceStateUpdate) {
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   if (tab?.url && isStripePage(tab.url)) injectAutoHitter(tabId);
   if (info.status === 'complete' && tab?.url && isStripeCheckoutUrl(tab.url)) {
-    state.stats = { hits: 0, tested: 0, declined: 0 };
-    chrome.storage.local.set({ stats: state.stats });
-    chrome.tabs.sendMessage(tabId, { type: 'STATE_UPDATE', resetAttempts: true, attempts: 0, hits: 0 }).catch(() => {});
+    // Removed automatic stats reset on checkout page load
+    // Stats should only be reset manually by user
+    console.log('[AriesxHit] Detected new checkout page, injecting auto-hitter');
   }
 });
 
@@ -336,6 +337,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       state.logs.push({ type: 'log', subtype: 'trying', attempt: msg.attempt, card: msg.card, timestamp: Date.now() });
       if (state.logs.length > 200) state.logs.shift();
       chrome.storage.local.set({ logs: state.logs, stats: state.stats });
+      console.log('[STATS] Updated tested count:', state.stats.tested, 'total stats:', state.stats);
       broadcastToPopups(msg);
       broadcastToTabs(msg, sender?.tab?.id);
       broadcastToTabs({ type: 'STATS_UPDATE', attempts: state.stats.tested, hits: state.stats.hits }, sender?.tab?.id);
@@ -347,6 +349,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       state.logs.push({ type: 'log', subtype: 'error', code: msg.code, decline_code: msg.decline_code, message: msg.message, timestamp: Date.now() });
       if (state.logs.length > 200) state.logs.shift();
       chrome.storage.local.set({ logs: state.logs, stats: state.stats });
+      console.log('[STATS] Updated declined count:', state.stats.declined, 'total stats:', state.stats);
       broadcastToPopups(msg);
       broadcastToTabs(msg, sender?.tab?.id);
       broadcastToTabs({ type: 'STATS_UPDATE', attempts: state.stats.tested, hits: state.stats.hits }, sender?.tab?.id);
@@ -368,6 +371,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       if (state.logs.length > 200) state.logs.shift();
       const hitTime = new Date().toLocaleTimeString('en-US', { hour12: true });
       chrome.storage.local.set({ logs: state.logs, stats: state.stats, ax_last_hit: hitTime });
+      console.log('[STATS] Updated hits count:', state.stats.hits, 'total stats:', state.stats);
       broadcastToPopups(hitData);
       broadcastToTabs(hitData, sender?.tab?.id);
       broadcastToTabs({ type: 'STATS_UPDATE', attempts: state.stats.tested, hits: state.stats.hits }, sender?.tab?.id);
