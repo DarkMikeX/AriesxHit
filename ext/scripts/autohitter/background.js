@@ -217,7 +217,6 @@ function isAmexBin(bin) {
 function generateCardsFromBins(bins) {
   console.log('[generateCardsFromBins] Called with bins:', bins);
   const out = [];
-
   for (const binInput of bins) {
     console.log('[generateCardsFromBins] Processing binInput:', binInput);
     // Parse input: BIN|MM|YY|CVV or BIN|MM|YY or just BIN
@@ -237,17 +236,22 @@ function generateCardsFromBins(bins) {
     const cardLen = amex ? 15 : 16;
     const cvvLen = amex ? 4 : 3;
 
-    // Generate only 1 card per BIN input (more focused)
-    const cardIndex = 0;
-
     // Generate the card number
     let cardNumber;
-    if (binPart.length >= 6 && binPart.length < cardLen) {
-      // BIN is partial - generate remaining digits
-      const availableDigits = binPart.length;
-      const need = cardLen - availableDigits;
+    if (binPart.length === 6) {
+      // Exactly 6 digits - generate full card starting with this BIN
+      const need = cardLen - 6;
+      let suffix = '';
+      for (let j = 0; j < need - 1; j++) suffix += Math.floor(Math.random() * 10);
+      suffix += '0'; // Last digit before checksum
+      cardNumber = binPart + suffix;
+      cardNumber = fixLuhn(cardNumber.slice(0, cardLen));
+    } else {
+      // More than 6 digits - use as much as possible and pad to card length
+      const availableDigits = Math.min(binPart.length, cardLen - 1); // Leave room for checksum
+      let baseNumber = binPart.slice(0, availableDigits);
+      const need = cardLen - baseNumber.length;
 
-      let baseNumber = binPart;
       if (need > 1) {
         // Add random digits before checksum
         let suffix = '';
@@ -259,25 +263,6 @@ function generateCardsFromBins(bins) {
       }
 
       cardNumber = fixLuhn(baseNumber.slice(0, cardLen));
-    } else if (binPart.length === cardLen) {
-      // BIN is already full length - ensure valid Luhn
-      cardNumber = fixLuhn(binPart);
-    } else {
-      // BIN too long or too short - truncate/use as much as possible
-      const availableDigits = Math.min(binPart.length, cardLen - 1);
-      let baseNumber = binPart.slice(0, availableDigits);
-      const need = cardLen - baseNumber.length;
-
-      if (need > 1) {
-        let suffix = '';
-        for (let j = 0; j < need - 1; j++) suffix += Math.floor(Math.random() * 10);
-        suffix += '0';
-        baseNumber += suffix;
-      } else if (need === 1) {
-        baseNumber += '0';
-      }
-
-      cardNumber = fixLuhn(baseNumber.slice(0, cardLen));
     }
 
     // Generate expiry date
@@ -285,38 +270,23 @@ function generateCardsFromBins(bins) {
     if (providedMonth && providedYear) {
       // Use provided expiry
       month = providedMonth.padStart(2, '0');
-      // Convert 2-digit year to 4-digit if needed
-      if (providedYear.length === 2) {
-        const currentYear = new Date().getFullYear();
-        const currentCentury = Math.floor(currentYear / 100) * 100;
-        const twoDigitYear = parseInt(providedYear);
-        year = currentCentury + twoDigitYear;
-        // Handle century wraparound for years like "30" (2030)
-        if (year < currentYear) year += 100;
-      } else {
-        year = providedYear;
-      }
-      year = String(year); // Keep as full year
+      year = providedYear.length === 2 ? providedYear : providedYear.slice(-2);
     } else {
-      // Generate realistic future expiry (2025-2030)
-      const currentYear = new Date().getFullYear();
-      year = currentYear + Math.floor(Math.random() * 6) + 1; // 2025-2030
-      month = Math.floor(Math.random() * 12) + 1;
-      month = String(month).padStart(2, '0');
-      year = String(year);
+      // Generate random expiry
+      month = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0');
+      year = String((new Date().getFullYear() % 100) + Math.floor(Math.random() * 5) + 1).padStart(2, '0');
     }
 
     // Generate CVV
     let cvv;
     if (providedCvv) {
+      // Use provided CVV
       cvv = providedCvv;
     } else {
-      // Generate realistic CVV
-      if (cvvLen === 4) {
-        cvv = String(Math.floor(Math.random() * 9000) + 1000); // 1000-9999
-      } else {
-        cvv = String(Math.floor(Math.random() * 900) + 100); // 100-999
-      }
+      // Generate random CVV
+      const cvvMin = cvvLen === 4 ? 1000 : 100;
+      const cvvMax = cvvLen === 4 ? 9999 : 999;
+      cvv = String(Math.floor(cvvMin + Math.random() * (cvvMax - cvvMin + 1)));
     }
 
     const finalCard = cardNumber + '|' + month + '|' + year + '|' + cvv;

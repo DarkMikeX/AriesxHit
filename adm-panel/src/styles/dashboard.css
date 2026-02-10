@@ -469,124 +469,39 @@
 }
 
 /* Responsive */
-@media (max-width: 1400px) {
-  .dashboard-content {
-    padding: 24px;
-    max-width: 1400px;
-  }
-}
-
 @media (max-width: 1200px) {
   .stats-grid {
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  }
-
-  .welcome-section {
-    gap: 24px;
   }
 }
 
 @media (max-width: 768px) {
   .dashboard-content {
-    padding: 16px;
-    max-width: 100%;
+    padding: 20px;
   }
 
   .welcome-section {
     flex-direction: column;
     align-items: flex-start;
-    padding: 20px;
-    margin-bottom: 24px;
-    gap: 20px;
-  }
-
-  .welcome-content {
-    width: 100%;
-  }
-
-  .welcome-title {
-    font-size: 28px;
+    padding: 24px;
   }
 
   .welcome-stats {
     width: 100%;
     justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 12px;
   }
 
   .quick-stat {
     flex: 1;
-    min-width: 120px;
-    padding: 14px;
-  }
-
-  .quick-stat-value {
-    font-size: 24px;
+    min-width: auto;
+    padding: 16px;
   }
 
   .stats-grid {
     grid-template-columns: 1fr;
-    gap: 16px;
   }
 
   .section-title {
     font-size: 20px;
-  }
-
-  .stat-card {
-    padding: 20px;
-  }
-
-  .stat-value {
-    font-size: 32px;
-  }
-}
-
-@media (max-width: 480px) {
-  .dashboard-content {
-    padding: 12px;
-  }
-
-  .welcome-section {
-    padding: 16px;
-    margin-bottom: 20px;
-  }
-
-  .welcome-title {
-    font-size: 24px;
-  }
-
-  .welcome-subtitle {
-    font-size: 14px;
-  }
-
-  .quick-stat {
-    padding: 12px;
-    min-width: 100px;
-  }
-
-  .quick-stat-value {
-    font-size: 20px;
-  }
-
-  .section-title {
-    font-size: 18px;
-  }
-
-  .stat-card {
-    padding: 16px;
-  }
-
-  .stat-title {
-    font-size: 12px;
-  }
-
-  .stat-value {
-    font-size: 28px;
-  }
-
-  .welcome-stats {
-    gap: 8px;
   }
 }

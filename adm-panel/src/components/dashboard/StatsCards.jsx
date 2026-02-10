@@ -48,22 +48,17 @@ const styles = {
   },
   icon: {
     fontSize: '18px',
-    flexShrink: 0,
   },
   title: {
     margin: 0,
     fontSize: '14px',
     color: '#888',
     fontWeight: '500',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
   },
   value: {
     margin: 0,
     fontSize: '32px',
     fontWeight: '700',
-    lineHeight: '1.2',
   },
 };
 
