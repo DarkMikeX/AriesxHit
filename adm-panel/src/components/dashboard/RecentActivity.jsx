@@ -68,15 +68,20 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
+    minWidth: 0, // Allow shrinking
   },
   label: {
     fontSize: '12px',
     color: '#888',
     fontWeight: '500',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   value: {
     fontSize: '24px',
     fontWeight: '700',
+    lineHeight: '1.2',
   },
 };
 
