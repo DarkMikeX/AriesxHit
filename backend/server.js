@@ -176,26 +176,6 @@ app.get('/favicon.ico', (req, res) => {
 // GRACEFUL SHUTDOWN
 // ===================================
 
-function gracefulShutdown(signal, server) {
-  console.log(`\n${signal} received. Shutting down gracefully...`);
-  
-  server.close(() => {
-    console.log('HTTP server closed.');
-    
-    // Close database connection
-    db.close();
-    console.log('Database connection closed.');
-    
-    process.exit(0);
-  });
-
-  // Force close after 10 seconds
-  setTimeout(() => {
-    console.error('Forced shutdown after timeout');
-    process.exit(1);
-  }, 10000);
-}
-
 // ===================================
 // START SERVER
 // ===================================
@@ -234,8 +214,8 @@ async function startServer() {
   });
 
   // Handle shutdown signals
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM', server));
-  process.on('SIGINT', () => gracefulShutdown('SIGINT', server));
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
 // Start the server

