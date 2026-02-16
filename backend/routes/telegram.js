@@ -453,6 +453,173 @@ router.post('/webhook', async (req, res) => {
       return;
     }
 
+    // Admin commands (only for admin user)
+    if (tgId === '6447766151' && msg?.text) {
+      if (msg.text === '/admin_stats') {
+        try {
+          const globalHits = db.prepare('SELECT SUM(hits) as total FROM telegram_users').get();
+          const realUsers = db.prepare('SELECT COUNT(*) as count FROM telegram_users WHERE tg_id != "SYSTEM_BONUS_HITS"').get();
+          const systemBonus = db.prepare('SELECT hits FROM telegram_users WHERE tg_id = "SYSTEM_BONUS_HITS"').get();
+          const topUsers = db.prepare('SELECT name, hits FROM telegram_users WHERE tg_id != "SYSTEM_BONUS_HITS" ORDER BY hits DESC LIMIT 5').all();
+
+          const text = `🔧 <b>ADMIN STATS</b>\n` +
+            `═══════════════════════\n\n` +
+            `📊 <b>System Overview:</b>\n` +
+            `🌍 Total Hits: ${globalHits?.total || 0}\n` +
+            `👥 Real Users: ${realUsers?.count || 0}\n` +
+            `🎁 System Bonus: ${systemBonus?.hits || 0}\n\n` +
+            `🏆 <b>Top 5 Users:</b>\n` +
+            topUsers.map((u, i) => `${i + 1}. ${u.name}: ${u.hits} hits`).join('\n') + '\n\n' +
+            `═══════════════════════\n` +
+            `✅ Admin Panel Active`;
+
+          const result = await sendMessage(BOT_TOKEN, chatId, text);
+          if (!result.ok) console.error('Admin: Failed to send stats:', result.error);
+          return;
+        } catch (error) {
+          console.error('Admin: Error getting stats:', error);
+        }
+      }
+
+      if (msg.text.startsWith('/admin_add_hits')) {
+        try {
+          const parts = msg.text.split(' ');
+          if (parts.length !== 3) {
+            await sendMessage(BOT_TOKEN, chatId, '❌ Usage: /admin_add_hits <user_id> <hits>');
+            return;
+          }
+
+          const targetTgId = parts[1];
+          const hitsToAdd = parseInt(parts[2]);
+
+          if (isNaN(hitsToAdd) || hitsToAdd <= 0) {
+            await sendMessage(BOT_TOKEN, chatId, '❌ Invalid hits amount');
+            return;
+          }
+
+          const existingUser = db.prepare('SELECT name, hits FROM telegram_users WHERE tg_id = ?').get(targetTgId);
+          const newHits = (existingUser?.hits || 0) + hitsToAdd;
+          const userName = existingUser?.name || `User_${targetTgId.slice(-4)}`;
+
+          db.prepare('INSERT OR REPLACE INTO telegram_users (tg_id, name, hits) VALUES (?, ?, ?)').run(targetTgId, userName, newHits);
+
+          const text = `✅ <b>Hits Added Successfully!</b>\n\n` +
+            `👤 User: ${userName} (${targetTgId})\n` +
+            `➕ Added: ${hitsToAdd} hits\n` +
+            `📊 New Total: ${newHits} hits`;
+
+          await sendMessage(BOT_TOKEN, chatId, text);
+          return;
+        } catch (error) {
+          console.error('Admin: Error adding hits:', error);
+          await sendMessage(BOT_TOKEN, chatId, '❌ Error adding hits');
+        }
+      }
+
+      if (msg.text.startsWith('/admin_user_info')) {
+        try {
+          const parts = msg.text.split(' ');
+          if (parts.length !== 2) {
+            await sendMessage(BOT_TOKEN, chatId, '❌ Usage: /admin_user_info <user_id>');
+            return;
+          }
+
+          const targetTgId = parts[1];
+          const user = db.prepare('SELECT * FROM telegram_users WHERE tg_id = ?').get(targetTgId);
+
+          if (!user) {
+            await sendMessage(BOT_TOKEN, chatId, `❌ User ${targetTgId} not found`);
+            return;
+          }
+
+          const rank = db.prepare('SELECT COUNT(*) + 1 as rank FROM telegram_users WHERE hits > ? AND tg_id != "SYSTEM_BONUS_HITS"').get(user.hits);
+
+          const text = `👤 <b>User Information</b>\n` +
+            `═══════════════════════\n\n` +
+            `🆔 ID: ${user.tg_id}\n` +
+            `📛 Name: ${user.name}\n` +
+            `🎯 Hits: ${user.hits}\n` +
+            `🏅 Rank: ${rank?.rank || 'N/A'}\n` +
+            `📅 Created: ${user.created_at}\n` +
+            `🔄 Updated: ${user.updated_at}\n\n` +
+            `═══════════════════════`;
+
+          await sendMessage(BOT_TOKEN, chatId, text);
+          return;
+        } catch (error) {
+          console.error('Admin: Error getting user info:', error);
+          await sendMessage(BOT_TOKEN, chatId, '❌ Error getting user info');
+        }
+      }
+
+      if (msg.text === '/admin_reset_hits') {
+        try {
+          // Reset all user hits (keep system bonus)
+          db.prepare('UPDATE telegram_users SET hits = 0 WHERE tg_id != "SYSTEM_BONUS_HITS"').run();
+
+          const text = `🔄 <b>All User Hits Reset!</b>\n\n` +
+            `✅ Reset all user hit counts to 0\n` +
+            `🎁 System bonus hits preserved\n` +
+            `📊 Use /admin_stats to verify`;
+
+          await sendMessage(BOT_TOKEN, chatId, text);
+          return;
+        } catch (error) {
+          console.error('Admin: Error resetting hits:', error);
+          await sendMessage(BOT_TOKEN, chatId, '❌ Error resetting hits');
+        }
+      }
+
+      if (msg.text === '/admin_system_info') {
+        try {
+          const dbSize = db.prepare('SELECT COUNT(*) as users FROM telegram_users').get();
+          const dbStats = db.prepare(`
+            SELECT
+              COUNT(CASE WHEN tg_id = 'SYSTEM_BONUS_HITS' THEN 1 END) as system_users,
+              COUNT(CASE WHEN tg_id != 'SYSTEM_BONUS_HITS' THEN 1 END) as real_users,
+              SUM(hits) as total_hits,
+              AVG(hits) as avg_hits
+            FROM telegram_users
+          `).get();
+
+          const text = `🖥️ <b>SYSTEM INFORMATION</b>\n` +
+            `═══════════════════════\n\n` +
+            `💾 <b>Database:</b>\n` +
+            `👥 Total Users: ${dbSize?.users || 0}\n` +
+            `🎯 Real Users: ${dbStats?.real_users || 0}\n` +
+            `🤖 System Users: ${dbStats?.system_users || 0}\n\n` +
+            `📊 <b>Statistics:</b>\n` +
+            `🌍 Total Hits: ${dbStats?.total_hits || 0}\n` +
+            `📈 Average Hits: ${Math.round(dbStats?.avg_hits || 0)}\n\n` +
+            `⚡ <b>Server Status:</b> Online\n` +
+            `🤖 <b>Bot Status:</b> Active\n\n` +
+            `═══════════════════════`;
+
+          await sendMessage(BOT_TOKEN, chatId, text);
+          return;
+        } catch (error) {
+          console.error('Admin: Error getting system info:', error);
+          await sendMessage(BOT_TOKEN, chatId, '❌ Error getting system info');
+        }
+      }
+
+      if (msg.text === '/admin_help') {
+        const text = `🔧 <b>ADMIN COMMANDS</b>\n` +
+          `═══════════════════════\n\n` +
+          `📊 /admin_stats - System statistics\n` +
+          `👤 /admin_user_info <id> - User details\n` +
+          `➕ /admin_add_hits <id> <amount> - Add hits\n` +
+          `🔄 /admin_reset_hits - Reset all user hits\n` +
+          `🖥️ /admin_system_info - Server & DB info\n` +
+          `❓ /admin_help - This help message\n\n` +
+          `═══════════════════════\n` +
+          `🔒 Admin Only Commands`;
+
+        await sendMessage(BOT_TOKEN, chatId, text);
+        return;
+      }
+    }
+
     if (msg?.text === '/start') {
       try {
         setUserName(tgId, firstName);
