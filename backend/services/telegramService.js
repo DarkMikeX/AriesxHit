@@ -214,10 +214,16 @@ function verifyOTP(tgId, token) {
 
 // User hits and names (stored in database)
 function getUserHits(tgId) {
-  if (!db) return 0;
+  console.log('[DEBUG] getUserHits called for:', tgId, 'DB available:', !!db);
+  if (!db) {
+    console.error('[DEBUG] Database not available in getUserHits');
+    return 0;
+  }
   try {
     const result = db.prepare('SELECT hits FROM telegram_users WHERE tg_id = ?').get(String(tgId));
-    return result ? result.hits : 0;
+    const hits = result ? result.hits : 0;
+    console.log('[DEBUG] getUserHits result for', tgId, ':', hits);
+    return hits;
   } catch (error) {
     console.error('Error getting user hits:', error);
     return 0;
@@ -225,10 +231,16 @@ function getUserHits(tgId) {
 }
 
 function getGlobalHits() {
-  if (!db) return 0;
+  console.log('[DEBUG] getGlobalHits called, DB available:', !!db);
+  if (!db) {
+    console.error('[DEBUG] Database not available in getGlobalHits');
+    return 0;
+  }
   try {
     const result = db.prepare('SELECT SUM(hits) as total FROM telegram_users').get();
-    return result ? result.total || 0 : 0;
+    const total = result ? result.total || 0 : 0;
+    console.log('[DEBUG] getGlobalHits result:', total);
+    return total;
   } catch (error) {
     console.error('Error getting global hits:', error);
     return 0;
