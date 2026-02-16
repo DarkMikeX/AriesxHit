@@ -252,13 +252,11 @@ router.post('/validate-token', tokenLimiter, (req, res) => {
 
 // POST /api/tg/webhook - Telegram bot webhook (/start, inline buttons)
 function getMainMenuText(firstName, tgId) {
-  console.log(`[MAIN_MENU] Building menu for user: ${tgId}`);
   const myHits = getUserHits(tgId);
   const rank = getUserRank(tgId);
   const rankStr = rank ? ` (Rank #${rank})` : '';
   const users = getTopRealUsers(100); // Get all users to count them
   const communityHits = users.reduce((sum, u) => sum + u.hits, 0);
-  console.log(`[MAIN_MENU] User ${tgId}: hits=${myHits}, rank=${rank}, community=${communityHits}, users_found=${users.length}`);
   return `ARIESXHIT\n` +
     `─────────────────\n\n` +
     `Welcome <b>${firstName}</b>\n\n` +

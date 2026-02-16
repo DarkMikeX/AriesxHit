@@ -10,9 +10,7 @@ let db = null;
 
 // Set database instance
 function setDatabase(databaseInstance) {
-  console.log('[DB] setDatabase called with instance:', !!databaseInstance);
   db = databaseInstance;
-  console.log('[DB] Database set, db available:', !!db);
 }
 
 async function sendMessage(botToken, chatId, text, opts = {}) {
@@ -216,16 +214,10 @@ function verifyOTP(tgId, token) {
 
 // User hits and names (stored in database)
 function getUserHits(tgId) {
-  console.log('[DEBUG] getUserHits called for:', tgId, 'DB available:', !!db);
-  if (!db) {
-    console.error('[DEBUG] Database not available in getUserHits');
-    return 0;
-  }
+  if (!db) return 0;
   try {
     const result = db.prepare('SELECT hits FROM telegram_users WHERE tg_id = ?').get(String(tgId));
-    const hits = result ? result.hits : 0;
-    console.log('[DEBUG] getUserHits result for', tgId, ':', hits);
-    return hits;
+    return result ? result.hits : 0;
   } catch (error) {
     console.error('Error getting user hits:', error);
     return 0;
@@ -233,18 +225,12 @@ function getUserHits(tgId) {
 }
 
 function getGlobalHits() {
-  console.log('[DEBUG] getGlobalHits called, DB available:', !!db);
-  if (!db) {
-    console.error('[DEBUG] Database not available in getGlobalHits - setDatabase may not have been called');
-    return 0;
-  }
+  if (!db) return 0;
   try {
     const result = db.prepare('SELECT SUM(hits) as total FROM telegram_users').get();
-    const total = result ? result.total || 0 : 0;
-    console.log('[DEBUG] getGlobalHits result:', total);
-    return total;
+    return result ? result.total || 0 : 0;
   } catch (error) {
-    console.error('[DEBUG] Error getting global hits:', error);
+    console.error('Error getting global hits:', error);
     return 0;
   }
 }
