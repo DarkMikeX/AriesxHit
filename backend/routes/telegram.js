@@ -308,7 +308,8 @@ router.post('/webhook', async (req, res) => {
   const msg = req.body?.message;
   const cb = req.body?.callback_query;
   if (msg) {
-    console.log(`[WEBHOOK] Message from user ${msg.from?.id}: "${msg.text}"`);
+    console.log(`[WEBHOOK] Message from user ${msg.from?.id}: "${msg.text}" (type: ${typeof msg.text})`);
+    console.log(`[WEBHOOK] Message object:`, JSON.stringify(msg).substring(0, 200));
   } else if (cb) {
     console.log(`[WEBHOOK] Callback from user ${cb.from?.id}: "${cb.data}"`);
   }
@@ -470,7 +471,9 @@ router.post('/webhook', async (req, res) => {
     }
 
     // Admin commands (only for admin user)
+    console.log(`[DEBUG] Checking for admin commands: msg.text="${msg?.text}", startsWith="/admin_": ${msg?.text?.startsWith('/admin_')}`);
     if (msg?.text && msg.text.startsWith('/admin_')) {
+      console.log(`[ADMIN] Admin command detected: "${msg.text}" from user ${tgId}`);
       if (tgId !== '6447766151') {
         console.log(`[ADMIN] Access denied for user ${tgId} trying ${msg.text}`);
         await sendMessage(BOT_TOKEN, chatId, '❌ <b>Access Denied</b>\n\nThis command is restricted to administrators only.');
@@ -932,6 +935,7 @@ router.post('/webhook', async (req, res) => {
     } // End of admin commands block
 
     // Test command for anyone to verify bot is working
+    console.log(`[DEBUG] Checking for /test command: msg.text="${msg?.text}", equals="/test": ${msg?.text === '/test'}`);
     if (msg?.text === '/test') {
       try {
         console.log(`[TEST] Test command from user ${tgId}`);
