@@ -337,6 +337,11 @@ router.post('/webhook', async (req, res) => {
       return;
     }
 
+    // Ensure user exists in database for all interactions
+    if (tgId && firstName) {
+      setUserName(tgId, firstName);
+    }
+
     const backBtn = [{ text: '← Back', callback_data: 'back' }];
     const replyMarkup = (kb) => ({ reply_markup: JSON.stringify(kb) });
 
@@ -454,6 +459,14 @@ router.post('/webhook', async (req, res) => {
     }
 
     // Admin commands (only for admin user)
+    if (msg?.text && msg.text.startsWith('/admin_')) {
+      if (tgId !== '6447766151') {
+        await sendMessage(BOT_TOKEN, chatId, '❌ <b>Access Denied</b>\n\nThis command is restricted to administrators only.');
+        return;
+      }
+      // Continue with admin commands below
+    }
+
     if (tgId === '6447766151' && msg?.text) {
       if (msg.text === '/admin_stats') {
         try {
@@ -805,11 +818,36 @@ router.post('/webhook', async (req, res) => {
         }
       }
 
+      if (msg.text === '/admin_debug_users') {
+        try {
+          const allUsers = db.prepare('SELECT tg_id, name, hits FROM telegram_users ORDER BY created_at DESC').all();
+
+          let text = `🐛 <b>DEBUG: ALL DATABASE USERS</b>\n` +
+            `═══════════════════════\n\n`;
+
+          allUsers.forEach((user, i) => {
+            const type = user.tg_id === 'SYSTEM_BONUS_HITS' ? '🤖 SYSTEM' : '👤 USER';
+            text += `${i + 1}. ${type} ${user.name} (${user.tg_id})\n`;
+            text += `   🎯 ${user.hits} hits\n\n`;
+          });
+
+          text += `═══════════════════════\n` +
+            `📊 Total Records: ${allUsers.length}`;
+
+          await sendMessage(BOT_TOKEN, chatId, text);
+          return;
+        } catch (error) {
+          console.error('Admin: Error in debug users:', error);
+          await sendMessage(BOT_TOKEN, chatId, '❌ Error getting debug info');
+        }
+      }
+
       if (msg.text === '/admin_help') {
         const text = `🔧 <b>ADMIN COMMANDS</b>\n` +
           `═══════════════════════\n\n` +
           `📊 /admin_stats - System statistics\n` +
           `👥 /admin_users - List all users\n` +
+          `🐛 /admin_debug_users - Debug all DB records\n` +
           `👤 /admin_user_info <id> - User details\n` +
           `➕ /admin_add_hits <id> <amount> - Add hits\n` +
           `🚫 /admin_ban <id> - Ban user\n` +
