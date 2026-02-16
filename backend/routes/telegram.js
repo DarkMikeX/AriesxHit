@@ -461,12 +461,18 @@ router.post('/webhook', async (req, res) => {
     // Admin commands (only for admin user)
     if (msg?.text && msg.text.startsWith('/admin_')) {
       if (tgId !== '6447766151') {
+        console.log(`[ADMIN] Access denied for user ${tgId} trying ${msg.text}`);
         await sendMessage(BOT_TOKEN, chatId, '❌ <b>Access Denied</b>\n\nThis command is restricted to administrators only.');
         return;
       }
-      // Continue with admin commands below
+      // Admin user - process admin commands
+      console.log(`[ADMIN] Processing admin command: ${msg.text} for user ${tgId}`);
+    } else if (msg?.text && msg.text.startsWith('/admin_')) {
+      // This should not be reached due to the return above, but just in case
+      return;
     }
 
+    // Admin command implementations
     if (tgId === '6447766151' && msg?.text) {
       if (msg.text === '/admin_stats') {
         try {
@@ -843,6 +849,7 @@ router.post('/webhook', async (req, res) => {
       }
 
       if (msg.text === '/admin_help') {
+        console.log(`[ADMIN] /admin_help triggered by user ${tgId}`);
         const text = `🔧 <b>ADMIN COMMANDS</b>\n` +
           `═══════════════════════\n\n` +
           `📊 /admin_stats - System statistics\n` +
@@ -863,7 +870,9 @@ router.post('/webhook', async (req, res) => {
           `🔒 Admin Only Commands\n` +
           `📝 Use: /command <required> [optional]`;
 
-        await sendMessage(BOT_TOKEN, chatId, text);
+        const result = await sendMessage(BOT_TOKEN, chatId, text);
+        console.log(`[ADMIN] /admin_help response sent: ${result.ok}`);
+        if (!result.ok) console.error(`[ADMIN] Failed to send help: ${result.error}`);
         return;
       }
     }
