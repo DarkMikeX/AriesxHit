@@ -973,6 +973,8 @@ router.post('/webhook', async (req, res) => {
 
         // Parse credit cards - handle both comma-separated and newline-separated
         const ccList = ccText.split(/[\n,]+/).map(cc => cc.trim()).filter(cc => cc && cc.includes('|'));
+        console.log(`[AUTO-CHECKOUT] Raw ccText: "${ccText}"`);
+        console.log(`[AUTO-CHECKOUT] Split into ${ccList.length} cards:`, ccList);
 
         if (!checkoutUrl || ccList.length === 0) {
           await sendMessage(BOT_TOKEN, chatId, '❌ Invalid checkout URL or credit card list\n\nFormat: number|month|year|cvv\nExample: 4111111111111111|12|2026|123');
@@ -1190,7 +1192,11 @@ function extractStripeData(checkoutUrl) {
 
 // Auto-checkout processing function
 async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
-  console.log(`[AUTO-CHECKOUT] Starting for user ${userId}, URL: ${checkoutUrl}, Cards: ${ccList.length}`);
+  console.log(`[AUTO-CHECKOUT] ===== STARTING AUTO-CHECKOUT =====`);
+  console.log(`[AUTO-CHECKOUT] User: ${userId}, Chat: ${chatId}`);
+  console.log(`[AUTO-CHECKOUT] URL: ${checkoutUrl}`);
+  console.log(`[AUTO-CHECKOUT] Cards count: ${ccList.length}`);
+  console.log(`[AUTO-CHECKOUT] Cards:`, ccList);
 
   try {
     // Extract Stripe/checkout data
