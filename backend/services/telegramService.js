@@ -10,7 +10,9 @@ let db = null;
 
 // Set database instance
 function setDatabase(databaseInstance) {
+  console.log('[DB] setDatabase called with instance:', !!databaseInstance);
   db = databaseInstance;
+  console.log('[DB] Database set, db available:', !!db);
 }
 
 async function sendMessage(botToken, chatId, text, opts = {}) {
@@ -233,7 +235,7 @@ function getUserHits(tgId) {
 function getGlobalHits() {
   console.log('[DEBUG] getGlobalHits called, DB available:', !!db);
   if (!db) {
-    console.error('[DEBUG] Database not available in getGlobalHits');
+    console.error('[DEBUG] Database not available in getGlobalHits - setDatabase may not have been called');
     return 0;
   }
   try {
@@ -242,7 +244,7 @@ function getGlobalHits() {
     console.log('[DEBUG] getGlobalHits result:', total);
     return total;
   } catch (error) {
-    console.error('Error getting global hits:', error);
+    console.error('[DEBUG] Error getting global hits:', error);
     return 0;
   }
 }

@@ -269,8 +269,6 @@ function getMainMenuText(firstName, tgId) {
 
 router.post('/webhook', async (req, res) => {
   console.log('[WEBHOOK] Received webhook request');
-  console.log('[WEBHOOK] Database available:', !!db);
-  console.log('[WEBHOOK] Global hits check:', getGlobalHits());
 
   // Always respond immediately to Telegram
   res.status(200).end();
