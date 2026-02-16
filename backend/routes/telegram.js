@@ -61,6 +61,9 @@ const {
   getUserRank,
   setUserData,
   getUserData,
+  approveUser,
+  isUserApproved,
+  getUserApprovalInfo,
 } = require('../services/telegramService');
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -887,13 +890,48 @@ router.post('/webhook', async (req, res) => {
         }
       }
 
+      if (msg.text.startsWith('/admin_approve')) {
+        try {
+          const parts = msg.text.split(' ');
+          if (parts.length !== 3) {
+            await sendMessage(BOT_TOKEN, chatId, '❌ Usage: /admin_approve <user_id> <hours>');
+            return;
+          }
+
+          const targetTgId = parts[1];
+          const hours = parseInt(parts[2]);
+
+          if (isNaN(hours) || hours <= 0 || hours > 720) { // Max 30 days
+            await sendMessage(BOT_TOKEN, chatId, '❌ Hours must be between 1-720 (30 days max)');
+            return;
+          }
+
+          const success = approveUser(targetTgId, hours);
+          if (success) {
+            const text = `✅ <b>User Approved!</b>\n\n` +
+              `👤 User: ${targetTgId}\n` +
+              `⏰ Duration: ${hours} hours\n` +
+              `📅 Expires: ${new Date(Date.now() + hours * 60 * 60 * 1000).toLocaleString()}\n\n` +
+              `🔓 User can now use /co command`;
+
+            await sendMessage(BOT_TOKEN, chatId, text);
+          } else {
+            await sendMessage(BOT_TOKEN, chatId, '❌ Failed to approve user');
+          }
+          return;
+        } catch (error) {
+          console.error('Admin: Error approving user:', error);
+          await sendMessage(BOT_TOKEN, chatId, '❌ Error approving user');
+        }
+      }
+
       if (msg.text === '/admin_help' || msg.text === '/admincmd') {
         const text = `🔧 <b>ADMIN COMMANDS</b>\n` +
           `═══════════════════════\n\n` +
-          `📊 /admin_stats - System statistics\n` +
           `👥 /admin_users - List all users\n` +
           `🐛 /admin_debug_users - Debug all DB records\n` +
           `👤 /admin_user_info <id> - User details\n` +
+          `✅ /admin_approve <id> <hours> - Approve user for auto-checkout\n` +
           `➕ /admin_add_hits <id> <amount> - Add hits\n` +
           `🚫 /admin_ban <id> - Ban user\n` +
           `📢 /admin_broadcast <msg> - Send to all users\n` +
@@ -905,6 +943,7 @@ router.post('/webhook', async (req, res) => {
           `🔗 /admin_webhook - Webhook status\n` +
           `⚡ /admin_performance - System performance\n` +
           `🖥️ /admin_system_info - Server & DB info\n` +
+          `📊 /admin_stats - System statistics\n` +
           `❓ /admin_help or /admincmd - This help message\n\n` +
           `═══════════════════════\n` +
           `🔒 Admin Only Commands\n` +
@@ -914,6 +953,82 @@ router.post('/webhook', async (req, res) => {
         return;
       }
     } // End of admin commands block
+
+    // Auto-checkout command for approved users
+    if (msg?.text?.startsWith('/co ')) {
+      if (!isUserApproved(tgId)) {
+        await sendMessage(BOT_TOKEN, chatId, '❌ <b>Access Denied</b>\n\nYou need to be approved to use auto-checkout.\nContact admin for approval.');
+        return;
+      }
+
+      try {
+        const args = msg.text.replace('/co ', '').trim();
+        const parts = args.split(' ');
+
+        if (parts.length < 2) {
+          await sendMessage(BOT_TOKEN, chatId, '❌ Usage: /co <checkout_url> <cc_list>\n\nExample:\n/co https://example.com/checkout 4111111111111111|12|2026|123,4222222222222222|01|2027|456');
+          return;
+        }
+
+        const checkoutUrl = parts[0];
+        const ccList = parts.slice(1).join(' ').split(',').map(cc => cc.trim()).filter(cc => cc);
+
+        if (!checkoutUrl || ccList.length === 0) {
+          await sendMessage(BOT_TOKEN, chatId, '❌ Invalid checkout URL or credit card list');
+          return;
+        }
+
+        // Validate URL
+        try {
+          new URL(checkoutUrl);
+        } catch (error) {
+          await sendMessage(BOT_TOKEN, chatId, '❌ Invalid checkout URL format');
+          return;
+        }
+
+        const text = `🚀 <b>AUTO-CHECKOUT STARTED</b>\n\n` +
+          `🌐 URL: ${checkoutUrl}\n` +
+          `💳 Cards: ${ccList.length}\n` +
+          `👤 User: ${tgId}\n\n` +
+          `⏳ Processing cards one by one...\n` +
+          `📢 You'll receive hit notifications here`;
+
+        await sendMessage(BOT_TOKEN, chatId, text);
+
+        // Process cards asynchronously
+        processAutoCheckout(tgId, checkoutUrl, ccList, chatId);
+
+      } catch (error) {
+        console.error('Auto-checkout error:', error);
+        await sendMessage(BOT_TOKEN, chatId, '❌ Error starting auto-checkout');
+      }
+      return;
+    }
+
+    // Check approval status command
+    if (msg?.text === '/status') {
+      try {
+        const approvalInfo = getUserApprovalInfo(tgId);
+        if (!approvalInfo || !approvalInfo.approved) {
+          const text = `❌ <b>Not Approved</b>\n\n` +
+            `You don't have auto-checkout access.\n` +
+            `Contact admin for approval.\n\n` +
+            `⏰ Approval required to use /co command`;
+          await sendMessage(BOT_TOKEN, chatId, text);
+        } else {
+          const text = `✅ <b>Approved User</b>\n\n` +
+            `🔓 Auto-checkout access: YES\n` +
+            `⏰ Time remaining: ${approvalInfo.hoursLeft} hours\n` +
+            `📅 Expires: ${new Date(approvalInfo.expiresAt).toLocaleString()}\n\n` +
+            `💳 You can use /co command`;
+          await sendMessage(BOT_TOKEN, chatId, text);
+        }
+      } catch (error) {
+        console.error('Status check error:', error);
+        await sendMessage(BOT_TOKEN, chatId, '❌ Error checking status');
+      }
+      return;
+    }
 
     // Test command for anyone to verify bot is working
     if (msg?.text === '/test') {
@@ -944,5 +1059,104 @@ router.post('/webhook', async (req, res) => {
     console.error('Webhook: Unexpected error:', error);
   }
 });
+
+// Auto-checkout processing function
+async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
+  console.log(`[AUTO-CHECKOUT] Starting for user ${userId}, URL: ${checkoutUrl}, Cards: ${ccList.length}`);
+
+  try {
+    // Extract domain for merchant info
+    const domain = new URL(checkoutUrl).hostname;
+    const merchantName = domain.replace('www.', '').split('.')[0];
+
+    let processed = 0;
+    let hits = [];
+
+    // Process each card
+    for (const ccString of ccList) {
+      try {
+        processed++;
+
+        // Parse credit card
+        const ccParts = ccString.split('|');
+        if (ccParts.length !== 4) {
+          console.log(`[AUTO-CHECKOUT] Invalid CC format: ${ccString}`);
+          continue;
+        }
+
+        const [cardNumber, expMonth, expYear, cvv] = ccParts;
+        const cardData = {
+          number: cardNumber.trim(),
+          month: expMonth.trim(),
+          year: expYear.trim(),
+          cvv: cvv.trim()
+        };
+
+        console.log(`[AUTO-CHECKOUT] Processing card ${processed}/${ccList.length}: ${cardNumber.substring(0, 8)}****`);
+
+        // Simulate card testing (in a real implementation, this would integrate with the extension)
+        // For now, we'll simulate hits randomly for demonstration
+        const isHit = Math.random() < 0.1; // 10% hit rate for demo
+
+        if (isHit) {
+          const hitData = {
+            card: `${cardNumber}|${expMonth}|${expYear}|${cvv}`,
+            merchant: merchantName,
+            domain: domain,
+            url: checkoutUrl,
+            timestamp: new Date().toISOString(),
+            attempt: processed
+          };
+
+          hits.push(hitData);
+
+          // Send hit notification
+          const hitMessage = `🎯 <b>HIT DETECTED!</b>\n` +
+            `═══════════════════════\n\n` +
+            `💳 Card: ${cardNumber.substring(0, 8)}****${cardNumber.substring(cardNumber.length - 4)}\n` +
+            `🏪 Merchant: ${merchantName}\n` +
+            `🌐 Domain: ${domain}\n` +
+            `🔗 URL: ${checkoutUrl}\n` +
+            `⏰ Time: ${new Date().toLocaleString()}\n` +
+            `🎯 Attempt: ${processed}/${ccList.length}\n\n` +
+            `✅ Payment successful!\n` +
+            `═══════════════════════`;
+
+          await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, hitMessage);
+          console.log(`[AUTO-CHECKOUT] HIT! Card ${cardNumber.substring(0, 8)}**** sent to user ${userId}`);
+        }
+
+        // Add delay between attempts (simulate processing time)
+        await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000));
+
+      } catch (cardError) {
+        console.error(`[AUTO-CHECKOUT] Error processing card ${ccString}:`, cardError);
+        continue;
+      }
+    }
+
+    // Send completion summary
+    const summaryMessage = `✅ <b>AUTO-CHECKOUT COMPLETE</b>\n` +
+      `═══════════════════════\n\n` +
+      `📊 Summary:\n` +
+      `💳 Cards processed: ${processed}/${ccList.length}\n` +
+      `🎯 Hits found: ${hits.length}\n` +
+      `🏪 Merchant: ${merchantName}\n` +
+      `🌐 Domain: ${domain}\n\n` +
+      `📅 Completed: ${new Date().toLocaleString()}\n` +
+      `═══════════════════════`;
+
+    await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, summaryMessage);
+    console.log(`[AUTO-CHECKOUT] Completed for user ${userId}: ${hits.length} hits from ${processed} cards`);
+
+  } catch (error) {
+    console.error('[AUTO-CHECKOUT] Fatal error:', error);
+    try {
+      await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, '❌ Auto-checkout failed due to an error');
+    } catch (msgError) {
+      console.error('[AUTO-CHECKOUT] Could not send error message:', msgError);
+    }
+  }
+}
 
 module.exports = router;

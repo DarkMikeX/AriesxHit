@@ -352,7 +352,72 @@ function getUserRank(tgId) {
   }
 }
 
-// User data store (stored in database) - BINs, CCs, prefs
+// User approval system
+function approveUser(tgId, durationHours) {
+  if (!db || !tgId) return false;
+  const id = String(tgId);
+  const expiresAt = Date.now() + (durationHours * 60 * 60 * 1000); // Convert hours to milliseconds
+
+  try {
+    // Get existing user data or create empty object
+    const existingData = getUserData(id) || {};
+    existingData.approved = true;
+    existingData.approvedAt = Date.now();
+    existingData.expiresAt = expiresAt;
+
+    setUserData(id, existingData);
+    return true;
+  } catch (error) {
+    console.error('Error approving user:', error);
+    return false;
+  }
+}
+
+function isUserApproved(tgId) {
+  if (!db || !tgId) return false;
+
+  try {
+    const userData = getUserData(tgId);
+    if (!userData || !userData.approved || !userData.expiresAt) {
+      return false;
+    }
+
+    // Check if approval has expired
+    return Date.now() < userData.expiresAt;
+  } catch (error) {
+    console.error('Error checking user approval:', error);
+    return false;
+  }
+}
+
+function getUserApprovalInfo(tgId) {
+  if (!db || !tgId) return null;
+
+  try {
+    const userData = getUserData(tgId);
+    if (!userData || !userData.approved) {
+      return null;
+    }
+
+    const now = Date.now();
+    const isActive = now < (userData.expiresAt || 0);
+    const timeLeft = Math.max(0, (userData.expiresAt || 0) - now);
+    const hoursLeft = Math.ceil(timeLeft / (60 * 60 * 1000));
+
+    return {
+      approved: isActive,
+      approvedAt: userData.approvedAt,
+      expiresAt: userData.expiresAt,
+      hoursLeft: hoursLeft,
+      timeLeft: timeLeft
+    };
+  } catch (error) {
+    console.error('Error getting user approval info:', error);
+    return null;
+  }
+}
+
+// User data store (stored in database) - BINs, CCs, prefs, approvals
 function setUserData(tgId, data) {
   if (!db || !tgId || typeof data !== 'object') return;
   const id = String(tgId);
@@ -452,4 +517,7 @@ module.exports = {
   getUserRank,
   setUserData,
   getUserData,
+  approveUser,
+  isUserApproved,
+  getUserApprovalInfo,
 };
