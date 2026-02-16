@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const { strictLimiter, createRateLimiter } = require('../middleware/rateLimiter');
+const db = require('../config/database');
 
 // Rate limiter for OTP sending (2 per hour per IP)
 const otpLimiter = createRateLimiter({
@@ -226,6 +227,41 @@ router.get('/test-stats', (req, res) => {
   };
 
   return res.json({ ok: true, data: response });
+});
+
+// POST /api/tg/add-hits - Manually add hits (development only)
+router.post('/add-hits', (req, res) => {
+  const { tg_id, hits, global } = req.body || {};
+
+  if (!tg_id || !hits || typeof hits !== 'number' || hits <= 0) {
+    return res.status(400).json({ ok: false, error: 'Invalid parameters. Need: tg_id, hits (number > 0), optional: global (boolean)' });
+  }
+
+  try {
+    if (global) {
+      // Add to system bonus for global hits
+      const existingBonus = db.prepare('SELECT hits FROM telegram_users WHERE tg_id = ?').get('SYSTEM_BONUS_HITS');
+      const newBonusHits = (existingBonus?.hits || 0) + hits;
+      db.prepare('INSERT OR REPLACE INTO telegram_users (tg_id, name, hits) VALUES (?, ?, ?)').run('SYSTEM_BONUS_HITS', 'System Bonus', newBonusHits);
+    } else {
+      // Add to specific user
+      const existingUser = db.prepare('SELECT hits FROM telegram_users WHERE tg_id = ?').get(tg_id);
+      const newHits = (existingUser?.hits || 0) + hits;
+      const userName = existingUser ? null : `User_${tg_id.slice(-4)}`;
+      db.prepare('INSERT OR REPLACE INTO telegram_users (tg_id, name, hits) VALUES (?, ?, ?)').run(tg_id, userName, newHits);
+    }
+
+    const globalHits = db.prepare('SELECT SUM(hits) as total FROM telegram_users').get();
+    return res.json({
+      ok: true,
+      message: global ? `Added ${hits} global hits` : `Added ${hits} hits to user ${tg_id}`,
+      global_hits: globalHits?.total || 0
+    });
+
+  } catch (error) {
+    console.error('Error adding hits:', error);
+    return res.status(500).json({ ok: false, error: 'Database error' });
+  }
 });
 
 // POST /api/tg/validate-token - Validate login token (extension)
