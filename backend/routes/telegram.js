@@ -1219,8 +1219,11 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
       `💡 <b>Note:</b> Testing stops on first hit (realistic)\n\n` +
       `═══════════════════════`;
 
+    console.log(`[AUTO-CHECKOUT] Sending initial message to chat ${chatId}`);
     const initialMessage = await sendMessage(BOT_TOKEN, chatId, statusMessage);
-    let messageId = initialMessage.result?.message_id;
+    console.log('Initial message result:', JSON.stringify(initialMessage, null, 2));
+    let messageId = initialMessage?.result?.message_id || initialMessage?.message_id;
+    console.log(`[AUTO-CHECKOUT] Initial message sent, messageId: ${messageId}`);
 
     let processed = 0;
     let hits = [];
@@ -1268,10 +1271,25 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
 
       if (messageId) {
         try {
-          await editMessageText(BOT_TOKEN, chatId, messageId, statusText);
+          console.log(`[AUTO-CHECKOUT] Updating message ${messageId} for user ${chatId}`);
+          const editResult = await editMessageText(BOT_TOKEN, chatId, messageId, statusText);
+          if (!editResult.ok) {
+            console.error('Failed to edit message:', editResult);
+          } else {
+            console.log('Message updated successfully');
+          }
         } catch (error) {
           console.error('Failed to edit message:', error);
+          // Fallback: send a new message if editing fails
+          try {
+            await sendMessage(BOT_TOKEN, chatId, statusText);
+            console.log('Sent fallback message');
+          } catch (fallbackError) {
+            console.error('Fallback message also failed:', fallbackError);
+          }
         }
+      } else {
+        console.error('No messageId available for updating');
       }
     };
 
@@ -1282,12 +1300,14 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
 
         // Parse credit card
         const ccParts = ccString.split('|');
+        console.log(`[AUTO-CHECKOUT] Parsing card: ${ccString} -> ${ccParts.length} parts`);
         if (ccParts.length !== 4) {
-          console.log(`[AUTO-CHECKOUT] Invalid CC format: ${ccString}`);
+          console.log(`[AUTO-CHECKOUT] Invalid CC format: ${ccString} (expected 4 parts, got ${ccParts.length})`);
           continue;
         }
 
         const [cardNumber, expMonth, expYear, cvv] = ccParts;
+        console.log(`[AUTO-CHECKOUT] Card parsed: ${cardNumber.substring(0, 6)}****${cardNumber.substring(cardNumber.length - 4)} | ${expMonth}/${expYear} | ${cvv}`);
         const cardData = {
           number: cardNumber.trim(),
           month: expMonth.trim(),
@@ -1298,15 +1318,17 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
         console.log(`[AUTO-CHECKOUT] Testing card ${processed}/${ccList.length}: ${cardNumber.substring(0, 6)}****`);
 
         // Update status message every card
-        await updateStatusMessage('Testing cards...', null);
+        await updateStatusMessage(`Testing card ${processed}/${ccList.length}...`, null);
 
         // Use simulation instead of real API calls (no fake charges)
+        console.log(`[AUTO-CHECKOUT] Starting card test for ${bin}****${lastFour}`);
         const bin = cardNumber.substring(0, 6);
         const lastFour = cardNumber.substring(cardNumber.length - 4);
 
         // BIN-based approval logic (simulation)
         const isPremium = ['411111', '422222', '433333', '444444', '555555', '371111', '372222'].some(pb => bin.startsWith(pb));
         const isBusiness = ['374355', '375987', '376543'].some(bb => bin.startsWith(bb));
+        console.log(`[AUTO-CHECKOUT] BIN ${bin} - Business: ${isBusiness}, Premium: ${isPremium}`);
 
         let testResult = {
           approved: false,
@@ -1337,8 +1359,10 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
           testResult.declined = !testResult.approved && !testResult.needsAuth;
         }
 
-        // Simulate processing delay
-        await new Promise(resolve => setTimeout(resolve, testResult.processingTime));
+        // Simulate processing delay (minimum 1 second for visibility)
+        const delay = Math.max(testResult.processingTime, 1000);
+        console.log(`[AUTO-CHECKOUT] Processing card for ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
 
         if (testResult.approved) {
           // HIT! Card approved - checkout would close here in real scenario
