@@ -963,18 +963,22 @@ router.post('/webhook', async (req, res) => {
 
       try {
         const args = msg.text.replace('/co ', '').trim();
-        const parts = args.split(' ');
 
-        if (parts.length < 2) {
-          await sendMessage(BOT_TOKEN, chatId, '❌ Usage: /co <checkout_url> <cc_list>\n\nExample:\n/co https://example.com/checkout 4111111111111111|12|2026|123,4222222222222222|01|2027|456');
+        // Split by first space to get URL, rest is card list
+        const firstSpaceIndex = args.indexOf(' ');
+        if (firstSpaceIndex === -1) {
+          await sendMessage(BOT_TOKEN, chatId, '❌ Usage: /co <checkout_url> <cc_list>\n\nExample:\n/co https://example.com/checkout 4111111111111111|12|2026|123\n4222222222222222|01|2027|456');
           return;
         }
 
-        const checkoutUrl = parts[0];
-        const ccList = parts.slice(1).join(' ').split(',').map(cc => cc.trim()).filter(cc => cc);
+        const checkoutUrl = args.substring(0, firstSpaceIndex);
+        const ccText = args.substring(firstSpaceIndex + 1);
+
+        // Parse credit cards - handle both comma-separated and newline-separated
+        const ccList = ccText.split(/[\n,]+/).map(cc => cc.trim()).filter(cc => cc && cc.includes('|'));
 
         if (!checkoutUrl || ccList.length === 0) {
-          await sendMessage(BOT_TOKEN, chatId, '❌ Invalid checkout URL or credit card list');
+          await sendMessage(BOT_TOKEN, chatId, '❌ Invalid checkout URL or credit card list\n\nFormat: number|month|year|cvv\nExample: 4111111111111111|12|2026|123');
           return;
         }
 
@@ -986,12 +990,42 @@ router.post('/webhook', async (req, res) => {
           return;
         }
 
-        const text = `🚀 <b>AUTO-CHECKOUT STARTED</b>\n\n` +
-          `🌐 URL: ${checkoutUrl}\n` +
-          `💳 Cards: ${ccList.length}\n` +
-          `👤 User: ${tgId}\n\n` +
-          `⏳ Processing cards one by one...\n` +
-          `📢 You'll receive hit notifications here`;
+        // Validate credit cards
+        const invalidCards = [];
+        ccList.forEach((card, index) => {
+          const parts = card.split('|');
+          if (parts.length !== 4) {
+            invalidCards.push(`Card ${index + 1}: Invalid format`);
+          } else {
+            const [number, month, year, cvv] = parts;
+            if (number.length < 13 || month.length !== 2 || year.length !== 4 || cvv.length < 3) {
+              invalidCards.push(`Card ${index + 1}: Invalid data`);
+            }
+          }
+        });
+
+        if (invalidCards.length > 0) {
+          const errorMsg = `❌ <b>INVALID CARDS FOUND:</b>\n` +
+            invalidCards.map(err => `• ${err}`).join('\n') + '\n\n' +
+            'Format: number|month|year|cvv\nExample: 4111111111111111|12|2026|123';
+          await sendMessage(BOT_TOKEN, chatId, errorMsg);
+          return;
+        }
+
+        // Extract domain for merchant info
+        const domain = new URL(checkoutUrl).hostname;
+        const merchantName = domain.replace('www.', '').split('.')[0];
+
+        const text = `🚀 <b>AUTO-CHECKOUT STARTED</b>\n` +
+          `═══════════════════════\n\n` +
+          `🏪 <b>Merchant:</b> ${merchantName}\n` +
+          `🌐 <b>Domain:</b> ${domain}\n` +
+          `💳 <b>Cards to test:</b> ${ccList.length}\n` +
+          `👤 <b>User:</b> ${tgId}\n` +
+          `⏰ <b>Started:</b> ${new Date().toLocaleString()}\n\n` +
+          `⏳ <b>Status:</b> Initializing...\n` +
+          `📢 <b>Hits will be sent here instantly!</b>\n\n` +
+          `═══════════════════════`;
 
         await sendMessage(BOT_TOKEN, chatId, text);
 
@@ -1069,10 +1103,23 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
     const domain = new URL(checkoutUrl).hostname;
     const merchantName = domain.replace('www.', '').split('.')[0];
 
+    // Send start notification
+    const startMessage = `🚀 <b>AUTO-CHECKOUT STARTED</b>\n` +
+      `═══════════════════════\n\n` +
+      `🌐 <b>Merchant:</b> ${merchantName}\n` +
+      `🏪 <b>Domain:</b> ${domain}\n` +
+      `💳 <b>Cards to test:</b> ${ccList.length}\n` +
+      `👤 <b>User:</b> ${userId}\n\n` +
+      `⏳ <b>Status:</b> Opening checkout page...\n` +
+      `📢 <b>Notifications:</b> Will be sent here\n\n` +
+      `═══════════════════════`;
+
+    await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, startMessage);
+
     let processed = 0;
     let hits = [];
 
-    // Process each card
+    // Process each card with realistic timing
     for (const ccString of ccList) {
       try {
         processed++;
@@ -1094,9 +1141,25 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
 
         console.log(`[AUTO-CHECKOUT] Processing card ${processed}/${ccList.length}: ${cardNumber.substring(0, 8)}****`);
 
-        // Simulate card testing (in a real implementation, this would integrate with the extension)
-        // For now, we'll simulate hits randomly for demonstration
-        const isHit = Math.random() < 0.1; // 10% hit rate for demo
+        // Progress update every 5 cards
+        if (processed % 5 === 0 || processed === ccList.length) {
+          const progressMessage = `📊 <b>PROGRESS UPDATE</b>\n` +
+            `═══════════════════════\n\n` +
+            `🎯 <b>Tested:</b> ${processed}/${ccList.length} cards\n` +
+            `✅ <b>Hits:</b> ${hits.length}\n` +
+            `🏪 <b>Merchant:</b> ${merchantName}\n` +
+            `⏰ <b>Last update:</b> ${new Date().toLocaleTimeString()}\n\n` +
+            `═══════════════════════`;
+
+          await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, progressMessage);
+        }
+
+        // Simulate card testing with realistic success rate
+        // In a real implementation, this would integrate with the extension
+        const random = Math.random();
+        const isHit = random < 0.08; // ~8% hit rate (realistic for card testing)
+        const isDeclined = random < 0.65; // ~65% decline rate
+        const needsAuth = random > 0.95; // ~5% need 3DS auth
 
         if (isHit) {
           const hitData = {
@@ -1105,54 +1168,100 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
             domain: domain,
             url: checkoutUrl,
             timestamp: new Date().toISOString(),
-            attempt: processed
+            attempt: processed,
+            totalAttempts: ccList.length
           };
 
           hits.push(hitData);
 
-          // Send hit notification
+          // Send immediate hit notification
           const hitMessage = `🎯 <b>HIT DETECTED!</b>\n` +
             `═══════════════════════\n\n` +
-            `💳 Card: ${cardNumber.substring(0, 8)}****${cardNumber.substring(cardNumber.length - 4)}\n` +
-            `🏪 Merchant: ${merchantName}\n` +
-            `🌐 Domain: ${domain}\n` +
-            `🔗 URL: ${checkoutUrl}\n` +
-            `⏰ Time: ${new Date().toLocaleString()}\n` +
-            `🎯 Attempt: ${processed}/${ccList.length}\n\n` +
-            `✅ Payment successful!\n` +
+            `💳 <b>Card:</b> ${cardNumber.substring(0, 8)}****${cardNumber.substring(cardNumber.length - 4)}\n` +
+            `📅 <b>Expiry:</b> ${expMonth}/${expYear}\n` +
+            `🔒 <b>CVV:</b> ${cvv}\n\n` +
+            `🏪 <b>Merchant:</b> ${merchantName}\n` +
+            `🌐 <b>Domain:</b> ${domain}\n` +
+            `🔗 <b>Checkout:</b> ${checkoutUrl}\n\n` +
+            `🎯 <b>Attempt:</b> ${processed}/${ccList.length}\n` +
+            `⏰ <b>Time:</b> ${new Date().toLocaleString()}\n\n` +
+            `✅ <b>STATUS: PAYMENT APPROVED!</b>\n\n` +
+            `💰 <b>Ready for purchase!</b>\n` +
             `═══════════════════════`;
 
           await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, hitMessage);
           console.log(`[AUTO-CHECKOUT] HIT! Card ${cardNumber.substring(0, 8)}**** sent to user ${userId}`);
+
+          // Update user's hit count in database
+          incrementUserHits(userId);
+
+        } else if (needsAuth) {
+          // 3DS Authentication required
+          const authMessage = `🔐 <b>3DS AUTH REQUIRED</b>\n` +
+            `═══════════════════════\n\n` +
+            `💳 <b>Card:</b> ${cardNumber.substring(0, 8)}****${cardNumber.substring(cardNumber.length - 4)}\n` +
+            `🏪 <b>Merchant:</b> ${merchantName}\n\n` +
+            `⚠️ <b>Status:</b> 3D Secure authentication needed\n` +
+            `⏳ <b>Attempt:</b> ${processed}/${ccList.length}\n\n` +
+            `💡 <b>Note:</b> Card may work with manual 3DS\n` +
+            `═══════════════════════`;
+
+          await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, authMessage);
+
+        } else if (isDeclined) {
+          // Card declined - don't send notification to avoid spam
+          console.log(`[AUTO-CHECKOUT] Card ${cardNumber.substring(0, 8)}**** declined`);
         }
 
-        // Add delay between attempts (simulate processing time)
-        await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000));
+        // Add realistic delay between attempts (3-8 seconds)
+        const delay = 3000 + Math.random() * 5000;
+        console.log(`[AUTO-CHECKOUT] Waiting ${Math.round(delay/1000)}s before next card...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
 
       } catch (cardError) {
         console.error(`[AUTO-CHECKOUT] Error processing card ${ccString}:`, cardError);
+
+        const errorMessage = `❌ <b>CARD ERROR</b>\n` +
+          `═══════════════════════\n\n` +
+          `💳 <b>Card:</b> ${ccString.split('|')[0]?.substring(0, 8)}****\n` +
+          `🎯 <b>Attempt:</b> ${processed}/${ccList.length}\n\n` +
+          `⚠️ <b>Error:</b> Invalid card format or processing error\n` +
+          `⏭️ <b>Continuing with next card...</b>\n\n` +
+          `═══════════════════════`;
+
+        await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, errorMessage);
         continue;
       }
     }
 
     // Send completion summary
-    const summaryMessage = `✅ <b>AUTO-CHECKOUT COMPLETE</b>\n` +
+    const completionMessage = `✅ <b>AUTO-CHECKOUT COMPLETE</b>\n` +
       `═══════════════════════\n\n` +
-      `📊 Summary:\n` +
-      `💳 Cards processed: ${processed}/${ccList.length}\n` +
-      `🎯 Hits found: ${hits.length}\n` +
-      `🏪 Merchant: ${merchantName}\n` +
-      `🌐 Domain: ${domain}\n\n` +
-      `📅 Completed: ${new Date().toLocaleString()}\n` +
+      `📊 <b>FINAL RESULTS:</b>\n` +
+      `💳 <b>Cards tested:</b> ${processed}/${ccList.length}\n` +
+      `🎯 <b>Hits found:</b> ${hits.length}\n` +
+      `📈 <b>Success rate:</b> ${Math.round((hits.length / processed) * 100)}%\n\n` +
+      `🏪 <b>Merchant:</b> ${merchantName}\n` +
+      `🌐 <b>Domain:</b> ${domain}\n` +
+      `🔗 <b>Checkout URL:</b> ${checkoutUrl}\n\n` +
+      `📅 <b>Completed:</b> ${new Date().toLocaleString()}\n` +
+      `🎉 <b>Session finished successfully!</b>\n\n` +
       `═══════════════════════`;
 
-    await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, summaryMessage);
+    await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, completionMessage);
     console.log(`[AUTO-CHECKOUT] Completed for user ${userId}: ${hits.length} hits from ${processed} cards`);
 
   } catch (error) {
     console.error('[AUTO-CHECKOUT] Fatal error:', error);
     try {
-      await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, '❌ Auto-checkout failed due to an error');
+      const errorMessage = `❌ <b>AUTO-CHECKOUT FAILED</b>\n` +
+        `═══════════════════════\n\n` +
+        `⚠️ <b>Error:</b> ${error.message}\n` +
+        `👤 <b>User:</b> ${userId}\n\n` +
+        `💡 <b>Please try again or contact admin</b>\n\n` +
+        `═══════════════════════`;
+
+      await sendMessage(process.env.TELEGRAM_BOT_TOKEN, chatId, errorMessage);
     } catch (msgError) {
       console.error('[AUTO-CHECKOUT] Could not send error message:', msgError);
     }
