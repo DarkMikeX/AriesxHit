@@ -304,6 +304,15 @@ function getMainMenuText(firstName, tgId) {
 router.post('/webhook', async (req, res) => {
   console.log('[WEBHOOK] Received webhook request');
 
+  // Debug: Log basic request info
+  const msg = req.body?.message;
+  const cb = req.body?.callback_query;
+  if (msg) {
+    console.log(`[WEBHOOK] Message from user ${msg.from?.id}: "${msg.text}"`);
+  } else if (cb) {
+    console.log(`[WEBHOOK] Callback from user ${cb.from?.id}: "${cb.data}"`);
+  }
+
   // Always respond immediately to Telegram
   res.status(200).end();
 
@@ -331,6 +340,8 @@ router.post('/webhook', async (req, res) => {
     const messageId = cb?.message?.message_id;
     const firstName = msg?.from?.first_name || cb?.from?.first_name || 'User';
     const tgId = String(msg?.from?.id || cb?.from?.id || '');
+
+    console.log(`[DEBUG] Processing request - User ID: ${tgId}, Message: ${msg?.text || cb?.data || 'N/A'}`);
 
     if (!chatId || !tgId) {
       console.error('Webhook: Missing chat_id or tg_id');
@@ -922,6 +933,23 @@ router.post('/webhook', async (req, res) => {
         console.log(`[ADMIN] /admin_help response sent: ${result.ok}`);
         if (!result.ok) console.error(`[ADMIN] Failed to send help: ${result.error}`);
         return;
+      }
+    }
+
+    // Test command for anyone to verify bot is working
+    if (msg?.text === '/test') {
+      try {
+        console.log(`[TEST] Test command from user ${tgId}`);
+        const text = `✅ <b>Bot is working!</b>\n\n` +
+          `👤 User ID: ${tgId}\n` +
+          `📝 Your message: ${msg.text}\n` +
+          `⏰ Time: ${new Date().toLocaleString()}\n\n` +
+          `The bot is responding correctly! 🤖`;
+        const result = await sendMessage(BOT_TOKEN, chatId, text);
+        console.log(`[TEST] Test response sent: ${result.ok}`);
+        return;
+      } catch (error) {
+        console.error('Error processing /test command:', error);
       }
     }
 
