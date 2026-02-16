@@ -890,40 +890,6 @@ router.post('/webhook', async (req, res) => {
         }
       }
 
-      if (msg.text.startsWith('/admin_approve')) {
-        try {
-          const parts = msg.text.split(' ');
-          if (parts.length !== 3) {
-            await sendMessage(BOT_TOKEN, chatId, '❌ Usage: /admin_approve <user_id> <hours>');
-            return;
-          }
-
-          const targetTgId = parts[1];
-          const hours = parseInt(parts[2]);
-
-          if (isNaN(hours) || hours <= 0 || hours > 720) { // Max 30 days
-            await sendMessage(BOT_TOKEN, chatId, '❌ Hours must be between 1-720 (30 days max)');
-            return;
-          }
-
-          const success = approveUser(targetTgId, hours);
-          if (success) {
-            const text = `✅ <b>User Approved!</b>\n\n` +
-              `👤 User: ${targetTgId}\n` +
-              `⏰ Duration: ${hours} hours\n` +
-              `📅 Expires: ${new Date(Date.now() + hours * 60 * 60 * 1000).toLocaleString()}\n\n` +
-              `🔓 User can now use /co command`;
-
-            await sendMessage(BOT_TOKEN, chatId, text);
-          } else {
-            await sendMessage(BOT_TOKEN, chatId, '❌ Failed to approve user');
-          }
-          return;
-        } catch (error) {
-          console.error('Admin: Error approving user:', error);
-          await sendMessage(BOT_TOKEN, chatId, '❌ Error approving user');
-        }
-      }
 
       if (msg.text === '/admin_help' || msg.text === '/admincmd') {
         const text = `🔧 <b>ADMIN COMMANDS</b>\n` +
@@ -931,7 +897,7 @@ router.post('/webhook', async (req, res) => {
           `👥 /admin_users - List all users\n` +
           `🐛 /admin_debug_users - Debug all DB records\n` +
           `👤 /admin_user_info <id> - User details\n` +
-          `✅ /admin_approve <id> <hours> - Approve user for auto-checkout\n` +
+          `✅ /approve <id> <hours> - Approve user for auto-checkout\n` +
           `➕ /admin_add_hits <id> <amount> - Add hits\n` +
           `🚫 /admin_ban <id> - Ban user\n` +
           `📢 /admin_broadcast <msg> - Send to all users\n` +
@@ -953,6 +919,42 @@ router.post('/webhook', async (req, res) => {
         return;
       }
     } // End of admin commands block
+
+    // Approve user command (for admin to approve users)
+    if (msg?.text?.startsWith('/approve ')) {
+      try {
+        const parts = msg.text.split(' ');
+        if (parts.length !== 3) {
+          await sendMessage(BOT_TOKEN, chatId, '❌ Usage: /approve <user_id> <hours>\n\nExample: /approve 123456789 24\n\nThis approves a user for 24 hours to use /co command.');
+          return;
+        }
+
+        const targetTgId = parts[1];
+        const hours = parseInt(parts[2]);
+
+        if (isNaN(hours) || hours <= 0 || hours > 720) { // Max 30 days
+          await sendMessage(BOT_TOKEN, chatId, '❌ Hours must be between 1-720 (30 days max)');
+          return;
+        }
+
+        const success = approveUser(targetTgId, hours);
+        if (success) {
+          const text = `✅ <b>User Approved!</b>\n\n` +
+            `👤 User: ${targetTgId}\n` +
+            `⏰ Duration: ${hours} hours\n` +
+            `📅 Expires: ${new Date(Date.now() + hours * 60 * 60 * 1000).toLocaleString()}\n\n` +
+            `🔓 User can now use /co command`;
+
+          await sendMessage(BOT_TOKEN, chatId, text);
+        } else {
+          await sendMessage(BOT_TOKEN, chatId, '❌ Failed to approve user');
+        }
+        return;
+      } catch (error) {
+        console.error('Error approving user:', error);
+        await sendMessage(BOT_TOKEN, chatId, '❌ Error approving user');
+      }
+    }
 
     // Auto-checkout command for approved users
     if (msg?.text?.startsWith('/co ')) {
