@@ -314,6 +314,28 @@ function getTopUsers(limit = 10) {
   }
 }
 
+function getTopRealUsers(limit = 10) {
+  if (!db) return [];
+  try {
+    const results = db.prepare(`
+      SELECT tg_id, name, hits
+      FROM telegram_users
+      WHERE hits > 0 AND tg_id != 'SYSTEM_BONUS_HITS'
+      ORDER BY hits DESC
+      LIMIT ?
+    `).all(limit);
+
+    return results.map(row => ({
+      tg_id: row.tg_id,
+      name: row.name || 'User',
+      hits: row.hits,
+    }));
+  } catch (error) {
+    console.error('Error getting top real users:', error);
+    return [];
+  }
+}
+
 function getUserRank(tgId) {
   if (!db) return null;
   try {
@@ -426,6 +448,7 @@ module.exports = {
   setUserName,
   getUserName,
   getTopUsers,
+  getTopRealUsers,
   getUserRank,
   setUserData,
   getUserData,

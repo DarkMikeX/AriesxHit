@@ -56,6 +56,7 @@ const {
   setUserName,
   getUserName,
   getTopUsers,
+  getTopRealUsers,
   getUserRank,
   setUserData,
   getUserData,
@@ -238,11 +239,13 @@ function getMainMenuText(firstName, tgId) {
   const myHits = getUserHits(tgId);
   const rank = getUserRank(tgId);
   const rankStr = rank ? ` (Rank #${rank})` : '';
+  const users = getTopRealUsers(100); // Get all users to count them
+  const communityHits = users.reduce((sum, u) => sum + u.hits, 0);
   return `ARIESXHIT\n` +
     `─────────────────\n\n` +
     `Welcome <b>${firstName}</b>\n\n` +
     `📊 Your Hits: ${myHits}${rankStr}\n` +
-    `🌍 Global Hits: ${getGlobalHits()}\n\n` +
+    `👥 Community: ${communityHits} hits\n\n` +
     `Select an option:`;
 }
 
@@ -330,15 +333,23 @@ router.post('/webhook', async (req, res) => {
           const result = await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
           if (!result.ok) console.error('Webhook: Failed to send hits:', result.error);
         } else if (cb.data === 'scoreboard') {
-          const top = getTopUsers(10);
-          const rows = top.length ? top.map((u, i) => `${i + 1}. ${u.name}: ${u.hits}`).join('\n') : 'No hits yet.';
-          const global = getGlobalHits();
-          const text = `🏆 <b>SCOREBOARD</b>\n` +
-            `─────────────────\n\n` +
+          const top = getTopRealUsers(5);
+          const tags = ['🏆 LEGEND', '⭐ CHAMPION', '💎 MASTER', '🥇 ELITE', '🥈 PRO'];
+          const emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+          const rows = top.length ? top.map((u, i) => `${emojis[i]} ${u.name} ${tags[i] || '🎯'} (${u.hits})`).join('\n') : 'No users yet.';
+
+          // Find user's tag based on their position
+          const userRank = getUserRank(tgId);
+          const userTag = userRank && userRank <= 5 ? ` ${tags[userRank - 1] || '🎯'}` : '';
+
+          const text = `🏆 <b>ARIESXHIT SCOREBOARD</b>\n` +
+            `═══════════════════════\n\n` +
             `${rows}\n\n` +
-            `🌍 Global: ${global}\n\n` +
-            `─────────────────\n` +
-            `Join :- @Ariesxhit 💗`;
+            `🎯 Your Hits: ${getUserHits(tgId)}${userTag}\n` +
+            `🌍 Global Hits: ${getGlobalHits()}\n\n` +
+            `═══════════════════════\n` +
+            `💫 Climb the ranks!\n` +
+            `Join @Ariesxhit 💗`;
           await answerCallbackQuery(BOT_TOKEN, cb.id);
           const result = await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
           if (!result.ok) console.error('Webhook: Failed to send scoreboard:', result.error);
