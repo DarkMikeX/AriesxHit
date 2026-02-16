@@ -1177,7 +1177,8 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
       `✅ <b>Hits:</b> 0\n` +
       `❌ <b>Declines:</b> 0\n` +
       `🔐 <b>3DS Required:</b> 0\n\n` +
-      `⚡ <b>Status:</b> Initializing...\n\n` +
+      `⚡ <b>Status:</b> Initializing...\n` +
+      `💡 <b>Note:</b> Testing stops on first hit (realistic)\n\n` +
       `═══════════════════════`;
 
     const initialMessage = await sendMessage(BOT_TOKEN, chatId, statusMessage);
@@ -1190,7 +1191,8 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
 
     // Function to update the status message
     const updateStatusMessage = async (currentStatus = 'Processing...', lastResult = null) => {
-      let statusText = `🚀 <b>AUTO-CHECKOUT IN PROGRESS</b>\n` +
+      const isComplete = hits.length > 0;
+      let statusText = `${isComplete ? '🎉' : '🚀'} <b>AUTO-CHECKOUT ${isComplete ? 'COMPLETE' : 'IN PROGRESS'}</b>\n` +
         `═══════════════════════\n\n` +
         `🏪 <b>Merchant:</b> ${merchantName}\n` +
         `🌐 <b>Domain:</b> ${domain}\n` +
@@ -1207,7 +1209,8 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
       if (lastResult) {
         statusText += `🔄 <b>LAST RESULT:</b>\n`;
         if (lastResult.hit) {
-          statusText += `💳 ${lastResult.bin}****${lastResult.lastFour} - ✅ CHARGED\n`;
+          statusText += `💳 ${lastResult.bin}****${lastResult.lastFour} - ✅ CHARGED SUCCESSFULLY!\n`;
+          statusText += `🎉 <b>CHECKOUT COMPLETED!</b>\n`;
         } else if (lastResult.auth) {
           statusText += `💳 ${lastResult.bin}****${lastResult.lastFour} - 🔐 3DS REQUIRED\n`;
         } else if (lastResult.declined) {
@@ -1216,8 +1219,14 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
         statusText += `\n`;
       }
 
-      statusText += `⚡ <b>Status:</b> ${currentStatus}\n\n` +
-        `═══════════════════════`;
+      if (isComplete) {
+        statusText += `🏁 <b>Testing stopped - checkout completed with live card!</b>\n`;
+      } else {
+        statusText += `⚡ <b>Status:</b> ${currentStatus}\n`;
+        statusText += `💡 <b>Note:</b> Testing stops on first hit (realistic)\n`;
+      }
+
+      statusText += `\n═══════════════════════`;
 
       if (messageId) {
         try {
@@ -1294,7 +1303,7 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
         await new Promise(resolve => setTimeout(resolve, testResult.processingTime));
 
         if (testResult.approved) {
-          // HIT! Card approved
+          // HIT! Card approved - checkout would close here in real scenario
           const hitData = {
             card: `${cardNumber}|${expMonth}|${expYear}|${cvv}`,
             merchant: merchantName,
@@ -1312,7 +1321,7 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
           hits.push(hitData);
 
           // Update status with hit
-          await updateStatusMessage('HIT DETECTED! 💳', {
+          await updateStatusMessage('CHECKOUT COMPLETE! 🎉', {
             hit: true,
             bin: testResult.bin,
             lastFour: testResult.lastFour
@@ -1322,6 +1331,9 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
 
           // Update user's hit count in database
           incrementUserHits(userId);
+
+          // BREAK THE LOOP - checkout is complete, can't test more cards
+          break;
 
         } else if (testResult.needsAuth) {
           // 3DS Authentication required
@@ -1368,7 +1380,8 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
     }
 
     // Update final status message with completion summary
-    const finalStatus = `✅ <b>AUTO-CHECKOUT SESSION COMPLETE</b>\n` +
+    const wasCheckoutComplete = hits.length > 0;
+    const finalStatus = `${wasCheckoutComplete ? '🎉' : '✅'} <b>AUTO-CHECKOUT ${wasCheckoutComplete ? 'COMPLETE' : 'SESSION COMPLETE'}</b>\n` +
       `═══════════════════════\n\n` +
       `📊 <b>FINAL STATISTICS:</b>\n` +
       `💳 <b>Total Cards Tested:</b> ${processed}/${ccList.length}\n` +
@@ -1381,8 +1394,12 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
       `🔧 <b>Provider:</b> ${stripeData.provider}\n\n` +
       `⏰ <b>Duration:</b> ~${Math.round((Date.now() - new Date().getTime()) / 1000)}s\n` +
       `📅 <b>Completed:</b> ${new Date().toLocaleString()}\n\n` +
-      `🎉 <b>Session finished successfully!</b>\n\n` +
-      `💡 <b>Note:</b> This is simulation mode - no real charges made\n\n` +
+      `${wasCheckoutComplete ?
+        '🎉 <b>PAYMENT SUCCESSFUL!</b> Checkout completed with live card!' :
+        '🎯 <b>Testing completed.</b> No live cards found in this batch.'}\n\n` +
+      `${wasCheckoutComplete ?
+        '💡 <b>Note:</b> Testing stopped after first hit (realistic behavior)' :
+        '💡 <b>Note:</b> This is simulation mode - no real charges made'}\n\n` +
       `═══════════════════════`;
 
     await updateStatusMessage('COMPLETED ✅', null);
