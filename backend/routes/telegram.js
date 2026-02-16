@@ -476,15 +476,10 @@ router.post('/webhook', async (req, res) => {
         await sendMessage(BOT_TOKEN, chatId, '❌ <b>Access Denied</b>\n\nThis command is restricted to administrators only.');
         return;
       }
-      // Admin user - process admin commands
-      console.log(`[ADMIN] Processing admin command: ${msg.text} for user ${tgId}`);
-    } else if (msg?.text && msg.text.startsWith('/admin_')) {
-      // This should not be reached due to the return above, but just in case
-      return;
-    }
 
-    // Admin command implementations
-    if (tgId === '6447766151' && msg?.text) {
+      console.log(`[ADMIN] Processing admin command: ${msg.text} for user ${tgId}`);
+
+      // Admin command implementations
       if (msg.text === '/admin_stats') {
         try {
           const globalHits = db.prepare('SELECT SUM(hits) as total FROM telegram_users').get();
@@ -934,7 +929,7 @@ router.post('/webhook', async (req, res) => {
         if (!result.ok) console.error(`[ADMIN] Failed to send help: ${result.error}`);
         return;
       }
-    }
+    } // End of admin commands block
 
     // Test command for anyone to verify bot is working
     if (msg?.text === '/test') {
