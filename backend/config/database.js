@@ -10,11 +10,19 @@ const fs = require('fs');
 // Database path
 const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, '../database/ariesxhit.db');
 const DB_DIR = path.dirname(DB_PATH);
+const BACKUP_PATH = process.env.DATABASE_BACKUP_PATH || path.join(__dirname, '../database/backup/ariesxhit.db');
 
 // Ensure database directory exists
 if (!fs.existsSync(DB_DIR)) {
   fs.mkdirSync(DB_DIR, { recursive: true });
   console.log('✅ Database directory created:', DB_DIR);
+}
+
+// Ensure backup directory exists
+const BACKUP_DIR = path.dirname(BACKUP_PATH);
+if (!fs.existsSync(BACKUP_DIR)) {
+  fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  console.log('✅ Backup directory created:', BACKUP_DIR);
 }
 
 // Database wrapper to provide better-sqlite3 compatible API
@@ -27,7 +35,24 @@ class DatabaseWrapper {
 
   async initialize() {
     const SQL = await initSqlJs();
-    
+
+    // Try to restore from backup first
+    if (fs.existsSync(BACKUP_PATH)) {
+      try {
+        console.log('🔄 Attempting to restore from backup:', BACKUP_PATH);
+        const backupBuffer = fs.readFileSync(BACKUP_PATH);
+        this.db = new SQL.Database(backupBuffer);
+        console.log('✅ Database restored from backup!');
+        this.ready = true;
+        this.initializeTables(); // Ensure tables exist
+        this.save(); // Save to main location
+        return this;
+      } catch (error) {
+        console.error('❌ Failed to restore from backup:', error.message);
+        // Continue with normal initialization
+      }
+    }
+
     // Load existing database or create new one
     if (fs.existsSync(DB_PATH)) {
       const fileBuffer = fs.readFileSync(DB_PATH);
@@ -37,12 +62,12 @@ class DatabaseWrapper {
       this.db = new SQL.Database();
       console.log('💾 New database created:', DB_PATH);
     }
-    
+
     this.ready = true;
     this.initializeTables();
     this.createDefaultAdmin();
     this.save();
-    
+
     return this;
   }
 
@@ -53,6 +78,41 @@ class DatabaseWrapper {
       const buffer = Buffer.from(data);
       fs.writeFileSync(DB_PATH, buffer);
     }
+  }
+
+  // Backup database to persistent location
+  backup() {
+    if (this.db && this.ready) {
+      try {
+        const data = this.db.export();
+        const buffer = Buffer.from(data);
+        fs.writeFileSync(BACKUP_PATH, buffer);
+        console.log('💾 Database backed up to:', BACKUP_PATH);
+        return true;
+      } catch (error) {
+        console.error('❌ Database backup failed:', error.message);
+        return false;
+      }
+    }
+    return false;
+  }
+
+  // Restore database from backup
+  restore() {
+    if (fs.existsSync(BACKUP_PATH)) {
+      try {
+        const backupBuffer = fs.readFileSync(BACKUP_PATH);
+        this.db = new SQL.Database(backupBuffer);
+        console.log('✅ Database restored from backup!');
+        this.save(); // Save to main location
+        return true;
+      } catch (error) {
+        console.error('❌ Database restore failed:', error.message);
+        return false;
+      }
+    }
+    console.log('❌ No backup file found');
+    return false;
   }
 
   // Prepare statement (returns object with run, get, all methods)
@@ -148,6 +208,7 @@ class DatabaseWrapper {
   // Close database
   close() {
     if (this.db) {
+      this.backup(); // Backup before closing
       this.save();
       this.db.close();
       console.log('Database connection closed.');

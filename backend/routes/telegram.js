@@ -824,6 +824,52 @@ router.post('/webhook', async (req, res) => {
         }
       }
 
+      if (msg.text === '/admin_backup_db') {
+        try {
+          const success = db.backup();
+          if (success) {
+            const text = `💾 <b>DATABASE BACKUP SUCCESSFUL</b>\n` +
+              `═══════════════════════\n\n` +
+              `✅ Database backed up to persistent storage\n` +
+              `📁 Location: ${process.env.DATABASE_BACKUP_PATH || 'backup/ariesxhit.db'}\n` +
+              `🕐 Timestamp: ${new Date().toISOString()}\n\n` +
+              `💡 <b>Backup will persist across deployments</b>\n\n` +
+              `═══════════════════════`;
+
+            await sendMessage(BOT_TOKEN, chatId, text);
+          } else {
+            await sendMessage(BOT_TOKEN, chatId, '❌ Database backup failed');
+          }
+          return;
+        } catch (error) {
+          console.error('Admin: Error backing up database:', error);
+          await sendMessage(BOT_TOKEN, chatId, '❌ Error backing up database');
+        }
+      }
+
+      if (msg.text === '/admin_restore_db') {
+        try {
+          const success = db.restore();
+          if (success) {
+            const text = `🔄 <b>DATABASE RESTORE SUCCESSFUL</b>\n` +
+              `═══════════════════════\n\n` +
+              `✅ Database restored from backup\n` +
+              `📁 Source: ${process.env.DATABASE_BACKUP_PATH || 'backup/ariesxhit.db'}\n\n` +
+              `⚠️ <b>Server restart may be required</b>\n` +
+              `   for changes to take effect\n\n` +
+              `═══════════════════════`;
+
+            await sendMessage(BOT_TOKEN, chatId, text);
+          } else {
+            await sendMessage(BOT_TOKEN, chatId, '❌ Database restore failed - no backup found');
+          }
+          return;
+        } catch (error) {
+          console.error('Admin: Error restoring database:', error);
+          await sendMessage(BOT_TOKEN, chatId, '❌ Error restoring database');
+        }
+      }
+
       if (msg.text === '/admin_debug_users') {
         try {
           const allUsers = db.prepare('SELECT tg_id, name, hits FROM telegram_users ORDER BY created_at DESC').all();
@@ -862,6 +908,8 @@ router.post('/webhook', async (req, res) => {
           `🔄 /admin_restart - Restart server\n` +
           `🧹 /admin_clear_inactive - Remove 0-hit users\n` +
           `💾 /admin_backup - Backup information\n` +
+          `💽 /admin_backup_db - Backup database to persistent storage\n` +
+          `🔄 /admin_restore_db - Restore database from backup\n` +
           `🔗 /admin_webhook - Webhook status\n` +
           `⚡ /admin_performance - System performance\n` +
           `🖥️ /admin_system_info - Server & DB info\n` +

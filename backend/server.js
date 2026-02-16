@@ -36,6 +36,10 @@ const HOST = '0.0.0.0';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const API_PREFIX = process.env.API_PREFIX || '/api';
 
+// Database persistence configuration
+const DATABASE_PATH = process.env.DATABASE_PATH;
+const DATABASE_BACKUP_PATH = process.env.DATABASE_BACKUP_PATH;
+
 // ===================================
 // SECURITY MIDDLEWARE
 // ===================================
@@ -246,9 +250,50 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
+// ===================================
+// GRACEFUL SHUTDOWN & DATABASE PERSISTENCE
+// ===================================
+
+// Graceful shutdown handler
+const gracefulShutdown = (signal) => {
+  console.log(`\n📤 Received ${signal}, initiating graceful shutdown...`);
+
+  // Backup database before shutdown
+  console.log('💾 Backing up database...');
+  if (db && typeof db.backup === 'function') {
+    try {
+      const backupSuccess = db.backup();
+      if (backupSuccess) {
+        console.log('✅ Database backup completed');
+      } else {
+        console.log('⚠️ Database backup failed');
+      }
+    } catch (error) {
+      console.error('❌ Error during database backup:', error);
+    }
+  }
+
+  console.log('👋 Shutting down gracefully...');
+  process.exit(0);
+};
+
+// Handle shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Graceful shutdown on unhandled errors in development
+  if (NODE_ENV === 'development') {
+    gracefulShutdown('UNHANDLED_REJECTION');
+  }
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  gracefulShutdown('UNCAUGHT_EXCEPTION');
 });
 
 module.exports = app;
