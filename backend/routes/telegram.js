@@ -887,8 +887,7 @@ router.post('/webhook', async (req, res) => {
         }
       }
 
-      if (msg.text === '/admin_help') {
-        console.log(`[ADMIN] /admin_help triggered by user ${tgId}`);
+      if (msg.text === '/admin_help' || msg.text === '/admincmd') {
         const text = `🔧 <b>ADMIN COMMANDS</b>\n` +
           `═══════════════════════\n\n` +
           `📊 /admin_stats - System statistics\n` +
@@ -906,7 +905,7 @@ router.post('/webhook', async (req, res) => {
           `🔗 /admin_webhook - Webhook status\n` +
           `⚡ /admin_performance - System performance\n` +
           `🖥️ /admin_system_info - Server & DB info\n` +
-          `❓ /admin_help - This help message\n\n` +
+          `❓ /admin_help or /admincmd - This help message\n\n` +
           `═══════════════════════\n` +
           `🔒 Admin Only Commands\n` +
           `📝 Use: /command <required> [optional]`;
