@@ -473,7 +473,18 @@ router.post('/webhook', async (req, res) => {
         }
 
         const checkoutUrl = parts[0];
-        const cardData = parts.slice(1).join(' ');
+        const cardData = parts[1]; // Only take the first card after URL
+
+        // Check if multiple cards provided
+        if (parts.length > 2) {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Multiple Cards Detected</b>\n\nPlease test <b>one card at a time</b>.\n\nUsage: <code>/co &lt;checkout_url&gt; &lt;card_data&gt;</code>\n\nExample:\n<code>/co https://checkout.stripe.com/... 4111111111111111|12|25|123</code>`);
+          return;
+        }
+
+        if (!cardData || !cardData.includes('|')) {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Invalid Card Format</b>\n\nCard format: <code>number|month|year|cvv</code>\n\nExample:\n<code>4111111111111111|12|25|123</code>`);
+          return;
+        }
 
         // Validate URL format - check for Stripe session ID
         const hasStripeSession = /cs_(?:live|test)_[A-Za-z0-9]+/.test(checkoutUrl);
@@ -482,8 +493,8 @@ router.post('/webhook', async (req, res) => {
           return;
         }
 
-        // Send processing message
-        const processingMsg = await sendMessage(BOT_TOKEN, chatId, `🔄 <b>Processing Checkout...</b>\n\nURL: <code>${checkoutUrl.substring(0, 50)}...</code>\nCard: <code>...${cardData.split('|')[0]?.slice(-4) || '****'}</code>\n\nPlease wait...`);
+        // Send processing message with full card number
+        const processingMsg = await sendMessage(BOT_TOKEN, chatId, `🔄 <b>Processing Checkout...</b>\n\nURL: <code>${checkoutUrl.substring(0, 50)}...</code>\nCard: <code>${cardData.split('|')[0]}</code>\n\nPlease wait...`);
 
         try {
           // Process the checkout
@@ -495,25 +506,41 @@ router.post('/webhook', async (req, res) => {
 
           if (result.success) {
             if (result.status === 'CHARGED') {
-              resultText += `✅ <b>SUCCESS!</b>\n`;
-              resultText += `💰 Amount: ${result.amount || 'N/A'} ${result.currency?.toUpperCase() || 'USD'}\n`;
-              resultText += `💳 Card: ...${result.card?.slice(-4) || '****'}\n`;
-              if (result.payment_intent) {
-                resultText += `🆔 Payment ID: ${result.payment_intent}\n`;
-              }
+              const cardNumber = result.card || cardData.split('|')[0];
+              const bin = cardNumber.substring(0, 6);
+              const amount = result.amount ? `$${(result.amount / 100).toFixed(2)}` : '$9.99';
+              const currency = result.currency?.toUpperCase() || 'USD';
+              const currentTime = new Date().toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'numeric',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+              });
+
+              resultText = `🎯 𝗛𝗜𝗧 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 ✅\n\n`;
+              resultText += `「❃」 𝗥𝗲𝘀𝗽𝗼𝗻𝘀𝗲 : Charged\n`;
+              resultText += `「❃」 𝗔𝗺𝗼𝘂𝗻𝘁 : ${amount} ${currency}\n`;
+              resultText += `「❃」 𝗠𝗲𝗿𝗰𝗵𝗮𝗻𝘁 : ${parsed.sessionId ? 'Stripe Checkout' : 'Unknown'}\n`;
+              resultText += `「❃」 𝗘𝗺𝗮𝗶𝗹 : ${tgId}@user.bot\n`;
+              resultText += `「❃」 𝗕𝗜𝗡 :- ${bin}\n`;
+              resultText += `「❃」 𝗛𝗶𝘁 𝗕𝘆 : ${tgId}\n`;
+              resultText += `「❃」 𝗧𝗶𝗺𝗲 : ${currentTime}\n`;
             } else if (result.status === '3DS_BYPASSED') {
               resultText += `🎯 <b>3DS BYPASSED!</b>\n`;
               resultText += `💰 Amount: ${result.amount || 'N/A'} ${result.currency?.toUpperCase() || 'USD'}\n`;
-              resultText += `💳 Card: ...${result.card?.slice(-4) || '****'}\n`;
+              resultText += `💳 Card: ${result.card || cardData.split('|')[0]}\n`;
             } else if (result.status === '3DS') {
               resultText += `🔒 <b>3DS Required</b>\n`;
               resultText += `💰 Amount: ${result.amount || 'N/A'} ${result.currency?.toUpperCase() || 'USD'}\n`;
-              resultText += `💳 Card: ...${result.card?.slice(-4) || '****'}\n`;
+              resultText += `💳 Card: ${result.card || cardData.split('|')[0]}\n`;
               resultText += `ℹ️ 3DS authentication may be required\n`;
             }
           } else {
             resultText += `❌ <b>Failed</b>\n`;
-            resultText += `💳 Card: ...${result.card?.slice(-4) || '****'}\n`;
+            resultText += `💳 Card: ${result.card || cardData.split('|')[0]}\n`;
             resultText += `📋 Status: ${result.status || 'UNKNOWN'}\n`;
 
             if (result.error) {
@@ -527,8 +554,11 @@ router.post('/webhook', async (req, res) => {
             }
           }
 
-          resultText += `\n═══════════════════\n`;
-          resultText += `🤖 AriesxHit Checkout Bot`;
+          // Add footer only for non-success messages
+          if (!result.success || result.status !== 'CHARGED') {
+            resultText += `\n═══════════════════\n`;
+            resultText += `🤖 AriesxHit Checkout Bot`;
+          }
 
           // Send result
           await sendMessage(BOT_TOKEN, chatId, resultText);
