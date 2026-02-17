@@ -462,7 +462,7 @@ router.post('/webhook', async (req, res) => {
     // Admin commands (only for admin user)
     if (msg?.text && msg.text.startsWith('/admin_')) {
       if (tgId !== '6447766151') {
-        await sendMessage(BOT_TOKEN, chatId, '❌ <b>Access Denied</b>\n\nThis command is restricted to administrators only.');
+        await sendMessage(BOT_TOKEN, chatId, '🚫 <b>ADMIN ACCESS REQUIRED</b>\n\n❌ <b>Access Denied</b>\n\nThis command is restricted to administrators only.\n\n📞 <b>Contact Admin:</b> Request access from the bot administrator.\n\n🔒 <b>Your ID:</b> ' + tgId);
         return;
       }
 
@@ -497,15 +497,20 @@ router.post('/webhook', async (req, res) => {
         try {
           const parts = msg.text.split(' ');
           if (parts.length !== 3) {
-            await sendMessage(BOT_TOKEN, chatId, '❌ Usage: /admin_add_hits <user_id> <hits>');
+            await sendMessage(BOT_TOKEN, chatId, '❌ <b>Invalid Format</b>\n\nUsage: /admin_add_hits <user_id> <hits>\nExample: /admin_add_hits 123456789 100');
             return;
           }
 
           const targetTgId = parts[1];
           const hitsToAdd = parseInt(parts[2]);
 
-          if (isNaN(hitsToAdd) || hitsToAdd <= 0) {
-            await sendMessage(BOT_TOKEN, chatId, '❌ Invalid hits amount');
+          if (!targetTgId || !/^\d{5,15}$/.test(targetTgId)) {
+            await sendMessage(BOT_TOKEN, chatId, '❌ Invalid user ID format. Must be a valid Telegram user ID (5-15 digits).');
+            return;
+          }
+
+          if (isNaN(hitsToAdd) || hitsToAdd <= 0 || hitsToAdd > 1000000) {
+            await sendMessage(BOT_TOKEN, chatId, '❌ Invalid hits amount. Must be a positive number (max 1,000,000).');
             return;
           }
 
@@ -532,11 +537,16 @@ router.post('/webhook', async (req, res) => {
         try {
           const parts = msg.text.split(' ');
           if (parts.length !== 2) {
-            await sendMessage(BOT_TOKEN, chatId, '❌ Usage: /admin_user_info <user_id>');
+            await sendMessage(BOT_TOKEN, chatId, '❌ <b>Invalid Format</b>\n\nUsage: /admin_user_info <user_id>\nExample: /admin_user_info 123456789');
             return;
           }
 
           const targetTgId = parts[1];
+
+          if (!targetTgId || !/^\d{5,15}$/.test(targetTgId)) {
+            await sendMessage(BOT_TOKEN, chatId, '❌ Invalid user ID format. Must be a valid Telegram user ID (5-15 digits).');
+            return;
+          }
           const user = db.prepare('SELECT * FROM telegram_users WHERE tg_id = ?').get(targetTgId);
 
           if (!user) {
@@ -619,7 +629,12 @@ router.post('/webhook', async (req, res) => {
         try {
           const message = msg.text.replace('/admin_broadcast', '').trim();
           if (!message) {
-            await sendMessage(BOT_TOKEN, chatId, '❌ Usage: /admin_broadcast <message>');
+            await sendMessage(BOT_TOKEN, chatId, '❌ <b>Invalid Format</b>\n\nUsage: /admin_broadcast <message>\nExample: /admin_broadcast Hello everyone!');
+            return;
+          }
+
+          if (message.length > 4000) {
+            await sendMessage(BOT_TOKEN, chatId, '❌ Message too long. Maximum 4000 characters allowed.');
             return;
           }
 
@@ -701,15 +716,30 @@ router.post('/webhook', async (req, res) => {
         try {
           const parts = msg.text.split(' ');
           if (parts.length !== 2) {
-            await sendMessage(BOT_TOKEN, chatId, '❌ Usage: /admin_ban <user_id>');
+            await sendMessage(BOT_TOKEN, chatId, '❌ <b>Invalid Format</b>\n\nUsage: /admin_ban <user_id>\nExample: /admin_ban 123456789');
             return;
           }
 
           const targetTgId = parts[1];
+
+          if (!targetTgId || !/^\d{5,15}$/.test(targetTgId)) {
+            await sendMessage(BOT_TOKEN, chatId, '❌ Invalid user ID format. Must be a valid Telegram user ID (5-15 digits).');
+            return;
+          }
           const user = db.prepare('SELECT name FROM telegram_users WHERE tg_id = ?').get(targetTgId);
 
           if (!user) {
-            await sendMessage(BOT_TOKEN, chatId, `❌ User ${targetTgId} not found`);
+            await sendMessage(BOT_TOKEN, chatId, `❌ User ${targetTgId} not found in database.`);
+            return;
+          }
+
+          if (targetTgId === '6447766151') {
+            await sendMessage(BOT_TOKEN, chatId, '❌ Cannot ban the admin account.');
+            return;
+          }
+
+          if (targetTgId === 'SYSTEM_BONUS_HITS') {
+            await sendMessage(BOT_TOKEN, chatId, '❌ Cannot ban the system bonus account.');
             return;
           }
 
