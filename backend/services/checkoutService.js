@@ -412,36 +412,71 @@ class CheckoutService {
       }
     }
 
-    // Check subscription data (including trials)
+    // Check subscription data (including trials) - Enhanced
     if (amount === null && info.subscription_data && typeof info.subscription_data === 'object') {
       const sub = info.subscription_data;
+      console.log(`[*] Found subscription_data - checking for amounts`);
+
       if (sub.items && Array.isArray(sub.items) && sub.items.length > 0) {
         const firstItem = sub.items[0];
+
         if (firstItem.price && typeof firstItem.price === 'object') {
-          // For trial subscriptions, unit_amount might be 0, check other fields
-          if (firstItem.price.unit_amount !== null && firstItem.price.unit_amount !== undefined && firstItem.price.unit_amount > 0) {
+          // Check unit_amount first
+          if (firstItem.price.unit_amount !== null && firstItem.price.unit_amount !== undefined) {
             amount = firstItem.price.unit_amount;
+            console.log(`[*] Found subscription unit_amount: ${amount} cents`);
             if (firstItem.price.currency) {
               currency = firstItem.price.currency;
             }
           }
-          // Check for trial_amount or setup fees
+          // Check for trial_amount
           else if (firstItem.price.trial_amount !== null && firstItem.price.trial_amount !== undefined) {
             amount = firstItem.price.trial_amount;
+            console.log(`[*] Found trial_amount: ${amount} cents`);
+            if (firstItem.price.currency) {
+              currency = firstItem.price.currency;
+            }
+          }
+          // Check for any amount field
+          else if (firstItem.price.amount !== null && firstItem.price.amount !== undefined) {
+            amount = firstItem.price.amount;
+            console.log(`[*] Found price amount: ${amount} cents`);
             if (firstItem.price.currency) {
               currency = firstItem.price.currency;
             }
           }
         }
+
+        // Check item-level amount fields
+        if (amount === null) {
+          if (firstItem.unit_amount !== null && firstItem.unit_amount !== undefined) {
+            amount = firstItem.unit_amount;
+            console.log(`[*] Found item unit_amount: ${amount} cents`);
+          } else if (firstItem.amount !== null && firstItem.amount !== undefined) {
+            amount = firstItem.amount;
+            console.log(`[*] Found item amount: ${amount} cents`);
+          }
+          if (firstItem.currency) {
+            currency = firstItem.currency;
+          }
+        }
       }
-      // Check subscription metadata for amounts
+
+      // Check subscription metadata
       if (amount === null && sub.metadata && typeof sub.metadata === 'object') {
         if (sub.metadata.amount !== null && sub.metadata.amount !== undefined) {
           amount = parseInt(sub.metadata.amount);
+          console.log(`[*] Found metadata amount: ${amount} cents`);
         }
         if (sub.metadata.currency) {
           currency = sub.metadata.currency;
         }
+      }
+
+      // Check for trial information
+      if (amount === null && sub.trial_days && sub.trial_days > 0) {
+        console.log(`[*] Trial subscription detected (${sub.trial_days} days)`);
+        amount = 0; // Trials often have $0 initial charge
       }
     }
 
@@ -511,6 +546,12 @@ class CheckoutService {
       // Fetch checkout info
       const info = await this.fetchCheckoutInfo(parsed.sessionId, parsed.publicKey);
 
+      // Debug: Log key fields for troubleshooting
+      console.log(`[*] Available checkout fields:`, Object.keys(info).slice(0, 10).join(', '));
+      if (info.subscription_data) {
+        console.log(`[*] Has subscription_data - likely a trial/subscription`);
+      }
+
       if (info.error) {
         return {
           success: false,
@@ -542,10 +583,50 @@ class CheckoutService {
       const pmId = pmResult.id;
       console.log(`[*] Payment method created: ${pmId}`);
 
-      // Handle null amount
-      if (!amount || amount <= 0) {
-        amount = 100; // Default fallback amount
-        console.log(`[*] Using fallback amount: ${amount} ${currency}`);
+      // Handle null amount with aggressive fallback for trials
+      if (amount === null || amount === undefined || amount <= 0) {
+        console.log(`[*] Amount is ${amount}, this appears to be a trial subscription. Trying common amounts...`);
+
+        // Most common trial amounts: 0 (free trial), then small amounts
+        const commonTrialAmounts = [0, 1, 50, 99, 100, 199, 299, 499, 999, 1999, 2999];
+
+        for (const trialAmount of commonTrialAmounts) {
+          console.log(`[*] Testing amount: ${trialAmount} cents ($${(trialAmount / 100).toFixed(2)})`);
+
+          try {
+            const testResult = await this.confirmPayment(
+              pmId,
+              parsed.sessionId,
+              parsed.publicKey,
+              trialAmount,
+              info.init_checksum
+            );
+
+            // Check if payment succeeded
+            if (testResult.status === 'complete') {
+              amount = trialAmount;
+              console.log(`[*] ✅ SUCCESS! Trial amount found: ${trialAmount} cents ($${(trialAmount / 100).toFixed(2)})`);
+              break;
+            }
+
+            // If it's not an amount mismatch, it might be a different issue
+            if (testResult.error?.code && testResult.error.code !== 'checkout_amount_mismatch') {
+              console.log(`[*] ⚠️  Different error (${testResult.error.code}), but trying next amount...`);
+            }
+
+          } catch (error) {
+            console.log(`[*] Error testing amount ${trialAmount}:`, error.message);
+          }
+
+          // Small delay between attempts
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        // If still no amount found, use a reasonable default
+        if (amount === null || amount === undefined || amount < 0) {
+          amount = 99; // $0.99 - common trial amount
+          console.log(`[*] Using default trial amount: ${amount} cents ($${(amount / 100).toFixed(2)})`);
+        }
       }
 
       // Confirm payment
