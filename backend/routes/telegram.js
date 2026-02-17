@@ -216,12 +216,27 @@ router.post('/notify-hit', async (req, res) => {
     merchant: merchantName // Use extracted merchant name
   };
 
+  console.log('[HIT_NOTIFICATION] Constructed hitData:', JSON.stringify(hitData, null, 2));
+  console.log('[HIT_NOTIFICATION] Merchant name:', merchantName);
+
+  // Write debug info to file
+  const fs = require('fs');
+  const debugInfo = {
+    timestamp: new Date().toISOString(),
+    hitData: hitData,
+    merchant: merchantName,
+    userMessageResult: 'pending'
+  };
+  fs.writeFileSync('./debug_hit_process.json', JSON.stringify(debugInfo, null, 2));
+
   try {
+    console.log('[HIT_NOTIFICATION] About to call sendHitToGroups...');
     // For extension hits, we don't have a checkout URL, so pass a generic one
     await sendHitToGroups(hitData, 'https://extension-hit.com');
     console.log('[HIT_NOTIFICATION] Group notifications sent for extension hit');
   } catch (groupError) {
     console.error('[HIT_NOTIFICATION] Failed to send group notifications:', groupError);
+    console.error('[HIT_NOTIFICATION] Error details:', groupError.stack);
   }
 
   if (result.ok) {

