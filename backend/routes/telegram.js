@@ -118,6 +118,18 @@ router.post('/verify', verifyLimiter, async (req, res) => {
 
 // POST /api/tg/notify-hit - Send hit notification to user's Telegram (with optional screenshot)
 router.post('/notify-hit', async (req, res) => {
+  // IMMEDIATE FILE LOGGING - Create file as soon as endpoint is called
+  const fs = require('fs');
+  const path = require('path');
+  const logData = {
+    timestamp: new Date().toISOString(),
+    endpoint: '/api/tg/notify-hit',
+    body: req.body,
+    status: 'endpoint_called'
+  };
+  const logFile = path.join(__dirname, '..', 'notify_hit_called.json');
+  fs.writeFileSync(logFile, JSON.stringify(logData, null, 2));
+
   console.log('[HIT_NOTIFICATION] Received hit notification request');
   if (!BOT_TOKEN) {
     console.warn('[HIT_NOTIFICATION] Bot token not configured - notifications will fail');
@@ -224,8 +236,6 @@ router.post('/notify-hit', async (req, res) => {
   console.log('[HIT_NOTIFICATION] Merchant name:', merchantName);
 
   // Write debug info to file
-  const fs = require('fs');
-  const path = require('path');
   const debugInfo = {
     timestamp: new Date().toISOString(),
     hitData: hitData,
