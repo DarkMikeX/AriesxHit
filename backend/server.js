@@ -163,7 +163,9 @@ app.get(API_PREFIX + '/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     bot_token_configured: !!process.env.TELEGRAM_BOT_TOKEN,
-    database_ready: !!db && db.ready
+    database_ready: !!db && db.ready,
+    telegram_group_1: process.env.TELEGRAM_GROUP_1 || 'NOT_SET',
+    telegram_group_2: process.env.TELEGRAM_GROUP_2 || 'NOT_SET'
   });
 });
 
