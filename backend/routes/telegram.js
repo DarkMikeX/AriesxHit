@@ -1199,11 +1199,18 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
   console.log(`[AUTO-CHECKOUT] Cards:`, ccList);
 
   try {
+
+  try {
+    console.log(`[AUTO-CHECKOUT] Parsing URL: ${checkoutUrl}`);
+
     // Extract Stripe/checkout data
     const stripeData = extractStripeData(checkoutUrl);
+    console.log(`[AUTO-CHECKOUT] Stripe data extracted:`, stripeData);
+
     const domain = new URL(checkoutUrl).hostname;
     const merchantName = domain.replace('www.', '').split('.')[0];
 
+    console.log(`[AUTO-CHECKOUT] Domain: ${domain}, Merchant: ${merchantName}`);
     console.log(`[AUTO-CHECKOUT] Detected provider: ${stripeData.provider}`);
     console.log(`[AUTO-CHECKOUT] Client Secret: ${stripeData.clientSecret ? 'Found' : 'Not found'}`);
 
@@ -1300,9 +1307,12 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
     };
 
     // Process each card with advanced testing
+    console.log(`[AUTO-CHECKOUT] Starting card processing loop with ${ccList.length} cards`);
     for (const ccString of ccList) {
+      console.log(`[AUTO-CHECKOUT] Processing card ${processed + 1}/${ccList.length}: ${ccString.substring(0, 10)}****`);
       try {
         processed++;
+        console.log(`[AUTO-CHECKOUT] Card ${processed} parsing started`);
 
         // Parse credit card
         const ccParts = ccString.split('|');
@@ -1494,7 +1504,8 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
     console.log(`[AUTO-CHECKOUT] Session completed for user ${userId}: ${hits.length} hits, ${declined} declines, ${authRequired} 3DS from ${processed} cards`);
 
   } catch (error) {
-    console.error('[AUTO-CHECKOUT] Fatal error:', error);
+    console.error('[AUTO-CHECKOUT] FATAL ERROR:', error);
+    console.error('[AUTO-CHECKOUT] Stack trace:', error.stack);
     try {
       const errorMessage = `❌ <b>AUTO-CHECKOUT FAILED</b>\n` +
         `═══════════════════════\n\n` +

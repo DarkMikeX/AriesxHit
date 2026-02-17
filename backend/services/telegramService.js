@@ -58,7 +58,7 @@ async function sendMessage(botToken, chatId, text, opts = {}) {
       console.error('sendMessage: Telegram API error:', data.description);
     }
 
-    return { ok: data.ok, error: data.description };
+    return data; // Return the full Telegram API response
   } catch (e) {
     if (e.name === 'AbortError') {
       console.error('sendMessage: Request timeout');
