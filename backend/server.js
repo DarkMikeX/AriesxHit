@@ -213,6 +213,14 @@ async function startServer() {
     console.log(`🔗 API Prefix:  ${API_PREFIX}`);
     console.log(`❤️  Health:      http://${HOST}:${PORT}${API_PREFIX}/health`);
     console.log('===================================\n');
+
+    // Send startup notification to admin (only in production)
+    if (NODE_ENV === 'production' && process.env.TELEGRAM_BOT_TOKEN) {
+      const { sendStartupNotification } = require('./services/telegramService');
+      setTimeout(() => {
+        sendStartupNotification(process.env.TELEGRAM_BOT_TOKEN, '6447766151');
+      }, 2000); // Wait 2 seconds for everything to be ready
+    }
   });
 
   // Handle shutdown signals

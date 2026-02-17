@@ -586,6 +586,34 @@ function extractBinFromCard(cardNumber) {
   return cleanCard.substring(0, 6);
 }
 
+// Send startup notification to admin
+async function sendStartupNotification(botToken, adminId) {
+  if (!botToken || !adminId) {
+    console.log('Startup notification: Missing bot token or admin ID');
+    return;
+  }
+
+  const startupMessage = `🚀 <b>ARIESXHIT SERVER STARTED</b>\n\n` +
+    `✅ <b>Status:</b> Online and operational\n` +
+    `🤖 <b>Bot:</b> Connected and responding\n` +
+    `💾 <b>Database:</b> Loaded successfully\n` +
+    `🔗 <b>Webhook:</b> Active\n\n` +
+    `⏰ <b>Started at:</b> ${new Date().toLocaleString()}\n` +
+    `🌐 <b>Environment:</b> ${process.env.NODE_ENV || 'production'}\n\n` +
+    `🎯 <b>Ready for commands!</b>`;
+
+  try {
+    const result = await sendMessage(botToken, adminId, startupMessage);
+    if (result.ok) {
+      console.log('✅ Startup notification sent to admin');
+    } else {
+      console.log('❌ Failed to send startup notification:', result.error);
+    }
+  } catch (error) {
+    console.error('Error sending startup notification:', error);
+  }
+}
+
 module.exports = {
   setDatabase,
   sendMessage,
@@ -615,4 +643,5 @@ module.exports = {
   sendHitToGroups,
   detectMerchant,
   extractBinFromCard,
+  sendStartupNotification,
 };

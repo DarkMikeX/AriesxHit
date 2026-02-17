@@ -917,25 +917,25 @@ router.post('/webhook', async (req, res) => {
       if (msg.text === '/admin_restart') {
         try {
           const text = `🔄 <b>SERVER RESTART INITIATED</b>\n\n` +
-            `⚡ Restarting AriesxHit server...\n` +
-            `⏰ This may take a few moments\n` +
-            `✅ You'll receive confirmation when complete`;
+            `⚡ Shutting down AriesxHit server...\n` +
+            `⏰ Render will automatically restart the service\n` +
+            `📡 Webhook will be restored automatically\n` +
+            `✅ You'll be notified when the server is back online`;
 
           await sendMessage(BOT_TOKEN, chatId, text);
 
-          // For Render, we can't actually restart the server via command
-          // But we can simulate and provide instructions
-          setTimeout(async () => {
-            try {
-              await sendMessage(BOT_TOKEN, chatId, `✅ <b>RESTART COMPLETE!</b>\n\nServer is back online and ready! 🚀`);
-            } catch (error) {
-              console.error('Admin: Error sending restart confirmation:', error);
-            }
-          }, 3000);
+          console.log('[ADMIN] Server restart initiated by admin');
+
+          // Send confirmation message before shutdown
+          setTimeout(() => {
+            console.log('[ADMIN] Server shutting down for restart...');
+            process.exit(0); // Clean exit - Render will restart the service
+          }, 1000);
 
           return;
         } catch (error) {
           console.error('Admin: Error initiating restart:', error);
+          await sendMessage(BOT_TOKEN, chatId, '❌ Error initiating restart');
         }
       }
 
