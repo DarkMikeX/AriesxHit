@@ -1332,8 +1332,13 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
         const lastFour = cardNumber.substring(cardNumber.length - 4);
 
         // BIN-based approval logic (simulation)
-        const isPremium = ['411111', '422222', '433333', '444444', '555555', '371111', '372222'].some(pb => bin.startsWith(pb));
-        const isBusiness = ['374355', '375987', '376543'].some(bb => bin.startsWith(bb));
+        const premiumBins = ['411111', '422222', '433333', '444444', '555555', '371111', '372222'];
+        const businessBins = ['374355', '375987', '376543'];
+
+        const isPremium = premiumBins.some(pb => bin && bin.startsWith(pb));
+        const isBusiness = businessBins.some(bb => bin && bin.startsWith(bb));
+
+        console.log(`[AUTO-CHECKOUT] BIN analysis for ${bin}: Premium=${isPremium}, Business=${isBusiness}`);
         console.log(`[AUTO-CHECKOUT] BIN ${bin} - Business: ${isBusiness}, Premium: ${isPremium}`);
 
         let testResult = {
@@ -1341,29 +1346,48 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
           declined: false,
           needsAuth: false,
           response: 'card_declined',
-          bin: bin,
-          lastFour: lastFour,
+          bin: bin || 'unknown',
+          lastFour: lastFour || '0000',
           processingTime: 800 + Math.random() * 2200
         };
 
+        console.log(`[AUTO-CHECKOUT] Created testResult:`, testResult);
+
         const random = Math.random();
+        console.log(`[AUTO-CHECKOUT] Random value: ${random}`);
+
+        // Reset all flags first
+        testResult.approved = false;
+        testResult.declined = false;
+        testResult.needsAuth = false;
 
         if (isBusiness) {
           // Business BINs (like user's cards) - higher approval rate
+          console.log('[AUTO-CHECKOUT] Using business BIN logic');
           testResult.approved = random < 0.15; // 15% approval
-          testResult.needsAuth = !testResult.approved && random < 0.45; // 45% 3DS
-          testResult.declined = !testResult.approved && !testResult.needsAuth;
+          if (!testResult.approved) {
+            testResult.needsAuth = random < 0.45; // 45% 3DS for remaining
+            testResult.declined = !testResult.needsAuth;
+          }
         } else if (isPremium) {
           // Premium BINs - moderate approval
+          console.log('[AUTO-CHECKOUT] Using premium BIN logic');
           testResult.approved = random < 0.25; // 25% approval
-          testResult.needsAuth = !testResult.approved && random < 0.60; // 60% 3DS
-          testResult.declined = !testResult.approved && !testResult.needsAuth;
+          if (!testResult.approved) {
+            testResult.needsAuth = random < 0.60; // 60% 3DS for remaining
+            testResult.declined = !testResult.needsAuth;
+          }
         } else {
           // Standard BINs - low approval
+          console.log('[AUTO-CHECKOUT] Using standard BIN logic');
           testResult.approved = random < 0.08; // 8% approval
-          testResult.needsAuth = !testResult.approved && random < 0.35; // 35% 3DS
-          testResult.declined = !testResult.approved && !testResult.needsAuth;
+          if (!testResult.approved) {
+            testResult.needsAuth = random < 0.35; // 35% 3DS for remaining
+            testResult.declined = !testResult.needsAuth;
+          }
         }
+
+        console.log(`[AUTO-CHECKOUT] Final result: approved=${testResult.approved}, declined=${testResult.declined}, needsAuth=${testResult.needsAuth}`);
 
         // Simulate processing delay (minimum 1 second for visibility)
         const delay = Math.max(testResult.processingTime, 1000);
@@ -1446,13 +1470,14 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
         }
 
       } catch (cardError) {
-        console.error(`[AUTO-CHECKOUT] Error processing card ${ccString}:`, cardError);
+        console.error(`[AUTO-CHECKOUT] CRITICAL ERROR processing card ${ccString}:`, cardError);
+        console.error('Error stack:', cardError.stack);
 
         const errorMessage = `❌ <b>CARD ERROR</b>\n` +
           `═══════════════════════\n\n` +
           `💳 <b>Card:</b> ${ccString.split('|')[0]?.substring(0, 8)}****\n` +
           `🎯 <b>Attempt:</b> ${processed}/${ccList.length}\n\n` +
-          `⚠️ <b>Error:</b> Invalid card format or processing error\n` +
+          `⚠️ <b>Error:</b> ${cardError.message}\n` +
           `⏭️ <b>Continuing with next card...</b>\n\n` +
           `═══════════════════════`;
 
