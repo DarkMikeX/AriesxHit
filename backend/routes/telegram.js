@@ -462,6 +462,12 @@ router.post('/webhook', async (req, res) => {
       return;
     }
 
+    // Debug command to check user ID (/debug)
+    if (msg?.text && msg.text === '/debug') {
+      await sendMessage(BOT_TOKEN, chatId, `🔧 <b>BOT DEBUG INFO</b>\n\n📊 <b>Your Telegram ID:</b> <code>${tgId}</code>\n🤖 <b>Bot Status:</b> Online\n📡 <b>Server:</b> Connected\n\n💡 <b>Commands Available:</b>\n• /co - Checkout hitter\n• /start - Main menu\n• /debug - This info`);
+      return;
+    }
+
     // Checkout hitter command (/co <checkout_url> <card_data>)
     if (msg?.text && msg.text.startsWith('/co ')) {
       try {
