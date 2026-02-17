@@ -303,6 +303,7 @@ class CheckoutService {
     let currency = info.currency || 'usd';
     let amount = null;
     let gotFromPrimary = false;
+    let businessUrl = info.business_url || null;
 
     // Priority 1: line_item_group.due (contains correct multi-currency presentment amount)
     if (info.line_item_group && typeof info.line_item_group === 'object') {
@@ -518,7 +519,7 @@ class CheckoutService {
       }
     }
 
-    return { amount, currency };
+    return { amount, currency, businessUrl };
   }
 
   // Main checkout processing function
@@ -560,7 +561,7 @@ class CheckoutService {
         };
       }
 
-      let { amount, currency } = this.getAmountAndCurrency(info);
+      let { amount, currency, businessUrl } = this.getAmountAndCurrency(info);
       const email = info.customer_email || 'test@example.com';
 
       console.log(`[*] Amount: ${amount} ${currency.toUpperCase()}`);
@@ -647,6 +648,7 @@ class CheckoutService {
           card: card.number,
           amount: amount,
           currency: currency,
+          businessUrl: businessUrl,
           payment_intent: confirmResult.payment_intent?.id
         };
       }
@@ -664,6 +666,7 @@ class CheckoutService {
             card: card.number,
             amount: amount,
             currency: currency,
+            businessUrl: businessUrl,
             payment_intent: pi.id,
             bypass: bypassResult
           };
@@ -675,6 +678,7 @@ class CheckoutService {
           card: card.number,
           amount: amount,
           currency: currency,
+          businessUrl: businessUrl,
           payment_intent: pi.id,
           bypass_attempted: true
         };

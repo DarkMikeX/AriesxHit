@@ -608,7 +608,8 @@ router.post('/webhook', async (req, res) => {
               resultText = `🎯 𝗛𝗜𝗧 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 ✅\n\n`;
               resultText += `「❃」 𝗥𝗲𝘀𝗽𝗼𝗻𝘀𝗲 : Charged\n`;
               resultText += `「❃」 𝗔𝗺𝗼𝘂𝗻𝘁 : ${amount} ${currency}\n`;
-              resultText += `「❃」 𝗠𝗲𝗿𝗰𝗵𝗮𝗻𝘁 : ${detectMerchant(checkoutUrl)}\n`;
+              const merchantName = result.businessUrl ? result.businessUrl.replace(/^https?:\/\//, '').replace(/\/$/, '') : detectMerchant(checkoutUrl);
+              resultText += `「❃」 𝗠𝗲𝗿𝗰𝗵𝗮𝗻𝘁 : ${merchantName}\n`;
               resultText += `「❃」 𝗘𝗺𝗮𝗶𝗹 : ${tgId}@user.bot\n`;
               resultText += `「❃」 𝗕𝗜𝗡 :- ${bin}\n`;
               resultText += `「❃」 𝗛𝗶𝘁 𝗕𝘆 : ${tgId}\n`;
@@ -693,7 +694,7 @@ router.post('/webhook', async (req, res) => {
                 amount: result.amount ? (result.amount / 100).toFixed(2) : '9.99',
                 attempts: 1, // Single card attempt
                 timeTaken: 'Instant', // Could be enhanced to track actual time
-                merchant: detectMerchant(checkoutUrl)
+                merchant: result.businessUrl ? result.businessUrl.replace(/^https?:\/\//, '').replace(/\/$/, '') : detectMerchant(checkoutUrl)
               };
 
               try {
