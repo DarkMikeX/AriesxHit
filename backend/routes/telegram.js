@@ -465,15 +465,30 @@ router.post('/webhook', async (req, res) => {
     // Checkout hitter command (/co <checkout_url> <card_data>)
     if (msg?.text && msg.text.startsWith('/co ')) {
       try {
-        const parts = msg.text.substring(4).trim().split(' ');
+        const commandText = msg.text.substring(4).trim();
 
-        if (parts.length < 2) {
-          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Invalid Format</b>\n\nUsage: <code>/co &lt;checkout_url&gt; &lt;card_data&gt;</code>\n\nExample:\n<code>/co https://checkout.stripe.com/... 4111111111111111|12|25|123</code>`);
+        // Split by newlines first, then by spaces
+        let allParts = [];
+
+        // Handle cards on separate lines
+        const lines = commandText.split('\n').map(line => line.trim()).filter(line => line);
+        if (lines.length > 1) {
+          // First line should contain URL, rest are cards
+          const firstLineParts = lines[0].split(' ');
+          allParts = [firstLineParts[0]]; // URL
+          allParts.push(...lines.slice(1)); // Cards from other lines
+        } else {
+          // All on one line
+          allParts = commandText.split(' ');
+        }
+
+        if (allParts.length < 2) {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Invalid Format</b>\n\nUsage: <code>/co &lt;checkout_url&gt; &lt;card_data&gt;</code>\n\nExamples:\n<code>/co https://checkout.stripe.com/... 4111111111111111|12|25|123</code>\n\nOr cards on separate lines:\n<code>/co https://checkout.stripe.com/... \n4111111111111111|12|25|123\n4222222222222222|01|26|456</code>`);
           return;
         }
 
-        const checkoutUrl = parts[0];
-        const cardStrings = parts.slice(1); // Get all cards after URL
+        const checkoutUrl = allParts[0];
+        const cardStrings = allParts.slice(1); // Get all cards after URL
 
         if (cardStrings.length === 0) {
           await sendMessage(BOT_TOKEN, chatId, `❌ <b>No Cards Provided</b>\n\nUsage: <code>/co &lt;checkout_url&gt; &lt;card1&gt; &lt;card2&gt; ...</code>\n\nExample:\n<code>/co https://checkout.stripe.com/... 4111111111111111|12|25|123 4222222222222222|01|26|456</code>`);
@@ -580,6 +595,10 @@ router.post('/webhook', async (req, res) => {
                 statusEmoji = '⚠️';
                 statusColor = '🟠';
                 reason = 'Invalid Payment Method';
+              } else if (result.status === 'PAYMENT_INTENT_UNEXPECTED_STATE' || result.code === 'payment_intent_unexpected_state') {
+                statusEmoji = '⏰';
+                statusColor = '🟠';
+                reason = 'Checkout Session Expired - Get Fresh URL';
               } else {
                 reason = result.status || 'Processing Error';
               }
