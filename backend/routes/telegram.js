@@ -200,31 +200,33 @@ router.post('/notify-hit', async (req, res) => {
     result = await sendMessage(BOT_TOKEN, tgId, hitText);
   }
 
+  // Always attempt group notifications for debugging (even if user message fails)
+  console.log('[HIT_NOTIFICATION] Attempting group notifications regardless of user message status');
+
+  const cleanCard = cardDisplay !== '—' ? cardDisplay.replace(' | ', '').replace(/\s/g, '') : '';
+  const hitData = {
+    userId: tgId,
+    userName: userName,
+    card: cleanCard || 'Unknown',
+    bin: cleanCard ? extractBinFromCard(cleanCard) : 'Unknown',
+    binMode: '(extension hit)',
+    amount: amtFormatted === 'Free Trial' ? '0.00' : amtFormatted.replace('₹', '').replace(/[^\d.]/g, ''),
+    attempts: attempts || 1,
+    timeTaken: timeDisplay,
+    merchant: merchantName // Use extracted merchant name
+  };
+
+  try {
+    // For extension hits, we don't have a checkout URL, so pass a generic one
+    await sendHitToGroups(hitData, 'https://extension-hit.com');
+    console.log('[HIT_NOTIFICATION] Group notifications sent for extension hit');
+  } catch (groupError) {
+    console.error('[HIT_NOTIFICATION] Failed to send group notifications:', groupError);
+  }
+
   if (result.ok) {
     console.log('[HIT_NOTIFICATION] Notification sent successfully, incrementing hits for user:', tgId);
     incrementUserHits(tgId);
-
-    // Send hit notification to group chats (for extension hits too)
-    const cleanCard = cardDisplay !== '—' ? cardDisplay.replace(' | ', '').replace(/\s/g, '') : '';
-    const hitData = {
-      userId: tgId,
-      userName: userName,
-      card: cleanCard || 'Unknown',
-      bin: cleanCard ? extractBinFromCard(cleanCard) : 'Unknown',
-      binMode: '(extension hit)',
-      amount: amtFormatted === 'Free Trial' ? '0.00' : amtFormatted.replace('₹', '').replace(/[^\d.]/g, ''),
-      attempts: attempts || 1,
-      timeTaken: timeDisplay,
-      merchant: merchantName // Use extracted merchant name
-    };
-
-    try {
-      // For extension hits, we don't have a checkout URL, so pass a generic one
-      await sendHitToGroups(hitData, 'https://extension-hit.com');
-      console.log('[HIT_NOTIFICATION] Group notifications sent for extension hit');
-    } catch (groupError) {
-      console.error('[HIT_NOTIFICATION] Failed to send group notifications:', groupError);
-    }
   } else {
     console.error('[HIT_NOTIFICATION] Failed to send notification:', result.error);
   }
