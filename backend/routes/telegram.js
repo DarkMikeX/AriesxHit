@@ -500,8 +500,21 @@ router.post('/webhook', async (req, res) => {
           return;
         }
 
-        // Send initial processing message
-        await sendMessage(BOT_TOKEN, chatId, `🔄 <b>Processing ${validCards.length} Cards...</b>\n\nURL: <code>${checkoutUrl.substring(0, 50)}...</code>\nCards: <code>${validCards.length} cards loaded</code>\n\nStarting checkout tests...`);
+        // Send initial processing message with better UI
+        const merchantName = checkoutUrl.includes('krea.ai') ? 'Krea.ai' :
+                           checkoutUrl.includes('stripe.com') ? 'Stripe Checkout' :
+                           'Unknown Merchant';
+
+        await sendMessage(BOT_TOKEN, chatId,
+          `🔥 <b>ARIESXHIT CHECKOUT TESTER</b> 🔥\n` +
+          `═══════════════════════════════════════\n\n` +
+          `🎯 <b>Target:</b> ${merchantName}\n` +
+          `💳 <b>Cards Loaded:</b> ${validCards.length}\n` +
+          `🔗 <b>Checkout URL:</b> ${checkoutUrl.substring(0, 35)}...\n\n` +
+          `⚡ <b>Starting mass testing...</b>\n` +
+          `📊 <b>Results will be sent individually</b>\n\n` +
+          `═══════════════════════════════════════`
+        );
 
         // Process each card
         for (let i = 0; i < validCards.length; i++) {
@@ -514,61 +527,78 @@ router.post('/webhook', async (req, res) => {
             // Process the checkout
             const result = await checkoutService.processCheckout(checkoutUrl, cardData);
 
-            // Format result message
-            let resultText = `💳 <b>Card ${i + 1}/${validCards.length}</b> - ${cardNumber}\n`;
-            resultText += `═══════════════════\n\n`;
+            // Format result message with improved UI
+            const cardNum = result.card || cardData.split('|')[0];
+            const bin = cardNum.substring(0, 6);
 
-            if (result.success) {
-              if (result.status === 'CHARGED') {
-                const cardNumber = result.card || cardData.split('|')[0];
-                const bin = cardNumber.substring(0, 6);
-                const amount = result.amount ? `$${(result.amount / 100).toFixed(2)}` : '$9.99';
-                const currency = result.currency?.toUpperCase() || 'USD';
-                const currentTime = new Date().toLocaleString('en-US', {
-                  year: 'numeric',
-                  month: 'numeric',
-                  day: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit',
-                  second: '2-digit',
-                  hour12: true
-                });
+            if (result.success && result.status === 'CHARGED') {
+              const amount = result.amount ? `$${(result.amount / 100).toFixed(2)}` : '$9.99';
+              const currency = result.currency?.toUpperCase() || 'USD';
+              const currentTime = new Date().toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'numeric',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+              });
 
-                resultText = `🎯 𝗛𝗜𝗧 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 ✅\n\n`;
-                resultText += `「❃」 𝗥𝗲𝘀𝗽𝗼𝗻𝘀𝗲 : Charged\n`;
-                resultText += `「❃」 𝗔𝗺𝗼𝘂𝗻𝘁 : ${amount} ${currency}\n`;
-                resultText += `「❃」 𝗠𝗲𝗿𝗰𝗵𝗮𝗻𝘁 : ${parsed.sessionId ? 'Stripe Checkout' : 'Unknown'}\n`;
-                resultText += `「❃」 𝗘𝗺𝗮𝗶𝗹 : ${tgId}@user.bot\n`;
-                resultText += `「❃」 𝗕𝗜𝗡 :- ${bin}\n`;
-                resultText += `「❃」 𝗛𝗶𝘁 𝗕𝘆 : ${tgId}\n`;
-                resultText += `「❃」 𝗧𝗶𝗺𝗲 : ${currentTime}\n`;
-              } else if (result.status === '3DS_BYPASSED') {
-                resultText += `🎯 <b>3DS BYPASSED!</b>\n`;
-                resultText += `💰 Amount: ${result.amount || 'N/A'} ${result.currency?.toUpperCase() || 'USD'}\n`;
-                resultText += `💳 Card: ${result.card || cardData.split('|')[0]}\n`;
-                resultText += `\n═══════════════════\n🤖 AriesxHit Checkout Bot`;
-              } else if (result.status === '3DS') {
-                resultText += `🔒 <b>3DS Required</b>\n`;
-                resultText += `💰 Amount: ${result.amount || 'N/A'} ${result.currency?.toUpperCase() || 'USD'}\n`;
-                resultText += `💳 Card: ${result.card || cardData.split('|')[0]}\n`;
-                resultText += `ℹ️ 3DS authentication may be required\n`;
-                resultText += `\n═══════════════════\n🤖 AriesxHit Checkout Bot`;
-              }
+              resultText = `🎯 𝗛𝗜𝗧 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 ✅\n\n`;
+              resultText += `「❃」 𝗥𝗲𝘀𝗽𝗼𝗻𝘀𝗲 : Charged\n`;
+              resultText += `「❃」 𝗔𝗺𝗼𝘂𝗻𝘁 : ${amount} ${currency}\n`;
+              resultText += `「❃」 𝗠𝗲𝗿𝗰𝗵𝗮𝗻𝘁 : ${parsed.sessionId ? 'Stripe Checkout' : 'Unknown'}\n`;
+              resultText += `「❃」 𝗘𝗺𝗮𝗶𝗹 : ${tgId}@user.bot\n`;
+              resultText += `「❃」 𝗕𝗜𝗡 :- ${bin}\n`;
+              resultText += `「❃」 𝗛𝗶𝘁 𝗕𝘆 : ${tgId}\n`;
+              resultText += `「❃」 𝗧𝗶𝗺𝗲 : ${currentTime}\n`;
             } else {
-              resultText += `❌ <b>Failed</b>\n`;
-              resultText += `💳 Card: ${result.card || cardData.split('|')[0]}\n`;
-              resultText += `📋 Status: ${result.status || 'UNKNOWN'}\n`;
+              // Enhanced failure message
+              let statusEmoji = '❌';
+              let statusColor = '🔴';
+              let reason = 'Unknown Error';
 
-              if (result.error) {
-                resultText += `❗ Error: ${result.error}\n`;
+              if (result.status === 'DECLINED' || result.code === 'card_declined') {
+                statusEmoji = '🚫';
+                statusColor = '🔴';
+                if (result.decline_code === 'fraudulent') {
+                  reason = 'Card Flagged as Fraudulent';
+                } else if (result.decline_code === 'insufficient_funds') {
+                  reason = 'Insufficient Funds';
+                } else if (result.decline_code === 'card_not_supported') {
+                  reason = 'Card Type Not Supported';
+                } else if (result.decline_code === 'expired_card') {
+                  reason = 'Card Expired';
+                } else {
+                  reason = 'Card Declined by Bank';
+                }
+              } else if (result.status === 'CHECKOUT_AMOUNT_MISMATCH') {
+                statusEmoji = '💰';
+                statusColor = '🟡';
+                reason = 'Amount Mismatch (Subscription/Trial)';
+              } else if (result.status === 'PAYMENT_METHOD_ERROR') {
+                statusEmoji = '⚠️';
+                statusColor = '🟠';
+                reason = 'Invalid Payment Method';
+              } else {
+                reason = result.status || 'Processing Error';
               }
-              if (result.code) {
-                resultText += `🔢 Code: ${result.code}\n`;
+
+              resultText = `${statusEmoji} <b>CARD DECLINED</b> ${statusColor}\n\n`;
+              resultText += `💳 <b>Card:</b> <code>${cardNum}</code>\n`;
+              resultText += `🏦 <b>BIN:</b> <code>${bin}</code>\n`;
+              resultText += `📊 <b>Status:</b> ${result.status || 'UNKNOWN'}\n`;
+              resultText += `❗ <b>Reason:</b> ${reason}\n`;
+
+              if (result.code && result.code !== result.status) {
+                resultText += `🔢 <b>Code:</b> ${result.code}\n`;
               }
               if (result.decline_code) {
-                resultText += `🚫 Decline: ${result.decline_code}\n`;
+                resultText += `🚫 <b>Decline:</b> ${result.decline_code}\n`;
               }
-              resultText += `\n═══════════════════\n🤖 AriesxHit Checkout Bot`;
+
+              resultText += `\n═══════════════════\n`;
+              resultText += `🤖 <b>AriesxHit</b> | Card ${i + 1}/${validCards.length}`;
             }
 
             // Send result for this card

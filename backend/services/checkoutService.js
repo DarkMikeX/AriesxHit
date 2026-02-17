@@ -412,15 +412,72 @@ class CheckoutService {
       }
     }
 
-    // Check subscription data
+    // Check subscription data (including trials)
     if (amount === null && info.subscription_data && typeof info.subscription_data === 'object') {
       const sub = info.subscription_data;
       if (sub.items && Array.isArray(sub.items) && sub.items.length > 0) {
         const firstItem = sub.items[0];
-        if (firstItem.price && typeof firstItem.price === 'object' && firstItem.price.unit_amount !== null && firstItem.price.unit_amount !== undefined) {
-          amount = firstItem.price.unit_amount;
-          if (firstItem.price.currency) {
-            currency = firstItem.price.currency;
+        if (firstItem.price && typeof firstItem.price === 'object') {
+          // For trial subscriptions, unit_amount might be 0, check other fields
+          if (firstItem.price.unit_amount !== null && firstItem.price.unit_amount !== undefined && firstItem.price.unit_amount > 0) {
+            amount = firstItem.price.unit_amount;
+            if (firstItem.price.currency) {
+              currency = firstItem.price.currency;
+            }
+          }
+          // Check for trial_amount or setup fees
+          else if (firstItem.price.trial_amount !== null && firstItem.price.trial_amount !== undefined) {
+            amount = firstItem.price.trial_amount;
+            if (firstItem.price.currency) {
+              currency = firstItem.price.currency;
+            }
+          }
+        }
+      }
+      // Check subscription metadata for amounts
+      if (amount === null && sub.metadata && typeof sub.metadata === 'object') {
+        if (sub.metadata.amount !== null && sub.metadata.amount !== undefined) {
+          amount = parseInt(sub.metadata.amount);
+        }
+        if (sub.metadata.currency) {
+          currency = sub.metadata.currency;
+        }
+      }
+    }
+
+    // Special handling for trial subscriptions - look for any non-zero amount
+    if (amount === null || amount === 0) {
+      // Check recurring details for subscription amounts
+      if (info.recurring_details && typeof info.recurring_details === 'object') {
+        const recurring = info.recurring_details;
+        if (recurring.amount !== null && recurring.amount !== undefined && recurring.amount > 0) {
+          amount = recurring.amount;
+        }
+        if (recurring.currency) {
+          currency = recurring.currency;
+        }
+      }
+
+      // Check for any pricing information in the checkout
+      if (amount === null && info.line_items && Array.isArray(info.line_items)) {
+        let items = info.line_items;
+        if (typeof items === 'object' && items.data) {
+          items = items.data;
+        }
+        for (const item of items) {
+          if (item.price && typeof item.price === 'object') {
+            if (item.price.unit_amount && item.price.unit_amount > 0) {
+              amount = item.price.unit_amount;
+              if (item.price.currency) {
+                currency = item.price.currency;
+              }
+              break;
+            }
+          }
+          // Check item amount_total or amount
+          if ((item.amount_total && item.amount_total > 0) || (item.amount && item.amount > 0)) {
+            amount = item.amount_total || item.amount;
+            break;
           }
         }
       }
