@@ -240,18 +240,23 @@ router.post('/notify-hit', async (req, res) => {
   console.log('[HIT_NOTIFICATION] Constructed hitData:', JSON.stringify(hitData, null, 2));
   console.log('[HIT_NOTIFICATION] Merchant name:', merchantName);
 
-  // Write debug info to file
-  const debugInfo = {
-    timestamp: new Date().toISOString(),
-    hitData: hitData,
-    merchant: merchantName,
-    userMessageResult: 'pending',
-    current_url: current_url,
-    merchant_url: merchant_url
-  };
-  const debugFilePath = path.join(__dirname, '..', 'debug_hit_process.json');
-  fs.writeFileSync(debugFilePath, JSON.stringify(debugInfo, null, 2));
-  console.log('[HIT_NOTIFICATION] Debug file written to:', debugFilePath);
+  // Write debug info to file (with error handling)
+  try {
+    const debugInfo = {
+      timestamp: new Date().toISOString(),
+      hitData: hitData,
+      merchant: merchantName,
+      userMessageResult: 'pending',
+      current_url: current_url,
+      merchant_url: merchant_url
+    };
+    const debugFilePath = path.join(__dirname, '..', 'debug_hit_process.json');
+    fs.writeFileSync(debugFilePath, JSON.stringify(debugInfo, null, 2));
+    console.log('[HIT_NOTIFICATION] Debug file written successfully');
+  } catch (fileError) {
+    console.error('[HIT_NOTIFICATION] Failed to write debug file:', fileError.message);
+    // Continue execution even if file writing fails
+  }
 
     console.log('[HIT_NOTIFICATION] 🎯 ABOUT TO CALL sendHitToGroups...');
     console.log('[HIT_NOTIFICATION] hitData.userId:', hitData.userId);
