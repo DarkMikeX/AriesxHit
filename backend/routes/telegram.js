@@ -5,6 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
+const https = require('https');
 const { strictLimiter, createRateLimiter } = require('../middleware/rateLimiter');
 const db = require('../config/database');
 
@@ -67,6 +68,86 @@ const {
 
 // Import checkout service
 const checkoutService = require('../services/checkoutService');
+
+// Function to fetch business_url from Stripe checkout URL
+async function fetchBusinessUrlFromCheckout(checkoutUrl) {
+  try {
+    console.log('[FETCH_BUSINESS_URL] Attempting to fetch from:', checkoutUrl);
+
+    // Extract session ID from checkout URL
+    const sessionMatch = checkoutUrl.match(/cs_(?:live|test)_[A-Za-z0-9]+/);
+    if (!sessionMatch) {
+      console.log('[FETCH_BUSINESS_URL] No session ID found in URL');
+      return null;
+    }
+
+    const sessionId = sessionMatch[0];
+    console.log('[FETCH_BUSINESS_URL] Extracted session ID:', sessionId);
+
+    // Extract publishable key from URL (if present)
+    const keyMatch = checkoutUrl.match(/key=([^&]+)/);
+    const publishableKey = keyMatch ? keyMatch[1] : 'pk_live_DEFAULT_KEY';
+
+    // Make request to Stripe API
+    const apiUrl = `https://api.stripe.com/v1/payment_pages/${sessionId}?key=${publishableKey}&eid=NA`;
+
+    console.log('[FETCH_BUSINESS_URL] Making API request to:', apiUrl.replace(publishableKey, '[KEY_HIDDEN]'));
+
+    return new Promise((resolve, reject) => {
+      const request = https.get(apiUrl, {
+        headers: {
+          'accept': 'application/json',
+          'accept-language': 'en',
+          'cache-control': 'no-cache',
+          'content-type': 'application/x-www-form-urlencoded',
+          'origin': 'https://checkout.stripe.com',
+          'referer': 'https://checkout.stripe.com/',
+          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        timeout: 10000 // 10 second timeout
+      }, (res) => {
+        let data = '';
+
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+
+        res.on('end', () => {
+          try {
+            const jsonData = JSON.parse(data);
+            const businessUrl = jsonData.business_url;
+
+            if (businessUrl) {
+              console.log('[FETCH_BUSINESS_URL] ✅ Found business_url:', businessUrl);
+              resolve(businessUrl);
+            } else {
+              console.log('[FETCH_BUSINESS_URL] ❌ No business_url in response');
+              resolve(null);
+            }
+          } catch (parseError) {
+            console.error('[FETCH_BUSINESS_URL] ❌ Error parsing API response:', parseError.message);
+            resolve(null);
+          }
+        });
+      });
+
+      request.on('error', (error) => {
+        console.error('[FETCH_BUSINESS_URL] ❌ Request error:', error.message);
+        resolve(null);
+      });
+
+      request.on('timeout', () => {
+        console.log('[FETCH_BUSINESS_URL] ❌ Request timeout');
+        request.destroy();
+        resolve(null);
+      });
+    });
+
+  } catch (error) {
+    console.error('[FETCH_BUSINESS_URL] ❌ Unexpected error:', error.message);
+    return null;
+  }
+}
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || '';
@@ -169,16 +250,33 @@ router.post('/notify-hit', async (req, res) => {
   let businessUrl = '—';
   let fullCheckoutUrl = '—';
 
-  // Extract merchant name - prioritize business_url, then URL detection, then BIN detection
+  // Extract merchant name - prioritize business_url, then auto-fetch from checkout URL, then URL detection, then BIN detection
   let merchantName = 'Payment Processor'; // Default
   console.log('[HIT_NOTIFICATION] Extension data - current_url:', current_url, 'merchant_url:', merchant_url, 'business_url:', business_url);
 
-  // Priority 1: business_url (exact merchant from Stripe checkout session)
+  // Priority 1: business_url (exact merchant from Stripe checkout session - sent by extension)
   if (business_url && typeof business_url === 'string' && business_url.trim()) {
     merchantName = business_url.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    console.log('[HIT_NOTIFICATION] 🎯 EXACT MERCHANT from business_url:', merchantName);
+    console.log('[HIT_NOTIFICATION] 🎯 EXACT MERCHANT from extension business_url:', merchantName);
   }
-  // Priority 2: URL-based detection
+  // Priority 2: Auto-fetch business_url from checkout URL
+  else if (current_url && current_url.includes('checkout.stripe.com')) {
+    try {
+      console.log('[HIT_NOTIFICATION] 🔍 Attempting to auto-fetch business_url from checkout URL');
+      const autoFetchedBusinessUrl = await fetchBusinessUrlFromCheckout(current_url);
+      if (autoFetchedBusinessUrl) {
+        merchantName = autoFetchedBusinessUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+        console.log('[HIT_NOTIFICATION] 🎯 AUTO-EXTRACTED MERCHANT from checkout URL:', merchantName);
+      } else {
+        console.log('[HIT_NOTIFICATION] ❌ Could not fetch business_url from checkout URL');
+        merchantName = 'Stripe Checkout';
+      }
+    } catch (error) {
+      console.error('[HIT_NOTIFICATION] ❌ Error auto-fetching business_url:', error.message);
+      merchantName = 'Stripe Checkout';
+    }
+  }
+  // Priority 3: URL-based detection
   else if (current_url || merchant_url) {
     const pageUrl = current_url || merchant_url;
     try {
