@@ -680,14 +680,36 @@ class CheckoutService {
         };
       }
 
-      // Handle errors
-      const error = confirmResult.error || {};
+      // Handle errors - Stripe API error format
+      let errorObj = {};
+
+      // Check if it's a direct error response
+      if (confirmResult.error) {
+        errorObj = confirmResult.error;
+      }
+      // Check if the entire response is an error
+      else if (confirmResult.code || confirmResult.decline_code || confirmResult.message) {
+        errorObj = confirmResult;
+      }
+      // Check for payment_intent error
+      else if (confirmResult.payment_intent && confirmResult.payment_intent.last_payment_error) {
+        errorObj = confirmResult.payment_intent.last_payment_error;
+      }
+
+      // If still no error found, create a generic one
+      if (!errorObj.code && !errorObj.message) {
+        errorObj = {
+          code: 'unknown_error',
+          message: 'Unknown payment error occurred'
+        };
+      }
+
       return {
         success: false,
-        status: this.interpretResult(error.code, error.decline_code, error.message),
-        error: error.message,
-        code: error.code,
-        decline_code: error.decline_code,
+        status: this.interpretResult(errorObj.code, errorObj.decline_code, errorObj.message),
+        error: errorObj.message || 'Payment failed',
+        code: errorObj.code,
+        decline_code: errorObj.decline_code,
         card: card.number
       };
 

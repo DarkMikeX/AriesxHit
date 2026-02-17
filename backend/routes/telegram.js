@@ -600,7 +600,16 @@ router.post('/webhook', async (req, res) => {
                 statusColor = '🟠';
                 reason = 'Checkout Session Expired - Get Fresh URL';
               } else {
-                reason = result.status || 'Processing Error';
+                // Better fallback for unknown errors
+                if (result.status === 'UNKNOWN') {
+                  reason = 'Payment processing failed - check card details';
+                } else if (result.status === 'DECLINED') {
+                  reason = 'Card declined by payment processor';
+                } else if (result.status === 'CHECKOUT_AMOUNT_MISMATCH') {
+                  reason = 'Amount mismatch - subscription/trial issue';
+                } else {
+                  reason = result.status || 'Processing Error';
+                }
               }
 
               resultText = `${statusEmoji} <b>CARD DECLINED</b> ${statusColor}\n\n`;
