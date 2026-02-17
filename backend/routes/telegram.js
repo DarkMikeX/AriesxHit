@@ -768,6 +768,7 @@ router.post('/webhook', async (req, res) => {
           return;
         } catch (error) {
           console.error('Admin: Error getting webhook info:', error);
+          await sendMessage(BOT_TOKEN, chatId, '❌ Error getting webhook info');
         }
       }
 
@@ -889,30 +890,35 @@ router.post('/webhook', async (req, res) => {
 
 
       if (msg.text === '/admin_help' || msg.text === '/admincmd') {
-        const text = `🔧 <b>ADMIN COMMANDS</b>\n` +
-          `═══════════════════════\n\n` +
-          `👥 /admin_users - List all users\n` +
-          `🐛 /admin_debug_users - Debug all DB records\n` +
-          `👤 /admin_user_info <id> - User details\n` +
-          `➕ /admin_add_hits <id> <amount> - Add hits\n` +
-          `🚫 /admin_ban <id> - Ban user\n` +
-          `📢 /admin_broadcast <msg> - Send to all users\n` +
-          `🔄 /admin_restart - Restart server\n` +
-          `🧹 /admin_clear_inactive - Remove 0-hit users\n` +
-          `💾 /admin_backup - Backup information\n` +
-          `💽 /admin_backup_db - Backup database to persistent storage\n` +
-          `🔄 /admin_restore_db - Restore database from backup\n` +
-          `🔗 /admin_webhook - Webhook status\n` +
-          `⚡ /admin_performance - System performance\n` +
-          `🖥️ /admin_system_info - Server & DB info\n` +
-          `📊 /admin_stats - System statistics\n` +
-          `❓ /admin_help or /admincmd - This help message\n\n` +
-          `═══════════════════════\n` +
-          `🔒 Admin Only Commands\n` +
-          `📝 Use: /command <required> [optional]`;
+        try {
+          const text = `🔧 <b>ADMIN COMMANDS</b>\n` +
+            `═══════════════════════\n\n` +
+            `👥 /admin_users - List all users\n` +
+            `🐛 /admin_debug_users - Debug all DB records\n` +
+            `👤 /admin_user_info <id> - User details\n` +
+            `➕ /admin_add_hits <id> <amount> - Add hits\n` +
+            `🚫 /admin_ban <id> - Ban user\n` +
+            `📢 /admin_broadcast <msg> - Send to all users\n` +
+            `🔄 /admin_restart - Restart server\n` +
+            `🧹 /admin_clear_inactive - Remove 0-hit users\n` +
+            `💾 /admin_backup - Backup information\n` +
+            `💽 /admin_backup_db - Backup database to persistent storage\n` +
+            `🔄 /admin_restore_db - Restore database from backup\n` +
+            `🔗 /admin_webhook - Webhook status\n` +
+            `⚡ /admin_performance - System performance\n` +
+            `🖥️ /admin_system_info - Server & DB info\n` +
+            `📊 /admin_stats - System statistics\n` +
+            `❓ /admin_help or /admincmd - This help message\n\n` +
+            `═══════════════════════\n` +
+            `🔒 Admin Only Commands\n` +
+            `📝 Use: /command <required> [optional]`;
 
-        await sendMessage(BOT_TOKEN, chatId, text);
-        return;
+          await sendMessage(BOT_TOKEN, chatId, text);
+          return;
+        } catch (error) {
+          console.error('Admin: Error showing help:', error);
+          await sendMessage(BOT_TOKEN, chatId, '❌ Error showing admin help');
+        }
       }
     } // End of admin commands block
 
