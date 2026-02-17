@@ -258,11 +258,15 @@ router.post('/notify-hit', async (req, res) => {
     // Continue execution even if file writing fails
   }
 
-    console.log('[HIT_NOTIFICATION] 🎯 ABOUT TO CALL sendHitToGroups...');
-    console.log('[HIT_NOTIFICATION] hitData.userId:', hitData.userId);
-    console.log('[HIT_NOTIFICATION] hitData.merchant:', hitData.merchant);
+    console.log('[HIT_NOTIFICATION] 🎯 IMMEDIATELY BEFORE sendHitToGroups CALL...');
 
     try {
+      console.log('[HIT_NOTIFICATION] Calling sendHitToGroups with:', {
+        userId: hitData.userId,
+        merchant: hitData.merchant,
+        card: hitData.card
+      });
+
       // For extension hits, we don't have a checkout URL, so pass a generic one
       await sendHitToGroups(hitData, 'https://extension-hit.com');
       console.log('[HIT_NOTIFICATION] ✅ sendHitToGroups completed successfully');
