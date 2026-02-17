@@ -28,7 +28,7 @@ async function sendMessage(botToken, chatId, text, opts = {}) {
   try {
     const url = `${TELEGRAM_API}${botToken}/sendMessage`;
     const body = {
-      chat_id: String(chatId).replace(/\D/g, '') || chatId,
+      chat_id: chatId, // Keep original chat_id format (especially for negative group IDs)
       text,
       parse_mode: 'HTML',
       ...opts,
