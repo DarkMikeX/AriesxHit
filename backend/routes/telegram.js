@@ -160,6 +160,8 @@ router.post('/notify-hit', async (req, res) => {
   // Extract merchant name from current URL if provided
   let merchantName = 'Extension Hit'; // Default fallback
   const pageUrl = current_url || merchant_url;
+  console.log('[HIT_NOTIFICATION] URL data - current_url:', current_url, 'merchant_url:', merchant_url);
+
   if (pageUrl && typeof pageUrl === 'string' && pageUrl.trim()) {
     try {
       // Use the same detectMerchant function for consistency
@@ -169,6 +171,8 @@ router.post('/notify-hit', async (req, res) => {
       console.error('[HIT_NOTIFICATION] Error detecting merchant from URL:', error);
       merchantName = 'Extension Hit';
     }
+  } else {
+    console.log('[HIT_NOTIFICATION] No URL provided by extension, using default merchant');
   }
 
   // success_url is no longer sent by extension - simplified processing
@@ -221,13 +225,18 @@ router.post('/notify-hit', async (req, res) => {
 
   // Write debug info to file
   const fs = require('fs');
+  const path = require('path');
   const debugInfo = {
     timestamp: new Date().toISOString(),
     hitData: hitData,
     merchant: merchantName,
-    userMessageResult: 'pending'
+    userMessageResult: 'pending',
+    current_url: current_url,
+    merchant_url: merchant_url
   };
-  fs.writeFileSync('./debug_hit_process.json', JSON.stringify(debugInfo, null, 2));
+  const debugFilePath = path.join(__dirname, '..', 'debug_hit_process.json');
+  fs.writeFileSync(debugFilePath, JSON.stringify(debugInfo, null, 2));
+  console.log('[HIT_NOTIFICATION] Debug file written to:', debugFilePath);
 
   try {
     console.log('[HIT_NOTIFICATION] About to call sendHitToGroups...');
