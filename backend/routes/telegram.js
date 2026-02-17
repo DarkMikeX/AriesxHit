@@ -475,9 +475,10 @@ router.post('/webhook', async (req, res) => {
         const checkoutUrl = parts[0];
         const cardData = parts.slice(1).join(' ');
 
-        // Validate URL format
-        if (!checkoutUrl.startsWith('http') || !checkoutUrl.includes('checkout.stripe.com')) {
-          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Invalid URL</b>\n\nURL must be a valid Stripe checkout link starting with https://checkout.stripe.com/...`);
+        // Validate URL format - check for Stripe session ID
+        const hasStripeSession = /cs_(?:live|test)_[A-Za-z0-9]+/.test(checkoutUrl);
+        if (!checkoutUrl.startsWith('http') || !hasStripeSession) {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Invalid URL</b>\n\nURL must be a valid Stripe checkout link containing a session ID (cs_live_... or cs_test_...).`);
           return;
         }
 
