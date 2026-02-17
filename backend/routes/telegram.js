@@ -170,21 +170,26 @@ router.post('/notify-hit', async (req, res) => {
   let fullCheckoutUrl = '—';
 
   // Extract merchant name from current URL if provided
-  let merchantName = 'Extension Hit'; // Default fallback
+  let merchantName = 'Unknown Site'; // Better default
   const pageUrl = current_url || merchant_url;
-  console.log('[HIT_NOTIFICATION] URL data - current_url:', current_url, 'merchant_url:', merchant_url);
 
   if (pageUrl && typeof pageUrl === 'string' && pageUrl.trim()) {
     try {
       // Use the same detectMerchant function for consistency
       merchantName = detectMerchant(pageUrl);
-      console.log('[HIT_NOTIFICATION] Detected merchant from URL:', merchantName, 'from:', pageUrl);
+      console.log('[HIT_NOTIFICATION] Detected merchant from URL:', merchantName);
     } catch (error) {
-      console.error('[HIT_NOTIFICATION] Error detecting merchant from URL:', error);
-      merchantName = 'Extension Hit';
+      console.error('[HIT_NOTIFICATION] Error detecting merchant from URL');
+      merchantName = 'Unknown Site';
     }
   } else {
-    console.log('[HIT_NOTIFICATION] No URL provided by extension, using default merchant');
+    // Try to detect merchant from card BIN if no URL
+    const cleanCard = card && card.trim() ? card.replace(/\|/g, '').substring(0, 6) : '';
+    if (cleanCard) {
+      // Could add BIN-based merchant detection here if needed
+      console.log('[HIT_NOTIFICATION] No URL provided, using BIN:', cleanCard);
+    }
+    merchantName = 'Extension Hit'; // Keep this for backward compatibility
   }
 
   // success_url is no longer sent by extension - simplified processing
@@ -248,15 +253,19 @@ router.post('/notify-hit', async (req, res) => {
   fs.writeFileSync(debugFilePath, JSON.stringify(debugInfo, null, 2));
   console.log('[HIT_NOTIFICATION] Debug file written to:', debugFilePath);
 
-  try {
-    console.log('[HIT_NOTIFICATION] About to call sendHitToGroups...');
-    // For extension hits, we don't have a checkout URL, so pass a generic one
-    await sendHitToGroups(hitData, 'https://extension-hit.com');
-    console.log('[HIT_NOTIFICATION] Group notifications sent for extension hit');
-  } catch (groupError) {
-    console.error('[HIT_NOTIFICATION] Failed to send group notifications:', groupError);
-    console.error('[HIT_NOTIFICATION] Error details:', groupError.stack);
-  }
+    console.log('[HIT_NOTIFICATION] 🎯 ABOUT TO CALL sendHitToGroups...');
+    console.log('[HIT_NOTIFICATION] hitData.userId:', hitData.userId);
+    console.log('[HIT_NOTIFICATION] hitData.merchant:', hitData.merchant);
+
+    try {
+      // For extension hits, we don't have a checkout URL, so pass a generic one
+      await sendHitToGroups(hitData, 'https://extension-hit.com');
+      console.log('[HIT_NOTIFICATION] ✅ sendHitToGroups completed successfully');
+    } catch (groupError) {
+      console.error('[HIT_NOTIFICATION] ❌ CRITICAL: sendHitToGroups threw exception:');
+      console.error('[HIT_NOTIFICATION] Error:', groupError.message);
+      console.error('[HIT_NOTIFICATION] Stack:', groupError.stack);
+    }
 
   if (result.ok) {
     console.log('[HIT_NOTIFICATION] Notification sent successfully, incrementing hits for user:', tgId);

