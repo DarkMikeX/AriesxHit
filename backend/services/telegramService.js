@@ -502,8 +502,8 @@ async function sendHitToGroups(hitData, checkoutUrl) {
 
   if (!BOT_TOKEN) return;
 
-  // Detect merchant name
-  const merchantName = detectMerchant(checkoutUrl);
+  // Detect merchant name - prioritize hitData.merchant, fallback to URL detection
+  const merchantName = hitData.merchant || detectMerchant(checkoutUrl);
 
   // Format for Group 1 (Simple)
   if (GROUP_1) {

