@@ -1192,15 +1192,13 @@ function extractStripeData(checkoutUrl) {
 
 // Auto-checkout processing function
 async function processAutoCheckout(userId, checkoutUrl, ccList, chatId) {
-  console.log(`[AUTO-CHECKOUT] ===== STARTING AUTO-CHECKOUT =====`);
-  console.log(`[AUTO-CHECKOUT] User: ${userId}, Chat: ${chatId}`);
-  console.log(`[AUTO-CHECKOUT] URL: ${checkoutUrl}`);
-  console.log(`[AUTO-CHECKOUT] Cards count: ${ccList.length}`);
-  console.log(`[AUTO-CHECKOUT] Cards:`, ccList);
-
   try {
+    console.log(`[AUTO-CHECKOUT] ===== STARTING AUTO-CHECKOUT =====`);
+    console.log(`[AUTO-CHECKOUT] User: ${userId}, Chat: ${chatId}`);
+    console.log(`[AUTO-CHECKOUT] URL: ${checkoutUrl}`);
+    console.log(`[AUTO-CHECKOUT] Cards count: ${ccList.length}`);
+    console.log(`[AUTO-CHECKOUT] Cards:`, ccList);
 
-  try {
     console.log(`[AUTO-CHECKOUT] Parsing URL: ${checkoutUrl}`);
 
     // Extract Stripe/checkout data
