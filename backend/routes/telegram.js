@@ -63,6 +63,9 @@ const {
   getUserData,
 } = require('../services/telegramService');
 
+// Import checkout service
+const checkoutService = require('../services/checkoutService');
+
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || '';
 
@@ -456,6 +459,96 @@ router.post('/webhook', async (req, res) => {
       } catch (error) {
         console.error('Webhook: Error processing callback query:', error);
       }
+      return;
+    }
+
+    // Checkout hitter command (/co <checkout_url> <card_data>)
+    if (msg?.text && msg.text.startsWith('/co ')) {
+      try {
+        const parts = msg.text.substring(4).trim().split(' ');
+
+        if (parts.length < 2) {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Invalid Format</b>\n\nUsage: <code>/co &lt;checkout_url&gt; &lt;card_data&gt;</code>\n\nExample:\n<code>/co https://checkout.stripe.com/... 4111111111111111|12|25|123</code>`);
+          return;
+        }
+
+        const checkoutUrl = parts[0];
+        const cardData = parts.slice(1).join(' ');
+
+        // Validate URL format
+        if (!checkoutUrl.startsWith('http') || !checkoutUrl.includes('checkout.stripe.com')) {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Invalid URL</b>\n\nURL must be a valid Stripe checkout link starting with https://checkout.stripe.com/...`);
+          return;
+        }
+
+        // Send processing message
+        const processingMsg = await sendMessage(BOT_TOKEN, chatId, `🔄 <b>Processing Checkout...</b>\n\nURL: <code>${checkoutUrl.substring(0, 50)}...</code>\nCard: <code>...${cardData.split('|')[0]?.slice(-4) || '****'}</code>\n\nPlease wait...`);
+
+        try {
+          // Process the checkout
+          const result = await checkoutService.processCheckout(checkoutUrl, cardData);
+
+          // Format result message
+          let resultText = `💳 <b>Checkout Result</b>\n`;
+          resultText += `═══════════════════\n\n`;
+
+          if (result.success) {
+            if (result.status === 'CHARGED') {
+              resultText += `✅ <b>SUCCESS!</b>\n`;
+              resultText += `💰 Amount: ${result.amount || 'N/A'} ${result.currency?.toUpperCase() || 'USD'}\n`;
+              resultText += `💳 Card: ...${result.card?.slice(-4) || '****'}\n`;
+              if (result.payment_intent) {
+                resultText += `🆔 Payment ID: ${result.payment_intent}\n`;
+              }
+            } else if (result.status === '3DS_BYPASSED') {
+              resultText += `🎯 <b>3DS BYPASSED!</b>\n`;
+              resultText += `💰 Amount: ${result.amount || 'N/A'} ${result.currency?.toUpperCase() || 'USD'}\n`;
+              resultText += `💳 Card: ...${result.card?.slice(-4) || '****'}\n`;
+            } else if (result.status === '3DS') {
+              resultText += `🔒 <b>3DS Required</b>\n`;
+              resultText += `💰 Amount: ${result.amount || 'N/A'} ${result.currency?.toUpperCase() || 'USD'}\n`;
+              resultText += `💳 Card: ...${result.card?.slice(-4) || '****'}\n`;
+              resultText += `ℹ️ 3DS authentication may be required\n`;
+            }
+          } else {
+            resultText += `❌ <b>Failed</b>\n`;
+            resultText += `💳 Card: ...${result.card?.slice(-4) || '****'}\n`;
+            resultText += `📋 Status: ${result.status || 'UNKNOWN'}\n`;
+
+            if (result.error) {
+              resultText += `❗ Error: ${result.error}\n`;
+            }
+            if (result.code) {
+              resultText += `🔢 Code: ${result.code}\n`;
+            }
+            if (result.decline_code) {
+              resultText += `🚫 Decline: ${result.decline_code}\n`;
+            }
+          }
+
+          resultText += `\n═══════════════════\n`;
+          resultText += `🤖 AriesxHit Checkout Bot`;
+
+          // Send result
+          await sendMessage(BOT_TOKEN, chatId, resultText);
+
+          // If successful, increment hits
+          if (result.success && (result.status === 'CHARGED' || result.status === '3DS_BYPASSED')) {
+            console.log('[CO_COMMAND] Successful checkout, incrementing hits for user:', tgId);
+            incrementUserHits(tgId);
+          }
+
+        } catch (checkoutError) {
+          console.error('[CO_COMMAND] Checkout processing error:', checkoutError);
+          const errorMsg = `❌ <b>Processing Error</b>\n\nAn error occurred while processing the checkout:\n<code>${checkoutError.message}</code>\n\nPlease try again or contact support.`;
+          await sendMessage(BOT_TOKEN, chatId, errorMsg);
+        }
+
+      } catch (cmdError) {
+        console.error('[CO_COMMAND] Command parsing error:', cmdError);
+        await sendMessage(BOT_TOKEN, chatId, `❌ <b>Command Error</b>\n\nFailed to parse command. Please check the format:\n<code>/co &lt;checkout_url&gt; &lt;card_data&gt;</code>`);
+      }
+
       return;
     }
 
