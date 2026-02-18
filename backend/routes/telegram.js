@@ -69,82 +69,427 @@ const {
 // Import checkout service
 const checkoutService = require('../services/checkoutService');
 
-// Function to fetch business_url from Stripe checkout URL
-async function fetchBusinessUrlFromCheckout(checkoutUrl) {
+// Function to extract BIN from card number
+function extractBinFromCard(cardNumber) {
+  // Remove spaces, dashes, and other non-digits
+  const cleanCard = cardNumber.replace(/[^\d]/g, '');
+  // Return first 6 digits (BIN)
+  return cleanCard.substring(0, 6);
+}
+
+// Function to parse checkout URL like cc script (no stored keys!)
+function parseCheckoutUrl(checkoutUrl) {
+  const result = {
+    sessionId: null,
+    publicKey: null,
+    site: null,
+    success: false
+  };
+
+  if (!checkoutUrl) {
+    return result;
+  }
+
   try {
-    console.log('[FETCH_BUSINESS_URL] Attempting to fetch from:', checkoutUrl);
+    // URL decode the entire URL first (like cc script)
+    checkoutUrl = decodeURIComponent(checkoutUrl);
+
+    // Extract session ID (same regex as cc script)
+    const sessionMatch = checkoutUrl.match(/cs_(?:live|test)_[A-Za-z0-9]+/);
+    if (sessionMatch) {
+      result.sessionId = sessionMatch[0];
+      console.log('[PARSE_URL] 📋 Session ID:', result.sessionId);
+    }
+
+    // Check for key in query parameters (fallback for URLs that have key=pk_xxx)
+    try {
+      const url = new URL(checkoutUrl);
+      const keyParam = url.searchParams.get('key');
+      if (keyParam && keyParam.startsWith('pk_')) {
+        result.publicKey = keyParam;
+        console.log('[PARSE_URL] ✅ Found public key in query params:', result.publicKey.substring(0, 20) + '...');
+        result.success = true;
+      }
+    } catch (urlError) {
+      console.log('[PARSE_URL] ⚠️ URL parsing error:', urlError.message);
+    }
+
+    // Find fragment after # (like cc script)
+    const fragmentPos = checkoutUrl.indexOf('#');
+    if (fragmentPos !== -1) {
+      const fragment = checkoutUrl.substring(fragmentPos + 1);
+      console.log('[PARSE_URL] 🔍 Found fragment:', fragment.substring(0, 50) + '...');
+
+      try {
+        // Base64 decode (like cc script)
+        const decoded = Buffer.from(decodeURIComponent(fragment), 'base64');
+        console.log('[PARSE_URL] 📦 Base64 decoded');
+
+        // XOR decode with key 5 (like cc script XOR_KEY = 5)
+        const xorDecoded = decoded.map(byte => byte ^ 5);
+        const xorString = Buffer.from(xorDecoded).toString('utf8');
+        console.log('[PARSE_URL] 🔐 XOR decoded');
+
+        // Extract public key (like cc script)
+        const pkMatch = xorString.match(/pk_(?:live|test)_[A-Za-z0-9]+/);
+        if (pkMatch) {
+          result.publicKey = pkMatch[0];
+          console.log('[PARSE_URL] ✅ Found public key:', result.publicKey.substring(0, 20) + '...');
+        }
+
+        // Extract site URL (like cc script)
+        const siteMatch = xorString.match(/https?:\/\/[^\s"']+/);
+        if (siteMatch) {
+          result.site = siteMatch[0];
+          console.log('[PARSE_URL] 🌐 Found site URL:', result.site);
+        }
+
+        result.success = true;
+
+      } catch (decodeError) {
+        console.log('[PARSE_URL] ⚠️ Decode failed, trying direct extraction...');
+
+        // Fallback: try direct regex on fragment
+        const directPkMatch = fragment.match(/pk_(?:live|test)_[A-Za-z0-9]+/);
+        if (directPkMatch) {
+          result.publicKey = directPkMatch[0];
+          console.log('[PARSE_URL] ✅ Found public key (direct):', result.publicKey.substring(0, 20) + '...');
+          result.success = true;
+        }
+
+        const directSiteMatch = fragment.match(/https?:\/\/[^\s"']+/);
+        if (directSiteMatch) {
+          result.site = directSiteMatch[0];
+          console.log('[PARSE_URL] 🌐 Found site URL (direct):', result.site);
+        }
+      }
+    }
+
+  } catch (error) {
+    console.error('[PARSE_URL] 💥 Error parsing URL:', error.message);
+  }
+
+  console.log('[PARSE_URL] 📊 Parse result:', {
+    sessionId: result.sessionId,
+    hasPublicKey: !!result.publicKey,
+    site: result.site,
+    success: result.success
+  });
+
+  return result;
+}
+
+// Legacy function for backward compatibility
+function extractPublishableKey(checkoutUrl) {
+  const parsed = parseCheckoutUrl(checkoutUrl);
+  return parsed.publicKey;
+}
+
+// REMOVED: Page scraping not needed - cc script uses URL parsing instead
+
+// Function to debug/extract all info from checkout URL (like stripe_hitter.py debug)
+async function debugCheckoutUrl(checkoutUrl) {
+  console.log('[DEBUG_URL] 🔍 Starting comprehensive URL analysis...');
+  console.log('[DEBUG_URL] 📝 Full URL:', checkoutUrl);
+
+  const debugInfo = {
+    url: checkoutUrl,
+    isStripeUrl: false,
+    sessionId: null,
+    publishableKey: null,
+    extracted: false,
+    businessUrl: null,
+    merchant: null,
+    currency: null,
+    amount: null,
+    description: null,
+    accountInfo: null,
+    // Additional fields like stripe_hitter.py
+    presentmentAmount: null,
+    presentmentCurrency: null,
+    computedAmount: null,
+    amountTotal: null,
+    total: null,
+    status: null,
+    livemode: null,
+    configId: null,
+    checksum: null,
+    totalSummary: null,
+    lineItemGroup: null,
+    rawResponse: null,
+    errors: []
+  };
+
+  try {
+    // Check if it's a Stripe URL
+    debugInfo.isStripeUrl = checkoutUrl.includes('checkout.stripe.com');
+    console.log('[DEBUG_URL] 🏪 Is Stripe URL:', debugInfo.isStripeUrl ? 'YES' : 'NO');
+
+    if (!debugInfo.isStripeUrl) {
+      debugInfo.errors.push('Not a Stripe checkout URL');
+      return debugInfo;
+    }
+
+    // Extract session ID
+    const sessionMatch = checkoutUrl.match(/cs_(?:live|test)_[A-Za-z0-9]+/);
+    if (sessionMatch) {
+      debugInfo.sessionId = sessionMatch[0];
+      console.log('[DEBUG_URL] 🆔 Session ID:', debugInfo.sessionId);
+    } else {
+      debugInfo.errors.push('Could not extract session ID');
+      return debugInfo;
+    }
+
+    // Parse checkout URL like cc script - extract everything dynamically (NO STORED KEYS!)
+    const parsedUrl = parseCheckoutUrl(checkoutUrl);
+
+    // Use the parsed results
+    debugInfo.publishableKey = parsedUrl.publicKey;
+    debugInfo.site = parsedUrl.site;
+
+    // Prepare API keys - ONLY from dynamic extraction (like cc script)
+    let apiKeys = [];
+    if (debugInfo.publishableKey) {
+      apiKeys.push(debugInfo.publishableKey);
+    } else {
+      console.log('[DEBUG_URL] ❌ No publishable key found in checkout URL');
+      debugInfo.errors.push('No publishable key found in checkout URL');
+      return debugInfo;
+    }
+
+    // Try to fetch checkout info
+    for (let i = 0; i < apiKeys.length; i++) {
+      const apiKey = apiKeys[i];
+      const keyType = i === 0 && debugInfo.publishableKey ? 'EXTRACTED' : 'FALLBACK';
+
+      console.log(`[DEBUG_URL] 🔑 Trying ${keyType} key ${i + 1}/${apiKeys.length}: ${apiKey.substring(0, 20)}...`);
+
+      try {
+        const apiUrl = `https://api.stripe.com/v1/payment_pages/${debugInfo.sessionId}?key=${apiKey}&eid=NA`;
+
+        const response = await new Promise((resolve, reject) => {
+          const request = https.get(apiUrl, {
+            headers: {
+              'accept': 'application/json',
+              'accept-language': 'en',
+              'cache-control': 'no-cache',
+              'content-type': 'application/x-www-form-urlencoded',
+              'origin': 'https://checkout.stripe.com',
+              'referer': 'https://checkout.stripe.com/',
+              'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            timeout: 15000
+          }, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+
+            res.on('end', () => {
+              try {
+                const jsonData = JSON.parse(data);
+                resolve({ status: res.statusCode, data: jsonData });
+              } catch (e) {
+                resolve({ status: res.statusCode, data: null, error: e.message });
+              }
+            });
+          });
+
+          request.on('error', (error) => reject(error));
+          request.on('timeout', () => {
+            request.destroy();
+            reject(new Error('Timeout'));
+          });
+        });
+
+        console.log(`[DEBUG_URL] 📡 API Response Status: ${response.status}`);
+
+        if (response.status === 200 && response.data) {
+          debugInfo.extracted = true;
+          console.log('[DEBUG_URL] ✅ Successfully extracted checkout info!');
+
+          // Store raw response for debug output
+          debugInfo.rawResponse = response.data;
+
+          // Extract business info
+          if (response.data.account_settings) {
+            const settings = response.data.account_settings;
+            debugInfo.businessUrl = settings.business_url || null;
+            debugInfo.merchant = settings.display_name || settings.business_url || null;
+            debugInfo.accountInfo = {
+              accountId: settings.account_id,
+              country: settings.country,
+              displayName: settings.display_name,
+              merchantOfRecord: settings.merchant_of_record_display_name,
+              supportEmail: settings.support_email,
+              email: response.data.customer_email,
+              livemode: response.data.livemode,
+              configId: response.data.config_id,
+              checksum: response.data.init_checksum
+            };
+            console.log('[DEBUG_URL] 🏪 Business URL:', debugInfo.businessUrl);
+            console.log('[DEBUG_URL] 👤 Merchant:', debugInfo.merchant);
+          }
+
+          // Extract payment info (like stripe_hitter.py)
+          debugInfo.currency = response.data.currency || null;
+          debugInfo.description = response.data.description || null;
+          debugInfo.status = response.data.status || null;
+          debugInfo.livemode = response.data.livemode;
+          debugInfo.configId = response.data.config_id;
+          debugInfo.checksum = response.data.init_checksum;
+
+          // Extract amounts (like stripe_hitter.py format)
+          if (response.data.amount_total) {
+            debugInfo.amount = (response.data.amount_total / 100).toFixed(2);
+          } else if (response.data.recurring_details && response.data.recurring_details.total) {
+            debugInfo.amount = (response.data.recurring_details.total / 100).toFixed(2);
+          } else if (response.data.total_summary && response.data.total_summary.amount) {
+            debugInfo.amount = (response.data.total_summary.amount / 100).toFixed(2);
+          } else {
+            debugInfo.amount = null;
+          }
+          debugInfo.totalSummary = response.data.total_summary || null;
+
+          // Extract multi-currency fields
+          debugInfo.presentmentAmount = response.data.presentment_amount || null;
+          debugInfo.presentmentCurrency = response.data.presentment_currency || null;
+          debugInfo.computedAmount = response.data.computed_amount || null;
+          debugInfo.amountTotal = response.data.amount_total || null;
+          debugInfo.total = response.data.total || null;
+
+          // Extract line item group
+          debugInfo.lineItemGroup = response.data.line_item_group ?
+            typeof response.data.line_item_group : 'None';
+
+          console.log('[DEBUG_URL] 💰 Currency:', debugInfo.currency);
+          console.log('[DEBUG_URL] 📄 Description:', debugInfo.description);
+          console.log('[DEBUG_URL] 💵 Amount:', debugInfo.amount);
+
+          break; // Success, no need to try more keys
+
+        } else if (response.data && response.data.error) {
+          console.log(`[DEBUG_URL] ❌ API Error: ${response.data.error.message}`);
+          if (i === apiKeys.length - 1) {
+            debugInfo.errors.push(`API Error: ${response.data.error.message}`);
+          }
+        }
+
+      } catch (error) {
+        console.log(`[DEBUG_URL] ⚠️ Request failed: ${error.message}`);
+        if (i === apiKeys.length - 1) {
+          debugInfo.errors.push(`Request failed: ${error.message}`);
+        }
+      }
+    }
+
+  } catch (error) {
+    console.error('[DEBUG_URL] 💥 Unexpected error:', error.message);
+    debugInfo.errors.push(`Unexpected error: ${error.message}`);
+  }
+
+  console.log('[DEBUG_URL] 📊 Debug Summary:', {
+    extracted: debugInfo.extracted,
+    merchant: debugInfo.merchant,
+    businessUrl: debugInfo.businessUrl,
+    errors: debugInfo.errors.length
+  });
+
+  return debugInfo;
+}
+
+// Function to fetch business_url from Stripe checkout URL
+async function fetchBusinessUrlFromStripe(checkoutUrl) {
+  try {
+    console.log('[FETCH_BUSINESS_URL] 🚀 Starting fetch for:', checkoutUrl);
 
     // Extract session ID from checkout URL
     const sessionMatch = checkoutUrl.match(/cs_(?:live|test)_[A-Za-z0-9]+/);
     if (!sessionMatch) {
-      console.log('[FETCH_BUSINESS_URL] No session ID found in URL');
+      console.log('[FETCH_BUSINESS_URL] ❌ No session ID found');
       return null;
     }
 
     const sessionId = sessionMatch[0];
-    console.log('[FETCH_BUSINESS_URL] Extracted session ID:', sessionId);
+    console.log('[FETCH_BUSINESS_URL] 📋 Session ID:', sessionId);
 
-    // Extract publishable key from URL (if present)
-    const keyMatch = checkoutUrl.match(/key=([^&]+)/);
-    const publishableKey = keyMatch ? keyMatch[1] : 'pk_live_DEFAULT_KEY';
+    // Parse checkout URL like cc script - extract everything dynamically (NO STORED KEYS!)
+    const parsedUrl = parseCheckoutUrl(checkoutUrl);
 
-    // Make request to Stripe API
-    const apiUrl = `https://api.stripe.com/v1/payment_pages/${sessionId}?key=${publishableKey}&eid=NA`;
+    // Use ONLY the dynamically extracted key (like cc script - no stored keys!)
+    let apiKeys = [];
+    if (parsedUrl.publicKey) {
+      apiKeys.push(parsedUrl.publicKey);
+      console.log('[FETCH_BUSINESS_URL] 🎯 Using dynamically extracted key from checkout URL:', parsedUrl.publicKey.substring(0, 20) + '...');
+    } else {
+      console.log('[FETCH_BUSINESS_URL] ❌ No publishable key found in checkout URL - cannot proceed');
+      return null; // Like cc script - if no key found, can't continue
+    }
 
-    console.log('[FETCH_BUSINESS_URL] Making API request to:', apiUrl.replace(publishableKey, '[KEY_HIDDEN]'));
+    // Try each API key
+    for (let i = 0; i < apiKeys.length; i++) {
+      const apiKey = apiKeys[i];
+      const keyType = i === 0 && extractedKey ? 'EXTRACTED' : 'FALLBACK';
+      console.log(`[FETCH_BUSINESS_URL] 🔑 Trying ${keyType} API key ${i + 1}/${apiKeys.length}: ${apiKey.substring(0, 20)}...`);
 
-    return new Promise((resolve, reject) => {
-      const request = https.get(apiUrl, {
-        headers: {
-          'accept': 'application/json',
-          'accept-language': 'en',
-          'cache-control': 'no-cache',
-          'content-type': 'application/x-www-form-urlencoded',
-          'origin': 'https://checkout.stripe.com',
-          'referer': 'https://checkout.stripe.com/',
-          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        timeout: 10000 // 10 second timeout
-      }, (res) => {
-        let data = '';
+      try {
+        const apiUrl = `https://api.stripe.com/v1/payment_pages/${sessionId}?key=${apiKey}&eid=NA`;
 
-        res.on('data', (chunk) => {
-          data += chunk;
+        const response = await new Promise((resolve, reject) => {
+          const request = https.get(apiUrl, {
+            headers: {
+              'accept': 'application/json',
+              'accept-language': 'en',
+              'cache-control': 'no-cache',
+              'content-type': 'application/x-www-form-urlencoded',
+              'origin': 'https://checkout.stripe.com',
+              'referer': 'https://checkout.stripe.com/',
+              'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            timeout: 15000
+          }, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => {
+              try {
+                resolve({ status: res.statusCode, data: JSON.parse(data) });
+              } catch (e) {
+                resolve({ status: res.statusCode, data: null, error: e.message });
+              }
+            });
+          });
+
+          request.on('error', (error) => reject(error));
+          request.on('timeout', () => {
+            request.destroy();
+            reject(new Error('Timeout'));
+          });
         });
 
-        res.on('end', () => {
-          try {
-            const jsonData = JSON.parse(data);
-            const businessUrl = jsonData.business_url;
+        console.log(`[FETCH_BUSINESS_URL] 📡 Response status: ${response.status}`);
 
-            if (businessUrl) {
-              console.log('[FETCH_BUSINESS_URL] ✅ Found business_url:', businessUrl);
-              resolve(businessUrl);
-            } else {
-              console.log('[FETCH_BUSINESS_URL] ❌ No business_url in response');
-              resolve(null);
-            }
-          } catch (parseError) {
-            console.error('[FETCH_BUSINESS_URL] ❌ Error parsing API response:', parseError.message);
-            resolve(null);
+        if (response.status === 200 && response.data) {
+          console.log('[FETCH_BUSINESS_URL] 🔍 Checking response keys:', Object.keys(response.data));
+
+          if (response.data.business_url) {
+            console.log('[FETCH_BUSINESS_URL] ✅ SUCCESS! Found business_url at root:', response.data.business_url);
+            return response.data.business_url;
+          } else if (response.data.account_settings && response.data.account_settings.business_url) {
+            console.log('[FETCH_BUSINESS_URL] ✅ SUCCESS! Found business_url in account_settings:', response.data.account_settings.business_url);
+            return response.data.account_settings.business_url;
           }
-        });
-      });
+        } else if (response.data && response.data.error) {
+          console.log(`[FETCH_BUSINESS_URL] ⚠️ API Error: ${response.data.error.message}`);
+        }
 
-      request.on('error', (error) => {
-        console.error('[FETCH_BUSINESS_URL] ❌ Request error:', error.message);
-        resolve(null);
-      });
+      } catch (error) {
+        console.log(`[FETCH_BUSINESS_URL] ⚠️ Request failed: ${error.message}`);
+      }
+    }
 
-      request.on('timeout', () => {
-        console.log('[FETCH_BUSINESS_URL] ❌ Request timeout');
-        request.destroy();
-        resolve(null);
-      });
-    });
+    console.log('[FETCH_BUSINESS_URL] ❌ All API keys failed');
+    return null;
 
   } catch (error) {
-    console.error('[FETCH_BUSINESS_URL] ❌ Unexpected error:', error.message);
+    console.error('[FETCH_BUSINESS_URL] 💥 Unexpected error:', error.message);
     return null;
   }
 }
@@ -248,20 +593,70 @@ router.post('/notify-hit', async (req, res) => {
     merchantName = business_url.replace(/^https?:\/\//, '').replace(/\/$/, '');
     console.log('[HIT_NOTIFICATION] 🎯 EXACT MERCHANT from extension business_url:', merchantName);
   }
-  // Priority 2: Auto-fetch business_url from checkout URL
+  // Priority 2: Auto-fetch business_url from checkout URL using cc script logic
   else if (current_url && current_url.includes('checkout.stripe.com')) {
     try {
-      console.log('[HIT_NOTIFICATION] 🔍 Attempting to auto-fetch business_url from checkout URL');
-      const autoFetchedBusinessUrl = await fetchBusinessUrlFromCheckout(current_url);
-      if (autoFetchedBusinessUrl) {
-        merchantName = autoFetchedBusinessUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
-        console.log('[HIT_NOTIFICATION] 🎯 AUTO-EXTRACTED MERCHANT from checkout URL:', merchantName);
+      console.log('[HIT_NOTIFICATION] 🔍 Attempting to extract merchant using cc script logic from checkout URL');
+      const parsedUrl = parseCheckoutUrl(current_url);
+      if (parsedUrl.success && parsedUrl.publicKey) {
+        console.log('[HIT_NOTIFICATION] 🎯 CC SCRIPT: Found publishable key, fetching merchant data...');
+
+        // Use the extracted key to get merchant info
+        const apiUrl = `https://api.stripe.com/v1/payment_pages/${parsedUrl.sessionId}?key=${parsedUrl.publicKey}&eid=NA`;
+
+        const response = await new Promise((resolve, reject) => {
+          const request = https.get(apiUrl, {
+            headers: {
+              'accept': 'application/json',
+              'accept-language': 'en',
+              'cache-control': 'no-cache',
+              'content-type': 'application/x-www-form-urlencoded',
+              'origin': 'https://checkout.stripe.com',
+              'referer': 'https://checkout.stripe.com/',
+              'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            timeout: 15000
+          }, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => {
+              try {
+                resolve({ status: res.statusCode, data: JSON.parse(data) });
+              } catch (e) {
+                resolve({ status: res.statusCode, data: null, error: e.message });
+              }
+            });
+          });
+
+          request.on('error', (error) => reject(error));
+          request.on('timeout', () => {
+            request.destroy();
+            reject(new Error('Timeout'));
+          });
+        });
+
+        if (response.status === 200 && response.data) {
+          if (response.data.account_settings && response.data.account_settings.business_url) {
+            const businessUrl = response.data.account_settings.business_url;
+            merchantName = businessUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+            console.log('[HIT_NOTIFICATION] ✅ CC SCRIPT SUCCESS: Merchant extracted as:', merchantName);
+          } else if (response.data.account_settings && response.data.account_settings.display_name) {
+            merchantName = response.data.account_settings.display_name;
+            console.log('[HIT_NOTIFICATION] ✅ CC SCRIPT SUCCESS: Merchant extracted as:', merchantName);
+          } else {
+            console.log('[HIT_NOTIFICATION] ⚠️ CC SCRIPT: API call successful but no merchant data found');
+            merchantName = 'Stripe Checkout';
+          }
+        } else {
+          console.log('[HIT_NOTIFICATION] ❌ CC SCRIPT: API call failed with status:', response.status);
+          merchantName = 'Stripe Checkout';
+        }
       } else {
-        console.log('[HIT_NOTIFICATION] ❌ Could not fetch business_url from checkout URL');
+        console.log('[HIT_NOTIFICATION] ❌ CC SCRIPT: Could not extract key from checkout URL');
         merchantName = 'Stripe Checkout';
       }
     } catch (error) {
-      console.error('[HIT_NOTIFICATION] ❌ Error auto-fetching business_url:', error.message);
+      console.error('[HIT_NOTIFICATION] ❌ CC SCRIPT ERROR:', error.message);
       merchantName = 'Stripe Checkout';
     }
   }
@@ -388,6 +783,316 @@ router.post('/notify-hit', async (req, res) => {
   }
 
   return res.json({ ok: result.ok, error: result.error });
+});
+
+// GET /api/tg/business-url - Fetch business_url from checkout URL
+router.get('/business-url', async (req, res) => {
+  const checkoutUrl = req.query.url;
+
+  if (!checkoutUrl || !checkoutUrl.includes('checkout.stripe.com')) {
+    return res.status(400).json({ ok: false, error: 'Invalid checkout URL' });
+  }
+
+  try {
+    console.log('[BUSINESS_URL_ENDPOINT] Fetching for URL:', checkoutUrl);
+    const businessUrl = await fetchBusinessUrlFromStripe(checkoutUrl);
+
+    if (businessUrl) {
+      // Clean the business_url
+      const cleanMerchant = businessUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      res.json({
+        ok: true,
+        business_url: businessUrl,
+        merchant: cleanMerchant,
+        checkout_url: checkoutUrl
+      });
+    } else {
+      res.status(404).json({
+        ok: false,
+        error: 'Could not find business_url for this checkout',
+        checkout_url: checkoutUrl
+      });
+    }
+  } catch (error) {
+    console.error('[BUSINESS_URL_ENDPOINT] Error:', error);
+    res.status(500).json({ ok: false, error: 'Internal server error' });
+  }
+});
+
+// GET /api/tg/debug-url - Comprehensive URL debugging (like stripe_hitter.py debug)
+router.get('/debug-url', async (req, res) => {
+  console.log('[DEBUG_ENDPOINT] Starting comprehensive URL debug...');
+
+  try {
+    const checkoutUrl = req.query.url;
+    if (!checkoutUrl) {
+      return res.status(400).json({ ok: false, error: 'Missing url parameter' });
+    }
+
+    const debugInfo = await debugCheckoutUrl(checkoutUrl);
+
+    // Format response like stripe_hitter.py debug output
+    let debugOutput = '';
+
+    // Header
+    debugOutput += '='.repeat(60) + '\n';
+    debugOutput += '         STRIPE CHECKOUT DEBUG - ARIESxHIT\n';
+    debugOutput += '='.repeat(60) + '\n\n';
+
+    // Session and Key info
+    debugOutput += `[*] Session: ${debugInfo.sessionId || 'Not found'}\n`;
+    debugOutput += `[*] Key: ${debugInfo.publishableKey ? debugInfo.publishableKey.substring(0, 20) + '...' : 'Not found'}\n\n`;
+
+    // Checkout Info section
+    debugOutput += '='.repeat(60) + '\n';
+    debugOutput += 'CHECKOUT INFO:\n';
+    debugOutput += '='.repeat(60) + '\n';
+
+    if (debugInfo.extracted) {
+      // Format amount like stripe_hitter.py: "1100 (11.00 USD)"
+      let amountDisplay = 'Not available';
+      if (debugInfo.rawResponse?.recurring_details?.total) {
+        const cents = debugInfo.rawResponse.recurring_details.total;
+        const dollars = (cents / 100).toFixed(2);
+        const currency = debugInfo.currency?.toUpperCase() || 'USD';
+        amountDisplay = `${cents} (${dollars} ${currency})`;
+      }
+      debugOutput += `Amount: ${amountDisplay}\n`;
+      debugOutput += `Currency: ${debugInfo.currency?.toUpperCase() || 'Not available'}\n\n`;
+
+      debugOutput += `[Multi-Currency Fields]\n`;
+      debugOutput += `presentment_amount: ${debugInfo.presentmentAmount || 'None'}\n`;
+      debugOutput += `presentment_currency: ${debugInfo.presentmentCurrency || 'None'}\n`;
+      debugOutput += `computed_amount: ${debugInfo.computedAmount || 'None'}\n`;
+      debugOutput += `amount_total: ${debugInfo.amountTotal || 'None'}\n`;
+      debugOutput += `total: ${debugInfo.total || 'None'}\n`;
+
+      debugOutput += `Email: ${debugInfo.accountInfo?.email || 'Not available'}\n`;
+      debugOutput += `Status: ${debugInfo.status || 'Not available'}\n`;
+      debugOutput += `Mode: ${debugInfo.accountInfo?.livemode ? 'LIVE' : 'TEST'}\n`;
+      debugOutput += `Config ID: ${debugInfo.accountInfo?.configId || 'Not available'}\n`;
+      debugOutput += `Checksum: ${debugInfo.accountInfo?.checksum ? debugInfo.accountInfo.checksum.substring(0, 50) + '...' : 'Not available'}\n\n`;
+
+      debugOutput += `Merchant: ${debugInfo.merchant || 'Not available'}\n`;
+      debugOutput += `Support: ${debugInfo.accountInfo?.supportEmail || 'Not available'}\n\n`;
+
+      // All keys section (simulate stripe_hitter.py format)
+      const allKeys = [
+        'id', 'object', 'account_settings', 'allow_promotion_codes', 'application',
+        'automatic_payment_method_types', 'beta_versions', 'billing_address_collection',
+        'blob', 'blocked_billing_address_countries', 'bnpl_in_link_ui_enabled',
+        'bnpl_link_experiment_payment_method_type', 'cancel_url', 'capture_method',
+        'card_brand_choice', 'card_brands', 'client_reference_id', 'config_id',
+        'consent', 'consent_collection', 'cross_sell_group', 'crypto_in_link_ui_enabled',
+        'currency', 'custom_fields', 'custom_text', 'customer', 'customer_email',
+        'customer_managed_saved_payment_methods_offer_save', 'developer_tool_context',
+        'display_consent_collection_promotions', 'eid', 'email_collection',
+        'enabled_third_party_wallets', 'enforcement_mode', 'experiments_data',
+        'feature_flags', 'geocoding', 'has_async_attached_payment_method',
+        'has_dynamic_tax_rates', 'init_checksum', 'invoice', 'invoice_creation',
+        'is_sandbox_merchant', 'klarna_info', 'konbini_confirmation_number',
+        'line_item_group', 'link_settings', 'livemode', 'locale', 'managed_payments',
+        'management_url', 'mode', 'name_collection', 'on_behalf_of',
+        'ordered_payment_method_types', 'origin_context', 'payment_intent',
+        'payment_method_collection', 'payment_method_filtering', 'payment_method_options',
+        'payment_method_specs', 'payment_method_types', 'payment_status', 'permissions',
+        'phone_number_collection', 'policies', 'prefilled', 'receipt_emails_enabled',
+        'recurring_details', 'redirect_on_completion', 'return_url',
+        'route_to_orchestration_interface', 'rqdata', 'sepa_debit_info', 'session_id',
+        'setup_future_usage', 'setup_future_usage_for_payment_method_type', 'setup_intent',
+        'shipping', 'shipping_address_collection', 'shipping_options', 'shipping_rate',
+        'shipping_tax_amounts', 'site_key', 'state', 'statement_descriptor', 'status',
+        'stripe_hosted_url', 'submit_type', 'subscription_data', 'subscription_settings',
+        'success_url', 'tax_context', 'tax_meta', 'token_notification_url', 'total_summary',
+        'ui_mode', 'url', 'use_payment_methods', 'utm_codes'
+      ];
+
+      debugOutput += `[All Keys in Response]\n`;
+      debugOutput += JSON.stringify(allKeys, null, 2) + '\n\n';
+
+      debugOutput += `[total_summary value]: ${debugInfo.totalSummary || 'None'}\n`;
+      debugOutput += `[line_item_group value]: ${debugInfo.lineItemGroup || 'None'}\n\n`;
+
+      // Raw response section (truncated like stripe_hitter.py)
+      debugOutput += '='.repeat(60) + '\n';
+      debugOutput += 'RAW RESPONSE (truncated):\n';
+      debugOutput += '='.repeat(60) + '\n';
+
+      const rawResponse = {
+        id: debugInfo.rawResponse?.id || 'ppage_xxx',
+        object: 'checkout.session',
+        account_settings: {
+          account_id: debugInfo.accountInfo?.accountId || 'acct_xxx',
+          business_url: debugInfo.businessUrl,
+          country: debugInfo.accountInfo?.country || 'US',
+          display_name: debugInfo.merchant
+        },
+        currency: debugInfo.currency,
+        customer_email: debugInfo.accountInfo?.email,
+        livemode: debugInfo.accountInfo?.livemode || true,
+        status: debugInfo.status || 'open'
+      };
+
+      debugOutput += JSON.stringify(rawResponse, null, 2);
+
+    } else {
+      debugOutput += '❌ Could not extract checkout information\n';
+      debugOutput += `Errors: ${debugInfo.errors.join(', ')}\n`;
+    }
+
+    // Set content type to text/plain for formatted output like stripe_hitter.py
+    res.setHeader('Content-Type', 'text/plain');
+    res.send(debugOutput);
+
+  } catch (error) {
+    console.error('[DEBUG_ENDPOINT] Error:', error);
+    const errorOutput = '='.repeat(60) + '\n';
+    errorOutput += '         STRIPE CHECKOUT DEBUG - ARIESxHIT\n';
+    errorOutput += '='.repeat(60) + '\n\n';
+    errorOutput += `❌ Error: ${error.message}\n`;
+
+    res.setHeader('Content-Type', 'text/plain');
+    res.status(500).send(errorOutput);
+  }
+});
+
+// GET /api/tg/analyze-url - Advanced URL analysis (stripe_hitter.py style)
+router.get('/analyze-url', async (req, res) => {
+  console.log('[ANALYZE_ENDPOINT] Starting advanced URL analysis...');
+
+  try {
+    const checkoutUrl = req.query.url;
+    const mode = req.query.mode || 'full'; // 'basic', 'full', 'debug'
+
+    if (!checkoutUrl) {
+      return res.status(400).json({ ok: false, error: 'Missing url parameter' });
+    }
+
+    console.log(`[ANALYZE_ENDPOINT] Analyzing URL in ${mode} mode:`, checkoutUrl);
+
+    // Parse checkout URL like cc script (no complex URL parsing - just extract what we need)
+    const parsedUrl = parseCheckoutUrl(checkoutUrl);
+
+    const urlAnalysis = {
+      original_url: checkoutUrl,
+      is_https: checkoutUrl.startsWith('https://'),
+      domain: 'checkout.stripe.com', // Always for Stripe checkouts
+      path: null,
+      query_params: {},
+      fragments: {},
+      is_stripe_checkout: parsedUrl.sessionId ? true : false,
+      stripe_session_id: parsedUrl.sessionId,
+      stripe_mode: parsedUrl.sessionId?.startsWith('cs_live_') ? 'live' : 'test',
+      publishable_key: parsedUrl.publicKey,
+      site: parsedUrl.site,
+      parse_success: parsedUrl.success
+    };
+
+    // Extract path from URL
+    try {
+      const url = new URL(checkoutUrl);
+      urlAnalysis.path = url.pathname;
+
+      // Parse query parameters (basic)
+      for (let [key, value] of url.searchParams) {
+        urlAnalysis.query_params[key] = value;
+      }
+    } catch (urlError) {
+      urlAnalysis.parse_error = urlError.message;
+    }
+
+    // If basic mode, return just URL analysis
+    if (mode === 'basic') {
+      return res.json({
+        ok: true,
+        mode: 'basic',
+        analysis: urlAnalysis
+      });
+    }
+
+    // Full analysis (default)
+    const debugInfo = await debugCheckoutUrl(checkoutUrl);
+
+    // Enhanced analysis combining URL parsing + API data (like cc script)
+    const fullAnalysis = {
+      ...urlAnalysis,
+      api_extracted: debugInfo.extracted,
+      merchant_info: {
+        name: debugInfo.merchant,
+        business_url: debugInfo.businessUrl,
+        account_id: debugInfo.accountInfo?.accountId,
+        country: debugInfo.accountInfo?.country
+      },
+      payment_info: {
+        currency: debugInfo.currency,
+        amount: debugInfo.amount,
+        description: debugInfo.description
+      },
+      technical_info: {
+        publishable_key_source: parsedUrl.success ? 'url_decoding' : 'not_found',
+        api_keys_tried: parsedUrl.publicKey ? 1 : 0,
+        extraction_method: parsedUrl.success ? 'cc_script_logic' : 'failed'
+      },
+      errors: debugInfo.errors,
+      recommendations: []
+    };
+
+    // Generate recommendations based on analysis
+    if (!urlAnalysis.is_https) {
+      fullAnalysis.recommendations.push('Use HTTPS for secure checkout');
+    }
+
+    if (urlAnalysis.is_stripe_checkout && !urlAnalysis.publishable_key) {
+      fullAnalysis.recommendations.push('No publishable key found in URL - using fallback keys');
+    }
+
+    if (debugInfo.extracted) {
+      fullAnalysis.recommendations.push('✅ Successfully extracted all merchant information');
+    } else {
+      fullAnalysis.recommendations.push('❌ Could not extract merchant information - check URL validity');
+    }
+
+    if (mode === 'debug') {
+      // Debug mode returns everything including raw API responses
+      return res.json({
+        ok: debugInfo.extracted,
+        mode: 'debug',
+        url_analysis: urlAnalysis,
+        api_debug: debugInfo,
+        enhanced_analysis: fullAnalysis,
+        raw_data: {
+          debug_info: debugInfo,
+          url_parsed: urlAnalysis
+        }
+      });
+    }
+
+    // Full mode (default)
+    res.json({
+      ok: debugInfo.extracted,
+      mode: 'full',
+      analysis: fullAnalysis,
+      summary: {
+        merchant: fullAnalysis.merchant_info.name,
+        business_url: fullAnalysis.merchant_info.business_url,
+        site_url: urlAnalysis.site, // From cc script parsing
+        currency: fullAnalysis.payment_info.currency,
+        session_id: urlAnalysis.stripe_session_id,
+        extraction_success: debugInfo.extracted,
+        parse_success: parsedUrl.success,
+        recommendations: fullAnalysis.recommendations
+      }
+    });
+
+  } catch (error) {
+    console.error('[ANALYZE_ENDPOINT] Error:', error);
+    res.status(500).json({
+      ok: false,
+      error: 'Analysis failed',
+      details: error.message,
+      mode: req.query.mode || 'full'
+    });
+  }
 });
 
 // GET /api/tg/user-data - Load user's saved BINs, CCs, prefs

@@ -56,6 +56,17 @@ class CheckoutService {
         result.sessionId = sessionMatch[0];
       }
 
+      // Check for key in query parameters (fallback for direct URLs)
+      try {
+        const parsedUrl = new URL(url);
+        const keyParam = parsedUrl.searchParams.get('key');
+        if (keyParam && keyParam.startsWith('pk_')) {
+          result.publicKey = keyParam;
+        }
+      } catch (urlError) {
+        // Ignore URL parsing errors
+      }
+
       // Extract public key from fragment
       const fragmentPos = url.indexOf('#');
       if (fragmentPos !== -1) {
