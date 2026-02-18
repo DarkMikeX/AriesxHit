@@ -17,6 +17,8 @@ const state = {
   // BIN mode session tracking
   currentCheckoutSession: null,
   usedCardsInSession: new Set(),
+  // Track current mode
+  currentMode: 'cc_list', // 'bin_mode' or 'cc_list'
 };
 
 // Parse single proxy line. Supports: host:port | host:port:user:pass | user:pass@host:port
@@ -459,6 +461,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
           amount: msg.amount || '',
           email: r.ax_fill_email || '',
           time_sec: durationSec,
+          hit_mode: state.currentMode, // 'bin_mode' or 'cc_list'
         };
         const doNotify = (screenshotB64) => {
           if (screenshotB64) payload.screenshot = screenshotB64;
@@ -548,10 +551,14 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       state._attemptStartTime = null;
       let cards = msg.data?.cards ?? [];
       const bins = msg.data?.bins ?? [];
+
+      // Set current mode based on input
       if (bins.length) {
+        state.currentMode = 'bin_mode';
         state.cardList = generateCardsFromBins(bins);
         state.binList = bins;
       } else {
+        state.currentMode = 'cc_list';
         state.cardList = Array.isArray(cards) ? cards : [];
       }
       chrome.storage.local.set({ cardList: state.cardList, binList: state.binList || [], autoHitActive: true, stats: state.stats });
