@@ -585,7 +585,7 @@ router.post('/notify-hit', async (req, res) => {
   let fullCheckoutUrl = '—';
 
   // Extract merchant name - prioritize business_url, then auto-fetch from checkout URL, then URL detection, then BIN detection
-  let merchantName = 'Unknown Merchant'; // Default
+  let merchantName = 'Unknown'; // Default - keep short
   console.log('[HIT_NOTIFICATION] Extension data - current_url:', current_url, 'merchant_url:', merchant_url, 'business_url:', business_url);
 
   // Priority 1: business_url (exact merchant from Stripe checkout session - sent by extension)
@@ -717,45 +717,55 @@ router.post('/notify-hit', async (req, res) => {
       merchantName = 'Payment Processor';
     }
   } else {
-    console.log('[HIT_NOTIFICATION] ❌ No URL provided by extension, using BIN detection');
+    console.log('[HIT_NOTIFICATION] ❌ No URL provided by extension, checking if we have merchant from other sources');
 
-    // Enhanced BIN-based merchant detection
-    const cleanCard = card && card.trim() ? card.replace(/\|/g, '').replace(/\s/g, '') : '';
-    if (cleanCard && cleanCard.length >= 6) {
-      const bin = cleanCard.substring(0, 6);
-      console.log('[HIT_NOTIFICATION] Card BIN detected:', bin);
+    // Only use BIN detection if we don't already have a real merchant name
+    const genericMerchants = ['Unknown', 'Unknown Merchant', 'Payment Processor', 'Stripe Checkout', 'Online Payment'];
+    const binBasedMerchants = ['Visa Payment', 'Mastercard Payment', 'Mastercard Network', 'American Express', 'Diners Club', 'JCB Payment', 'Discover Payment', 'China UnionPay'];
 
-      // Enhanced BIN patterns for more accurate merchant detection
-      if (bin.startsWith('4')) {
-        merchantName = 'Visa Payment';
-      } else if (bin.startsWith('5') || bin.startsWith('2')) {
-        // More specific Mastercard detection
-        const binNum = parseInt(bin);
-        if (binNum >= 510000 && binNum <= 559999) {
-          merchantName = 'Mastercard Payment';
-        } else if (binNum >= 222100 && binNum <= 272099) {
-          merchantName = 'Mastercard Payment';
+    if (genericMerchants.includes(merchantName) || binBasedMerchants.includes(merchantName) || !merchantName || merchantName.trim() === '') {
+      console.log('[HIT_NOTIFICATION] Using BIN detection as fallback');
+
+      // Enhanced BIN-based merchant detection
+      const cleanCard = card && card.trim() ? card.replace(/\|/g, '').replace(/\s/g, '') : '';
+      if (cleanCard && cleanCard.length >= 6) {
+        const bin = cleanCard.substring(0, 6);
+        console.log('[HIT_NOTIFICATION] Card BIN detected:', bin);
+
+        // Enhanced BIN patterns for more accurate merchant detection
+        if (bin.startsWith('4')) {
+          merchantName = 'Visa Payment';
+        } else if (bin.startsWith('5') || bin.startsWith('2')) {
+          // More specific Mastercard detection
+          const binNum = parseInt(bin);
+          if (binNum >= 510000 && binNum <= 559999) {
+            merchantName = 'Mastercard Payment';
+          } else if (binNum >= 222100 && binNum <= 272099) {
+            merchantName = 'Mastercard Payment';
+          } else {
+            merchantName = 'Mastercard Network';
+          }
+        } else if (bin.startsWith('34') || bin.startsWith('37')) {
+          merchantName = 'American Express';
+        } else if (bin.startsWith('36') || bin.startsWith('38') || bin.startsWith('39')) {
+          merchantName = 'Diners Club';
+        } else if (bin.startsWith('35')) {
+          merchantName = 'JCB Payment';
+        } else if (bin.startsWith('6011') || bin.startsWith('65') || bin.startsWith('644') || bin.startsWith('645') || bin.startsWith('646') || bin.startsWith('647') || bin.startsWith('648') || bin.startsWith('649')) {
+          merchantName = 'Discover Payment';
+        } else if (bin.startsWith('62')) {
+          merchantName = 'China UnionPay';
         } else {
-          merchantName = 'Mastercard Network';
+          merchantName = 'Online Payment';
         }
-      } else if (bin.startsWith('34') || bin.startsWith('37')) {
-        merchantName = 'American Express';
-      } else if (bin.startsWith('36') || bin.startsWith('38') || bin.startsWith('39')) {
-        merchantName = 'Diners Club';
-      } else if (bin.startsWith('35')) {
-        merchantName = 'JCB Payment';
-      } else if (bin.startsWith('6011') || bin.startsWith('65') || bin.startsWith('644') || bin.startsWith('645') || bin.startsWith('646') || bin.startsWith('647') || bin.startsWith('648') || bin.startsWith('649')) {
-        merchantName = 'Discover Payment';
-      } else if (bin.startsWith('62')) {
-        merchantName = 'China UnionPay';
+
+        console.log('[HIT_NOTIFICATION] Using BIN-based merchant detection:', merchantName);
       } else {
         merchantName = 'Online Payment';
+        console.log('[HIT_NOTIFICATION] Using generic merchant name');
       }
-
-      console.log('[HIT_NOTIFICATION] Using BIN-based merchant detection:', merchantName);
     } else {
-      merchantName = 'Online Payment';
-      console.log('[HIT_NOTIFICATION] Using generic merchant name');
+      console.log('[HIT_NOTIFICATION] Keeping existing merchant name:', merchantName);
     }
   }
 
@@ -831,8 +841,9 @@ router.post('/notify-hit', async (req, res) => {
   };
 
     console.log('[HIT_NOTIFICATION] Constructed hitData:', JSON.stringify(hitData, null, 2));
-    console.log('[HIT_NOTIFICATION] Merchant name:', merchantName);
+    console.log('[HIT_NOTIFICATION] Final merchant name:', merchantName);
     console.log('[HIT_NOTIFICATION] hitData.merchant:', hitData.merchant);
+    console.log('[HIT_NOTIFICATION] Extension provided - business_url:', business_url, 'current_url:', current_url);
 
     console.log('[HIT_NOTIFICATION] 🚨🚨🚨 IMMEDIATELY BEFORE sendHitToGroups CALL 🚨🚨🚨');
     console.log('[HIT_NOTIFICATION] hitData prepared:', JSON.stringify(hitData, null, 2));
