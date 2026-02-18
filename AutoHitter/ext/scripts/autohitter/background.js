@@ -222,6 +222,12 @@ function injectAutoHitter(tabId, forceStateUpdate) {
 }
 
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
+  // Store checkout URL when tab URL changes to Stripe checkout
+  if (tab?.url && tab.url.includes('checkout.stripe.com')) {
+    state.lastCheckoutUrl = tab.url;
+    console.log('[AriesxHit] Updated stored checkout URL:', tab.url);
+  }
+
   if (tab?.url && isStripePage(tab.url)) injectAutoHitter(tabId);
   if (info.status === 'complete' && tab?.url && isStripeCheckoutUrl(tab.url)) {
     // Removed automatic stats reset on checkout page load
@@ -524,6 +530,9 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
           }
         }
 
+        const finalCurrentUrl = msg.current_url || state.lastCheckoutUrl || '';
+        console.log('[CARD_HIT] Sending notification with current_url:', finalCurrentUrl);
+
         const payload = {
           tg_id: r.ax_tg_id,
           name: r.ax_tg_name || 'User',
@@ -533,7 +542,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
           email: r.ax_fill_email || '',
           time_sec: durationSec,
           hit_mode: state.currentMode, // 'bin_mode' or 'cc_list'
-          current_url: msg.current_url || state.lastCheckoutUrl || '',
+          current_url: finalCurrentUrl,
           merchant_url: msg.merchant_url || '',
           business_url: businessUrl || state.lastBusinessUrl || ''
         };

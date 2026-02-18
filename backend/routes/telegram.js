@@ -782,6 +782,8 @@ router.post('/notify-hit', async (req, res) => {
   let displayAmount = amtFormatted;
 
   console.log('[HIT_NOTIFICATION] About to send personal message with merchant:', merchantName);
+  console.log('[HIT_NOTIFICATION] current_url received:', current_url);
+  console.log('[HIT_NOTIFICATION] business_url received:', business_url);
 
   const hitText = `🎯 <b>HIT DETECTED</b>\n` +
     `─────────────────\n\n` +
