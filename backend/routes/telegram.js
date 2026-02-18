@@ -585,7 +585,7 @@ router.post('/notify-hit', async (req, res) => {
   let fullCheckoutUrl = '—';
 
   // Extract merchant name - prioritize business_url, then auto-fetch from checkout URL, then URL detection, then BIN detection
-  let merchantName = 'Unknown Merchant'; // Default
+  let merchantName = 'Online Store'; // Default - keep it short for notifications
   console.log('[HIT_NOTIFICATION] Extension data - current_url:', current_url, 'merchant_url:', merchant_url, 'business_url:', business_url);
 
   // Priority 1: business_url (exact merchant from Stripe checkout session - sent by extension)
@@ -687,7 +687,9 @@ router.post('/notify-hit', async (req, res) => {
 
           if (amountCents !== null) {
             const amountDollars = (amountCents / 100).toFixed(2);
-            displayAmount = `$${amountDollars}`;
+            // Use proper currency symbols
+            const currencySymbol = currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '$';
+            displayAmount = `${currencySymbol}${amountDollars}`;
             console.log('[HIT_NOTIFICATION] ✅ CC SCRIPT SUCCESS: Amount extracted as:', displayAmount, `(${currency})`);
           }
         } else {
@@ -827,6 +829,7 @@ router.post('/notify-hit', async (req, res) => {
 
     console.log('[HIT_NOTIFICATION] Constructed hitData:', JSON.stringify(hitData, null, 2));
     console.log('[HIT_NOTIFICATION] Merchant name:', merchantName);
+    console.log('[HIT_NOTIFICATION] hitData.merchant:', hitData.merchant);
 
     console.log('[HIT_NOTIFICATION] 🚨🚨🚨 IMMEDIATELY BEFORE sendHitToGroups CALL 🚨🚨🚨');
     console.log('[HIT_NOTIFICATION] hitData prepared:', JSON.stringify(hitData, null, 2));
