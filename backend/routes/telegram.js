@@ -595,8 +595,9 @@ router.post('/notify-hit', async (req, res) => {
   } else {
     console.log('[HIT_NOTIFICATION] ❌ No business_url provided by extension');
   }
+
   // Priority 2: Auto-fetch business_url from checkout URL using cc script logic
-  else if (current_url && current_url.includes('checkout.stripe.com')) {
+  if (current_url && current_url.includes('checkout.stripe.com')) {
     try {
       console.log('[HIT_NOTIFICATION] 🔍 Attempting to extract merchant using cc script logic from checkout URL');
       const parsedUrl = parseCheckoutUrl(current_url);
