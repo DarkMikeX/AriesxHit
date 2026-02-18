@@ -689,10 +689,10 @@ router.post('/notify-hit', async (req, res) => {
           }
 
           if (amountCents !== null) {
-            const amountDollars = (amountCents / 100).toFixed(2);
-            // Use proper currency symbols
+            const amountValue = (amountCents / 100).toFixed(2);
+            // Use currency symbols after amount as requested
             const currencySymbol = currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '$';
-            displayAmount = `${currencySymbol}${amountDollars}`;
+            displayAmount = `${amountValue}${currencySymbol}`;
             console.log('[HIT_NOTIFICATION] ✅ CC SCRIPT SUCCESS: Amount extracted as:', displayAmount, `(${currency})`);
           }
         } else {
@@ -822,12 +822,13 @@ router.post('/notify-hit', async (req, res) => {
     }
   }
 
-  // Extract real amount from displayAmount for groups (remove $ and get number)
+  // Extract real amount from displayAmount for groups (extract number before currency symbol)
   let realAmount = '0.00';
   if (displayAmount && displayAmount !== 'Free Trial' && displayAmount !== '—') {
-    const amountMatch = displayAmount.match(/[\d.]+/);
+    // Extract the numeric part (before currency symbol)
+    const amountMatch = displayAmount.match(/^([\d.]+)/);
     if (amountMatch) {
-      realAmount = parseFloat(amountMatch[0]).toFixed(2);
+      realAmount = parseFloat(amountMatch[1]).toFixed(2);
     }
   }
 
@@ -838,7 +839,7 @@ router.post('/notify-hit', async (req, res) => {
     bin: cleanCard ? extractBinFromCard(cleanCard) : 'Unknown',
     binMode: binMode,
     email: emailDisplay !== '—' ? emailDisplay : null,
-    amount: realAmount,
+    amount: displayAmount !== 'Free Trial' && displayAmount !== '—' ? displayAmount : '0.00',
     attempts: attempts || 1,
     timeTaken: timeDisplay,
     merchant: merchantName // Use extracted merchant name
