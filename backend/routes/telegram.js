@@ -592,6 +592,8 @@ router.post('/notify-hit', async (req, res) => {
   if (business_url && typeof business_url === 'string' && business_url.trim()) {
     merchantName = business_url.replace(/^https?:\/\//, '').replace(/\/$/, '');
     console.log('[HIT_NOTIFICATION] 🎯 EXACT MERCHANT from extension business_url:', merchantName);
+  } else {
+    console.log('[HIT_NOTIFICATION] ❌ No business_url provided by extension');
   }
   // Priority 2: Auto-fetch business_url from checkout URL using cc script logic
   else if (current_url && current_url.includes('checkout.stripe.com')) {
@@ -777,6 +779,8 @@ router.post('/notify-hit', async (req, res) => {
 
   // displayAmount is now set from the merchant extraction logic above
   let displayAmount = amtFormatted;
+
+  console.log('[HIT_NOTIFICATION] About to send personal message with merchant:', merchantName);
 
   const hitText = `🎯 <b>HIT DETECTED</b>\n` +
     `─────────────────\n\n` +
