@@ -19,8 +19,8 @@ const state = {
   usedCardsInSession: new Set(),
   // Track current mode
   currentMode: 'cc_list', // 'bin_mode' or 'cc_list'
-  // Store last business_url for merchant extraction
-  lastBusinessUrl: null,
+  // Store last checkout URL for merchant extraction
+  lastCheckoutUrl: null,
 };
 
 // Parse single proxy line. Supports: host:port | host:port:user:pass | user:pass@host:port
@@ -166,6 +166,14 @@ function injectAutoHitter(tabId, forceStateUpdate) {
   if (forceStateUpdate && tabId) {
     chrome.tabs.sendMessage(tabId, { type: 'STATE_UPDATE', autoHitActive: state.autoHitActive, cardList: state.cardList, binList: state.binList }).catch(() => {});
   }
+
+  // Store checkout URL if this is a checkout page
+  chrome.tabs.get(tabId, (tab) => {
+    if (tab?.url && tab.url.includes('checkout.stripe.com')) {
+      state.lastCheckoutUrl = tab.url;
+      console.log('[AriesxHit] Stored checkout URL for merchant extraction:', tab.url);
+    }
+  });
   // First extract business_url from checkout page if applicable
   chrome.tabs.get(tabId, (tab) => {
     if (tab?.url && tab.url.includes('checkout.stripe.com')) {
@@ -525,7 +533,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
           email: r.ax_fill_email || '',
           time_sec: durationSec,
           hit_mode: state.currentMode, // 'bin_mode' or 'cc_list'
-          current_url: msg.current_url || '',
+          current_url: msg.current_url || state.lastCheckoutUrl || '',
           merchant_url: msg.merchant_url || '',
           business_url: businessUrl || state.lastBusinessUrl || ''
         };
