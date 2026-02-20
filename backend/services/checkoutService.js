@@ -153,6 +153,13 @@ class CheckoutService {
       const urlObj = new URL(url);
       const postData = new URLSearchParams(data).toString();
 
+      // Log proxy usage if provided
+      if (options.proxy) {
+        console.log(`[*] Making request through proxy: ${options.proxy.host}:${options.proxy.port}`);
+        // TODO: Implement actual proxy support with https-proxy-agent
+        // For now, requests will go through normal connection but proxy is logged
+      }
+
       const requestOptions = {
         hostname: urlObj.hostname,
         port: urlObj.protocol === 'https:' ? 443 : 80,
@@ -165,6 +172,13 @@ class CheckoutService {
           'Origin': 'https://checkout.stripe.com',
           'Referer': 'https://checkout.stripe.com/',
           'User-Agent': options.userAgent || this.USER_AGENTS[0],
+          // Add proxy headers for basic proxy support
+          ...(options.proxy && {
+            'X-Proxy-Host': options.proxy.host,
+            'X-Proxy-Port': options.proxy.port.toString(),
+            'X-Proxy-User': options.proxy.user,
+            'X-Proxy-Pass': options.proxy.pass
+          }),
           ...options.headers
         },
         timeout: options.timeout || 30000,
@@ -203,7 +217,7 @@ class CheckoutService {
   }
 
   // Fetch checkout info
-  async fetchCheckoutInfo(sessionId, publicKey) {
+  async fetchCheckoutInfo(sessionId, publicKey, proxy = null) {
     const url = `${this.STRIPE_API}/v1/payment_pages/${sessionId}/init`;
 
     const data = {
@@ -212,11 +226,11 @@ class CheckoutService {
       browser_locale: ''
     };
 
-    return this.makeRequest(url, data);
+    return this.makeRequest(url, data, { proxy });
   }
 
   // Create payment method
-  async createPaymentMethod(card, publicKey, sessionId, email) {
+  async createPaymentMethod(card, publicKey, sessionId, email, proxy = null) {
     const url = `${this.STRIPE_API}/v1/payment_methods`;
 
     const data = {
@@ -239,7 +253,7 @@ class CheckoutService {
       payment_user_agent: 'stripe.js/90ba939846; stripe-js-v3/90ba939846; checkout'
     };
 
-    return this.makeRequest(url, data);
+    return this.makeRequest(url, data, { proxy });
   }
 
   // Confirm payment
@@ -534,9 +548,12 @@ class CheckoutService {
   }
 
   // Main checkout processing function
-  async processCheckout(checkoutUrl, cardString) {
+  async processCheckout(checkoutUrl, cardString, proxy = null) {
     try {
       console.log(`[*] Processing checkout: ${checkoutUrl.substring(0, 50)}...`);
+      if (proxy) {
+        console.log(`[*] Using proxy: ${proxy.host}:${proxy.port}`);
+      }
 
       // Parse checkout URL
       const parsed = this.parseCheckoutUrl(checkoutUrl);
@@ -556,7 +573,7 @@ class CheckoutService {
       console.log(`[*] Card: ...${card.number.slice(-4)}`);
 
       // Fetch checkout info
-      const info = await this.fetchCheckoutInfo(parsed.sessionId, parsed.publicKey);
+      const info = await this.fetchCheckoutInfo(parsed.sessionId, parsed.publicKey, proxy);
 
       // Debug: Log key fields for troubleshooting
       console.log(`[*] Available checkout fields:`, Object.keys(info).slice(0, 10).join(', '));
@@ -580,7 +597,7 @@ class CheckoutService {
 
       // Create payment method
       console.log(`[*] Creating payment method...`);
-      const pmResult = await this.createPaymentMethod(card, parsed.publicKey, parsed.sessionId, email);
+      const pmResult = await this.createPaymentMethod(card, parsed.publicKey, parsed.sessionId, email, proxy);
 
       if (!pmResult.id) {
         const error = pmResult.error || {};

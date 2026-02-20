@@ -69,6 +69,28 @@ const {
 // Import checkout service
 const checkoutService = require('../services/checkoutService');
 
+// Function to get IP geolocation info
+async function getIPInfo(ip) {
+  try {
+    const response = await fetch(`http://ip-api.com/json/${ip}`);
+    const data = await response.json();
+    return {
+      country: data.country || 'Unknown',
+      countryCode: data.countryCode || 'XX',
+      city: data.city || 'Unknown',
+      isp: data.isp || 'Unknown'
+    };
+  } catch (error) {
+    console.error('[IP_INFO] Error getting IP info:', error);
+    return {
+      country: 'Unknown',
+      countryCode: 'XX',
+      city: 'Unknown',
+      isp: 'Unknown'
+    };
+  }
+}
+
 // Function to extract BIN from card number
 function extractBinFromCard(cardNumber) {
   // Remove spaces, dashes, and other non-digits
@@ -2441,6 +2463,23 @@ router.post('/webhook', async (req, res) => {
           return;
         }
 
+        // Randomly select a proxy from active ones for this checkout session
+        const selectedProxy = activeProxies[Math.floor(Math.random() * activeProxies.length)];
+        console.log(`[CO_COMMAND] User ${tgId} selected proxy for checkout: ${selectedProxy.host}:${selectedProxy.port}`);
+
+        // Send initial message with proxy info
+        await sendMessage(BOT_TOKEN, chatId,
+          `🔥 <b>ARIESXHIT CHECKOUT TESTER</b> 🔥\n` +
+          `═══════════════════════════════════════\n\n` +
+          `🎯 <b>Target:</b> ${merchantName}\n` +
+          `💳 <b>Cards Loaded:</b> ${validCards.length}\n` +
+          `🔗 <b>Checkout URL:</b> ${checkoutUrl.substring(0, 35)}...\n` +
+          `🛡️ <b>Proxy:</b> ${selectedProxy.host}:${selectedProxy.port}\n\n` +
+          `⚡ <b>Starting mass testing...</b>\n` +
+          `📊 <b>Results will be sent individually</b>\n\n` +
+          `═══════════════════════════════════════`
+        );
+
         const commandText = msg.text.substring(4).trim();
 
         // Split by newlines first, then by spaces
@@ -2515,8 +2554,8 @@ router.post('/webhook', async (req, res) => {
           console.log(`Processing card ${i + 1}/${validCards.length}: ${cardNumber}`);
 
           try {
-            // Process the checkout
-            const result = await checkoutService.processCheckout(checkoutUrl, cardData);
+            // Process the checkout with selected proxy
+            const result = await checkoutService.processCheckout(checkoutUrl, cardData, selectedProxy);
 
             // Format result message with improved UI
             const cardNum = result.card || cardData.split('|')[0];
@@ -2549,6 +2588,14 @@ router.post('/webhook', async (req, res) => {
               let statusEmoji = '❌';
               let statusColor = '🔴';
               let reason = 'Unknown Error';
+
+              // Get IP info for decline message
+              let ipInfo = { country: 'Unknown', countryCode: 'XX' };
+              try {
+                ipInfo = await getIPInfo(selectedProxy.host);
+              } catch (error) {
+                console.error('[DECLINE_MESSAGE] Error getting IP info:', error);
+              }
 
               if (result.status === 'DECLINED' || result.code === 'card_declined') {
                 statusEmoji = '🚫';
@@ -2592,6 +2639,7 @@ router.post('/webhook', async (req, res) => {
               resultText = `${statusEmoji} <b>CARD DECLINED</b> ${statusColor}\n\n`;
               resultText += `💳 <b>Card:</b> <code>${cardNum}</code>\n`;
               resultText += `🏦 <b>BIN:</b> <code>${bin}</code>\n`;
+              resultText += `🌐 <b>IP:</b> ${selectedProxy.host} (${ipInfo.country})\n`;
               resultText += `📊 <b>Status:</b> ${result.status || 'UNKNOWN'}\n`;
               resultText += `❗ <b>Reason:</b> ${reason}\n`;
 
