@@ -1745,82 +1745,51 @@ router.post('/co', async (req, res) => {
       });
     }
 
-    // Make API call through randomly selected proxy (simplified - would need proxy library for production)
-    const apiUrl = `https://api.stripe.com/v1/payment_pages/${parsedUrl.sessionId}?key=${parsedUrl.publicKey}&eid=NA`;
-
     console.log(`[CO_CHECKOUT] Processing checkout for user ${tgId} through proxy ${selectedProxy.host}:${selectedProxy.port}`);
 
-    // Make the actual API call (without proxy for now - would need proxy library)
-    const response = await new Promise((resolve, reject) => {
-      const https = require('https');
-      const request = https.get(apiUrl, {
-        headers: {
-          'accept': 'application/json',
-          'accept-language': 'en',
-          'cache-control': 'no-cache',
-          'content-type': 'application/x-www-form-urlencoded',
-          'origin': 'https://checkout.stripe.com',
-          'referer': 'https://checkout.stripe.com/',
-          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        timeout: 15000
-      }, (res) => {
-        let data = '';
-        res.on('data', (chunk) => data += chunk);
-        res.on('end', () => {
-          try {
-            resolve({ status: res.statusCode, data: JSON.parse(data) });
-          } catch (e) {
-            resolve({ status: res.statusCode, data: null, error: e.message });
-          }
-        });
-      });
+    // Use the same checkout service logic to get accurate amount data
+    const info = await checkoutService.fetchCheckoutInfo(parsedUrl.sessionId, parsedUrl.publicKey, selectedProxy);
 
-      request.on('error', (error) => reject(error));
-      request.on('timeout', () => {
-        request.destroy();
-        reject(new Error('Timeout'));
-      });
-    });
-
-    if (response.status === 200 && response.data) {
-      // Extract checkout information
-      const merchant = response.data.account_settings?.business_url ?
-        response.data.account_settings.business_url.replace(/^https?:\/\//, '').replace(/\/$/, '') :
-        'Stripe Checkout';
-
-      const amount = response.data.amount_total ?
-        (response.data.amount_total / 100).toFixed(2) : '0.00';
-
-      const currency = response.data.currency ? response.data.currency.toUpperCase() : 'USD';
-      const currencySymbol = currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '$';
-
-      // Update selected proxy last used time
-      selectedProxy.lastUsed = Date.now();
-      setUserData(tgId, userData);
-
-      return res.json({
-        ok: true,
-        message: `✅ Checkout Analyzed Successfully!\n\n🏪 Merchant: ${merchant}\n💰 Amount: ${currencySymbol}${amount} ${currency}\n🌐 Proxy: ${selectedProxy.host}:${selectedProxy.port}\n\n✅ Protected by random proxy rotation!`,
-        data: {
-          merchant,
-          amount: `${currencySymbol}${amount}`,
-          currency,
-          proxy_used: `${selectedProxy.host}:${selectedProxy.port}`
-        }
-      });
-    } else {
+    if (info.error) {
       return res.json({
         ok: false,
         error: '❌ Failed to analyze checkout!\n\nThe checkout URL might be expired or invalid.'
       });
     }
 
+    // Extract checkout information using the same logic as checkout service
+    const { amount: rawAmount, currency: rawCurrency, businessUrl } = checkoutService.getAmountAndCurrency(info);
+
+    const merchant = businessUrl ?
+      businessUrl.replace(/^https?:\/\//, '').replace(/\/$/, '') :
+      info.account_settings?.business_url ?
+        info.account_settings.business_url.replace(/^https?:\/\//, '').replace(/\/$/, '') :
+        info.account_settings?.business_name || 'Stripe Checkout';
+
+    // Convert cents to dollars for display (fixed zero capture issue)
+    const amount = rawAmount !== null && rawAmount !== undefined ? (rawAmount / 100).toFixed(2) : '0.00';
+    const currency = rawCurrency ? rawCurrency.toUpperCase() : 'USD';
+    const currencySymbol = currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '$';
+
+    // Update selected proxy last used time
+    selectedProxy.lastUsed = Date.now();
+    setUserData(tgId, userData);
+
+    return res.json({
+      ok: true,
+      message: `✅ Checkout Analyzed Successfully!\n\n🏪 Merchant: ${merchant}\n💰 Amount: ${currencySymbol}${amount} ${currency}\n🌐 Proxy: ${selectedProxy.host}:${selectedProxy.port}\n\n✅ Protected by random proxy rotation!`,
+      data: {
+        merchant,
+        amount: `${currencySymbol}${amount}`,
+        currency,
+        proxy_used: `${selectedProxy.host}:${selectedProxy.port}`
+      }
+    });
   } catch (error) {
     console.error('[CO_CHECKOUT] Error:', error.message);
     return res.json({
       ok: false,
-      error: `❌ Checkout Analysis Failed!\n\nError: ${error.message}`
+      error: '❌ Failed to analyze checkout!\n\nThe checkout URL might be expired or invalid.'
     });
   }
 });
