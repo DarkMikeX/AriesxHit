@@ -592,7 +592,9 @@ class CheckoutService {
       let { amount, currency, businessUrl } = this.getAmountAndCurrency(info);
       const email = info.customer_email || 'test@example.com';
 
-      console.log(`[*] Amount: ${amount} ${currency.toUpperCase()}`);
+      // Convert cents to dollars for display
+      const displayAmount = amount !== null ? (amount / 100).toFixed(2) : 'unknown';
+      console.log(`[*] Amount: $${displayAmount} ${currency.toUpperCase()}`);
       console.log(`[*] Email: ${email}`);
 
       // Create payment method

@@ -2636,22 +2636,16 @@ router.post('/webhook', async (req, res) => {
                 }
               }
 
-              resultText = `${statusEmoji} <b>CARD DECLINED</b> ${statusColor}\n\n`;
-              resultText += `💳 <b>Card:</b> <code>${cardNum}</code>\n`;
-              resultText += `🏦 <b>BIN:</b> <code>${bin}</code>\n`;
-              resultText += `🌐 <b>IP:</b> ${selectedProxy.host} (${ipInfo.country})\n`;
-              resultText += `📊 <b>Status:</b> ${result.status || 'UNKNOWN'}\n`;
-              resultText += `❗ <b>Reason:</b> ${reason}\n`;
-
-              if (result.code && result.code !== result.status) {
-                resultText += `🔢 <b>Code:</b> ${result.code}\n`;
-              }
-              if (result.decline_code) {
-                resultText += `🚫 <b>Decline:</b> ${result.decline_code}\n`;
-              }
-
-              resultText += `\n═══════════════════\n`;
-              resultText += `🤖 <b>AriesxHit</b> | Card ${i + 1}/${validCards.length}`;
+              resultText = `CARD DECLINED  ❌\n`;
+              resultText += `═══════════════════\n\n`;
+              resultText += `Card : <code>${cardNum}</code>\n`;
+              resultText += `BIN : ${bin}\n`;
+              resultText += `Status : <code>${result.status || 'UNKNOWN'}</code>\n`;
+              resultText += `Response : <code>${result.decline_code || reason}</code>\n`;
+              resultText += `Attempts : ${i + 1}/${validCards.length}\n`;
+              resultText += `IP : ${ipInfo.country}\n\n`;
+              resultText += `═══════════════════\n\n`;
+              resultText += `@AriesxHit 💗`;
             }
 
             // Send result for this card
