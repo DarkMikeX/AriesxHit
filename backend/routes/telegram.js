@@ -1874,6 +1874,32 @@ router.post('/webhook', async (req, res) => {
             `Use To Log In Hitter 💗`;
           const result = await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({ inline_keyboard: [backBtn] }));
           if (!result.ok) console.error('Webhook: Failed to send login token:', result.error);
+
+        } else if (cb.data === 'proxy_manager') {
+          await answerCallbackQuery(BOT_TOKEN, cb.id, 'Proxy Manager');
+          const text = `🔐 <b>PROXY MANAGER</b>\n` +
+            `═══════════════════════════════\n\n` +
+            `Manage your proxies for checkout protection\n\n` +
+            `📝 <b>Add Proxies:</b>\n` +
+            `• <code>/addpxy host:port:user:pass</code>\n` +
+            `• Reply to proxy list with <code>/addpxy</code>\n\n` +
+            `🔍 <b>Manage Proxies:</b>\n` +
+            `• <code>/seepxy</code> - View all proxies\n` +
+            `• <code>/chkpxy</code> - Test all proxies\n` +
+            `• <code>/delpxy [id]</code> - Delete proxy\n` +
+            `• <code>/delallpxy</code> - Delete all proxies\n\n` +
+            `🔎 <b>Find Proxies:</b>\n` +
+            `• Reply to message with <code>/flpxy</code>\n\n` +
+            `⚠️ <b>Important:</b> Proxies are required for /co command\n\n` +
+            `💡 <b>Example:</b>\n` +
+            `<code>/addpxy 192.168.1.100:8080:user:pass</code>`;
+          const result = await editMessageText(BOT_TOKEN, chatId, messageId, text, replyMarkup({
+            inline_keyboard: [
+              [{ text: '⬅️ Back to Main', callback_data: 'back_to_main' }]
+            ]
+          }));
+          if (!result.ok) console.error('Webhook: Failed to send proxy manager:', result.error);
+
         } else if (cb.data === 'my_stats') {
           const hits = getUserHits(tgId);
           const global = getGlobalHits();
@@ -1970,13 +1996,353 @@ router.post('/webhook', async (req, res) => {
 
     // Debug command to check user ID (/debug)
     if (msg?.text && msg.text === '/debug') {
-      await sendMessage(BOT_TOKEN, chatId, `🔧 <b>BOT DEBUG INFO</b>\n\n📊 <b>Your Telegram ID:</b> <code>${tgId}</code>\n🤖 <b>Bot Status:</b> Online\n📡 <b>Server:</b> Connected\n\n💡 <b>Commands Available:</b>\n• /co - Checkout hitter\n• /start - Main menu\n• /debug - This info`);
+      await sendMessage(BOT_TOKEN, chatId, `🔧 <b>BOT DEBUG INFO</b>\n\n📊 <b>Your Telegram ID:</b> <code>${tgId}</code>\n🤖 <b>Bot Status:</b> Online\n📡 <b>Server:</b> Connected\n\n💡 <b>Commands Available:</b>\n• /co - Checkout hitter\n• /addpxy - Add proxy\n• /seepxy - View proxies\n• /chkpxy - Test proxies\n• /delpxy - Delete proxy\n• /start - Main menu\n• /debug - This info`);
       return;
     }
+
+    // ==================== PROXY COMMANDS ====================
+
+    // Add proxy command (/addpxy <proxy> or reply to file)
+    if (msg?.text && (msg.text.startsWith('/addpxy') || msg.text.startsWith('/addproxy'))) {
+      try {
+        const parts = msg.text.split(/\s+/);
+        let proxyData = null;
+
+        // Check if replying to a file/message
+        if (msg.reply_to_message) {
+          const repliedMsg = msg.reply_to_message;
+
+          // Handle document/text file replies
+          if (repliedMsg.document && (repliedMsg.document.mime_type === 'text/plain' || repliedMsg.document.file_name?.endsWith('.txt'))) {
+            // For file replies, we can't directly read the content here
+            // We need the user to paste the content
+            await sendMessage(BOT_TOKEN, chatId, `📄 <b>File Detected!</b>\n\nPlease paste the contents of the proxy file in your next message, and I'll add all valid proxies from it.\n\nFormat: One proxy per line\nExample:\n<code>192.168.1.100:8080:user:pass\n192.168.1.101:8080:user2:pass2</code>`);
+            return;
+          }
+
+          // Handle text message replies
+          if (repliedMsg.text) {
+            proxyData = repliedMsg.text;
+          }
+        }
+
+        // Handle command argument
+        if (parts.length > 1 && !proxyData) {
+          proxyData = parts.slice(1).join(' ');
+        }
+
+        if (!proxyData) {
+          await sendMessage(BOT_TOKEN, chatId, `📝 <b>Add Proxy</b>\n\nUsage:\n• <code>/addpxy host:port:user:pass</code> - Single proxy\n• Reply to proxy list with <code>/addpxy</code> - Multiple proxies\n\nExample:\n<code>/addpxy 192.168.1.100:8080:myuser:mypass123</code>`);
+          return;
+        }
+
+        // Make API call to add proxy
+        const apiUrl = `${process.env.API_BASE_URL || 'http://localhost:3001'}/api/tg/add-proxy`;
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tg_id: tgId, proxy: proxyData })
+        });
+
+        const result = await response.json();
+
+        if (result.ok) {
+          await sendMessage(BOT_TOKEN, chatId, `✅ <b>Proxy Added!</b>\n\n${result.message}`);
+        } else {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Failed to Add Proxy</b>\n\n${result.error}`);
+        }
+
+      } catch (error) {
+        console.error('[ADD_PROXY_COMMAND] Error:', error);
+        await sendMessage(BOT_TOKEN, chatId, `❌ <b>Error</b>\n\nFailed to process proxy addition. Please try again.`);
+      }
+
+      return;
+    }
+
+    // Delete proxy command (/delpxy [proxy_id])
+    if (msg?.text && (msg.text.startsWith('/delpxy') || msg.text.startsWith('/delproxy'))) {
+      try {
+        const parts = msg.text.split(/\s+/);
+        const proxyId = parts[1]; // Optional proxy ID
+
+        // Make API call to delete proxy
+        const apiUrl = `${process.env.API_BASE_URL || 'http://localhost:3001'}/api/tg/del-proxy`;
+        const response = await fetch(apiUrl, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tg_id: tgId, proxy_id: proxyId })
+        });
+
+        const result = await response.json();
+
+        if (result.ok) {
+          await sendMessage(BOT_TOKEN, chatId, `✅ <b>Proxy Deleted!</b>\n\n${result.message}`);
+        } else {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Failed to Delete Proxy</b>\n\n${result.error}`);
+        }
+
+      } catch (error) {
+        console.error('[DEL_PROXY_COMMAND] Error:', error);
+        await sendMessage(BOT_TOKEN, chatId, `❌ <b>Error</b>\n\nFailed to delete proxy. Please try again.`);
+      }
+
+      return;
+    }
+
+    // Delete all proxies command (/delallpxy)
+    if (msg?.text && (msg.text === '/delallpxy' || msg.text === '/delallproxy')) {
+      try {
+        // Make API call to delete all proxies
+        const apiUrl = `${process.env.API_BASE_URL || 'http://localhost:3001'}/api/tg/del-all-proxies`;
+        const response = await fetch(apiUrl, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tg_id: tgId })
+        });
+
+        const result = await response.json();
+
+        if (result.ok) {
+          await sendMessage(BOT_TOKEN, chatId, `✅ <b>All Proxies Deleted!</b>\n\n${result.message}`);
+        } else {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Failed to Delete Proxies</b>\n\n${result.error}`);
+        }
+
+      } catch (error) {
+        console.error('[DEL_ALL_PROXY_COMMAND] Error:', error);
+        await sendMessage(BOT_TOKEN, chatId, `❌ <b>Error</b>\n\nFailed to delete proxies. Please try again.`);
+      }
+
+      return;
+    }
+
+    // See proxies command (/seepxy)
+    if (msg?.text && (msg.text === '/seepxy' || msg.text === '/seeproxy')) {
+      try {
+        // Make API call to get proxies
+        const apiUrl = `${process.env.API_BASE_URL || 'http://localhost:3001'}/api/tg/see-proxy?tg_id=${tgId}`;
+        const response = await fetch(apiUrl);
+        const result = await response.json();
+
+        if (result.ok) {
+          const proxies = result.proxies || [];
+          if (proxies.length === 0) {
+            await sendMessage(BOT_TOKEN, chatId, `📭 <b>No Proxies Found</b>\n\nYou haven't added any proxies yet.\n\nUse <code>/addpxy host:port:user:pass</code> to add your first proxy.`);
+            return;
+          }
+
+          let proxyList = `🔐 <b>Your Proxies (${result.total})</b>\n═══════════════════════════════\n\n`;
+
+          proxies.forEach((proxy, index) => {
+            const status = proxy.status === 'active' ? '✅' : proxy.status === 'failed' ? '❌' : '⏳';
+            const lastUsed = proxy.lastUsed ? new Date(proxy.lastUsed).toLocaleString() : 'Never';
+
+            proxyList += `${index + 1}. ${status} <code>${proxy.host}:${proxy.port}</code>\n`;
+            proxyList += `   👤 ${proxy.user}\n`;
+            proxyList += `   📅 Added: ${new Date(proxy.addedAt).toLocaleDateString()}\n`;
+            proxyList += `   🕒 Last Used: ${lastUsed}\n`;
+            proxyList += `   🆔 ID: <code>${proxy.id}</code>\n\n`;
+          });
+
+          proxyList += `═══════════════════════════════\n`;
+          proxyList += `📊 <b>Summary:</b> ${result.active} active, ${result.total - result.active} inactive\n\n`;
+          proxyList += `💡 <b>Commands:</b>\n`;
+          proxyList += `• <code>/chkpxy</code> - Test all proxies\n`;
+          proxyList += `• <code>/delpxy [id]</code> - Delete proxy\n`;
+          proxyList += `• <code>/delallpxy</code> - Delete all`;
+
+          await sendMessage(BOT_TOKEN, chatId, proxyList);
+        } else {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Failed to Get Proxies</b>\n\n${result.error}`);
+        }
+
+      } catch (error) {
+        console.error('[SEE_PROXY_COMMAND] Error:', error);
+        await sendMessage(BOT_TOKEN, chatId, `❌ <b>Error</b>\n\nFailed to retrieve proxies. Please try again.`);
+      }
+
+      return;
+    }
+
+    // Check proxies command (/chkpxy or reply to file)
+    if (msg?.text && (msg.text.startsWith('/chkpxy') || msg.text.startsWith('/chkproxy'))) {
+      try {
+        let proxiesToCheck = null;
+
+        // Check if replying to a file/message
+        if (msg.reply_to_message) {
+          const repliedMsg = msg.reply_to_message;
+
+          // Handle document/text file replies
+          if (repliedMsg.document && (repliedMsg.document.mime_type === 'text/plain' || repliedMsg.document.file_name?.endsWith('.txt'))) {
+            await sendMessage(BOT_TOKEN, chatId, `📄 <b>File Detected!</b>\n\nPlease paste the contents of the proxy file in your next message, and I'll test all proxies from it.\n\nFormat: One proxy per line\nExample:\n<code>192.168.1.100:8080:user:pass\n192.168.1.101:8080:user2:pass2</code>`);
+            return;
+          }
+
+          // Handle text message replies
+          if (repliedMsg.text) {
+            // Extract proxies from text
+            const extractResponse = await fetch(`${process.env.API_BASE_URL || 'http://localhost:3001'}/api/tg/find-proxies`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: repliedMsg.text })
+            });
+
+            const extractResult = await extractResponse.json();
+            if (extractResult.ok && extractResult.details) {
+              proxiesToCheck = extractResult.details.map(p => `${p.host}:${p.port}:${p.user}:${p.pass}`);
+            }
+          }
+        }
+
+        // Make API call to check proxies
+        const apiUrl = `${process.env.API_BASE_URL || 'http://localhost:3001'}/api/tg/check-proxy`;
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tg_id: tgId, ...(proxiesToCheck && { proxies: proxiesToCheck }) })
+        });
+
+        const result = await response.json();
+
+        if (result.ok) {
+          let checkResult = `🔍 <b>Proxy Check Results</b>\n═════════════════════════════════\n\n`;
+
+          if (result.results && result.results.length > 0) {
+            result.results.forEach((item, index) => {
+              const statusIcon = item.status === 'working' ? '✅' : item.status === 'failed' ? '❌' : '⏳';
+              checkResult += `${index + 1}. ${statusIcon} ${item.proxy}\n`;
+              if (item.status !== 'working') {
+                checkResult += `   Status: ${item.status}\n`;
+                if (item.error) checkResult += `   Error: ${item.error}\n`;
+              }
+              checkResult += '\n';
+            });
+          }
+
+          checkResult += `═════════════════════════════════\n`;
+          checkResult += `📊 <b>Summary:</b> ${result.working || 0} working, ${result.failed || 0} failed\n\n`;
+
+          if (result.working > 0) {
+            checkResult += `✅ <b>Ready for checkout!</b> You can now use /co command.`;
+          } else {
+            checkResult += `❌ <b>No working proxies found.</b> Add more proxies with /addpxy.`;
+          }
+
+          await sendMessage(BOT_TOKEN, chatId, checkResult);
+        } else {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Failed to Check Proxies</b>\n\n${result.error}`);
+        }
+
+      } catch (error) {
+        console.error('[CHK_PROXY_COMMAND] Error:', error);
+        await sendMessage(BOT_TOKEN, chatId, `❌ <b>Error</b>\n\nFailed to check proxies. Please try again.`);
+      }
+
+      return;
+    }
+
+    // Find proxies command (/flpxy - reply to file/message)
+    if (msg?.text && (msg.text === '/flpxy' || msg.text === '/flproxy')) {
+      try {
+        if (!msg.reply_to_message) {
+          await sendMessage(BOT_TOKEN, chatId, `📝 <b>Find Proxies</b>\n\nReply to a message or file containing proxy list with <code>/flpxy</code> to extract all proxies from it.\n\nSupported formats:\n• Text messages with proxy lists\n• Text files (.txt)\n\nExample: Reply to a message containing:\n<code>192.168.1.100:8080:user:pass\n192.168.1.101:8080:user2:pass2</code>`);
+          return;
+        }
+
+        const repliedMsg = msg.reply_to_message;
+        let textToAnalyze = '';
+
+        // Handle document/text file replies
+        if (repliedMsg.document && (repliedMsg.document.mime_type === 'text/plain' || repliedMsg.document.file_name?.endsWith('.txt'))) {
+          await sendMessage(BOT_TOKEN, chatId, `📄 <b>File Detected!</b>\n\nFor files, please paste the contents directly in a text message and reply to that message with <code>/flpxy</code>.\n\nI cannot read file contents directly from Telegram files.`);
+          return;
+        }
+
+        // Handle text message replies
+        if (repliedMsg.text) {
+          textToAnalyze = repliedMsg.text;
+        } else {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Unsupported Content</b>\n\nPlease reply to a text message or paste the proxy list content.`);
+          return;
+        }
+
+        // Extract proxies from text
+        const extractResponse = await fetch(`${process.env.API_BASE_URL || 'http://localhost:3001'}/api/tg/find-proxies`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: textToAnalyze })
+        });
+
+        const extractResult = await extractResponse.json();
+
+        if (extractResult.ok) {
+          const proxies = extractResult.proxies || [];
+          const details = extractResult.details || [];
+
+          if (proxies.length === 0) {
+            await sendMessage(BOT_TOKEN, chatId, `🔍 <b>No Proxies Found</b>\n\nNo valid proxies found in the replied message.\n\nExpected format: <code>host:port:user:pass</code>\n\nExample: <code>192.168.1.100:8080:user:pass</code>`);
+            return;
+          }
+
+          let resultText = `🔍 <b>Proxies Found: ${proxies.length}</b>\n══════════════════════════════════════\n\n`;
+
+          details.forEach((proxy, index) => {
+            resultText += `${index + 1}. <code>${proxy.proxy}</code>\n`;
+          });
+
+          resultText += `\n══════════════════════════════════════\n`;
+          resultText += `💡 <b>To add these proxies:</b>\n`;
+          resultText += `• <code>/addpxy</code> (reply to this message)\n`;
+          resultText += `• <code>/chkpxy</code> (reply to this message to test)\n\n`;
+          resultText += `📋 <b>Format:</b> host:port:user:pass\n`;
+          resultText += `✅ <b>Valid proxies found!</b>`;
+
+          await sendMessage(BOT_TOKEN, chatId, resultText);
+        } else {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Failed to Analyze Content</b>\n\n${extractResult.error}`);
+        }
+
+      } catch (error) {
+        console.error('[FL_PROXY_COMMAND] Error:', error);
+        await sendMessage(BOT_TOKEN, chatId, `❌ <b>Error</b>\n\nFailed to analyze content. Please try again.`);
+      }
+
+      return;
+    }
+
+    // ==================== END PROXY COMMANDS ====================
 
     // Checkout hitter command (/co <checkout_url> <card_data>)
     if (msg?.text && msg.text.startsWith('/co ')) {
       try {
+        // Check if user has proxies configured
+        const userData = getUserData(tgId);
+        if (!userData?.proxies || !Array.isArray(userData.proxies) || userData.proxies.length === 0) {
+          await sendMessage(BOT_TOKEN, chatId,
+            `❌ <b>Proxy Required!</b>\n\nYou must configure at least one proxy before using the checkout hitter.\n\n🔧 <b>Add Proxy Commands:</b>\n` +
+            `• <code>/addpxy host:port:user:pass</code> - Single proxy\n` +
+            `• Reply to proxy list with <code>/addpxy</code> - Multiple proxies\n` +
+            `• <code>/seepxy</code> - View your proxies\n` +
+            `• <code>/chkpxy</code> - Test proxy connectivity\n\n` +
+            `📝 <b>Example:</b>\n<code>/addpxy 192.168.1.100:8080:myuser:mypass123</code>`
+          );
+          return;
+        }
+
+        // Check if user has active proxies
+        const activeProxies = userData.proxies.filter(p => p.status === 'active');
+        if (activeProxies.length === 0) {
+          await sendMessage(BOT_TOKEN, chatId,
+            `❌ <b>No Active Proxies!</b>\n\nYou have ${userData.proxies.length} proxies configured, but none are active.\n\n🔍 <b>Test your proxies:</b>\n` +
+            `• <code>/chkpxy</code> - Test all your proxies\n` +
+            `• <code>/seepxy</code> - View proxy status\n\n` +
+            `💡 <b>Tip:</b> Use /chkpxy to find out which proxies are working.`
+          );
+          return;
+        }
+
         const commandText = msg.text.substring(4).trim();
 
         // Split by newlines first, then by spaces

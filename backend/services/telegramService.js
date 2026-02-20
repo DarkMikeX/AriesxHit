@@ -488,6 +488,7 @@ async function editMessageText(botToken, chatId, messageId, text, opts = {}) {
 const MAIN_MENU_KEYBOARD = {
   inline_keyboard: [
     [{ text: '🔑 Generate Token', callback_data: 'get_login_token' }],
+    [{ text: '🔐 Proxy Manager', callback_data: 'proxy_manager' }],
     [{ text: '📈 My Stats', callback_data: 'my_stats' }, { text: '🎯 My Hits', callback_data: 'my_hits' }],
     [{ text: '🏆 Scoreboard', callback_data: 'scoreboard' }],
     [{ text: '👤 Profile', callback_data: 'profile' }, { text: '❓ Help', callback_data: 'help' }],
