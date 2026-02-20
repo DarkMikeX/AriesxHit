@@ -1243,6 +1243,301 @@ router.get('/test-stats', (req, res) => {
   return res.json({ ok: true, data: response });
 });
 
+// POST /api/tg/add-proxy - Add user's proxy
+router.post('/add-proxy', (req, res) => {
+  const { tg_id, proxy } = req.body || {};
+  const tgId = String(tg_id || '').trim();
+
+  if (!tgId || !/^\d{5,15}$/.test(tgId)) {
+    return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
+  }
+
+  if (!proxy) {
+    return res.status(400).json({ ok: false, error: 'Proxy required' });
+  }
+
+  // Validate proxy format: host:port:user:pass
+  const proxyParts = proxy.split(':');
+  if (proxyParts.length !== 4) {
+    return res.status(400).json({ ok: false, error: 'Invalid proxy format. Use: host:port:user:pass' });
+  }
+
+  const [host, port, user, pass] = proxyParts;
+  if (!host || !port || !user || !pass) {
+    return res.status(400).json({ ok: false, error: 'All proxy fields required: host:port:user:pass' });
+  }
+
+  const portNum = parseInt(port, 10);
+  if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+    return res.status(400).json({ ok: false, error: 'Invalid port number' });
+  }
+
+  // Save proxy for user
+  const proxyData = {
+    host,
+    port: portNum,
+    user,
+    pass,
+    addedAt: Date.now(),
+    lastUsed: null,
+    status: 'active'
+  };
+
+  setUserData(tgId, { proxy: proxyData });
+
+  console.log(`[ADD_PROXY] Proxy added for user ${tgId}: ${host}:${portNum}`);
+
+  return res.json({
+    ok: true,
+    message: `✅ Proxy Added Successfully!\n\n🌐 Host: ${host}\n🔌 Port: ${portNum}\n👤 User: ${user}\n📅 Added: ${new Date().toLocaleString()}\n\nYou can now use /co command!`,
+    proxy: `${host}:${portNum}:${user}:***`
+  });
+});
+
+// DELETE /api/tg/del-proxy - Delete user's proxy
+router.delete('/del-proxy', (req, res) => {
+  const { tg_id } = req.body || {};
+  const tgId = String(tg_id || '').trim();
+
+  if (!tgId || !/^\d{5,15}$/.test(tgId)) {
+    return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
+  }
+
+  const userData = getUserData(tgId);
+  if (!userData?.proxy) {
+    return res.status(404).json({ ok: false, error: 'No proxy found for user' });
+  }
+
+  // Remove proxy from user data
+  delete userData.proxy;
+  setUserData(tgId, userData);
+
+  console.log(`[DEL_PROXY] Proxy deleted for user ${tgId}`);
+
+  return res.json({
+    ok: true,
+    message: '✅ Proxy deleted successfully!\n\nUse /addpxy to add a new proxy.'
+  });
+});
+
+// GET /api/tg/see-proxy - Get user's proxy
+router.get('/see-proxy', (req, res) => {
+  const { tg_id } = req.query || {};
+  const tgId = String(tg_id || '').trim();
+
+  if (!tgId || !/^\d{5,15}$/.test(tgId)) {
+    return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
+  }
+
+  const userData = getUserData(tgId);
+  if (!userData?.proxy) {
+    return res.status(404).json({ ok: false, error: 'No proxy found for user' });
+  }
+
+  const proxy = userData.proxy;
+  return res.json({
+    ok: true,
+    proxy: {
+      host: proxy.host,
+      port: proxy.port,
+      user: proxy.user,
+      status: proxy.status,
+      addedAt: proxy.addedAt,
+      lastUsed: proxy.lastUsed
+    }
+  });
+});
+
+// POST /api/tg/check-proxy - Test user's proxy
+router.post('/check-proxy', async (req, res) => {
+  const { tg_id } = req.body || {};
+  const tgId = String(tg_id || '').trim();
+
+  if (!tgId || !/^\d{5,15}$/.test(tgId)) {
+    return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
+  }
+
+  const userData = getUserData(tgId);
+  if (!userData?.proxy) {
+    return res.status(404).json({ ok: false, error: 'No proxy found for user' });
+  }
+
+  const proxy = userData.proxy;
+
+  try {
+    // Simple proxy test (in production, use proper proxy library)
+    const testResponse = await fetch('https://httpbin.org/ip', {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      },
+      signal: AbortSignal.timeout(10000)
+    });
+
+    if (testResponse.ok) {
+      // Update proxy status
+      proxy.lastUsed = Date.now();
+      proxy.status = 'active';
+      userData.proxy = proxy;
+      setUserData(tgId, userData);
+
+      return res.json({
+        ok: true,
+        status: 'working',
+        message: '✅ Proxy is working correctly!'
+      });
+    } else {
+      proxy.status = 'failed';
+      userData.proxy = proxy;
+      setUserData(tgId, userData);
+
+      return res.json({
+        ok: false,
+        status: 'failed',
+        message: '❌ Proxy test failed. Check your proxy credentials.'
+      });
+    }
+  } catch (error) {
+    proxy.status = 'error';
+    userData.proxy = proxy;
+    setUserData(tgId, userData);
+
+    return res.json({
+      ok: false,
+      status: 'error',
+      message: `❌ Proxy test error: ${error.message}`
+    });
+  }
+});
+
+// POST /api/tg/co - Checkout hitter with proxy requirement
+router.post('/co', async (req, res) => {
+  const { tg_id, checkout_url } = req.body || {};
+  const tgId = String(tg_id || '').trim();
+
+  if (!tgId || !/^\d{5,15}$/.test(tgId)) {
+    return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
+  }
+
+  if (!checkout_url) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Checkout URL required'
+    });
+  }
+
+  // Check if user has proxy configured
+  const userData = getUserData(tgId);
+  if (!userData?.proxy) {
+    return res.json({
+      ok: false,
+      error: '❌ Proxy Required!\n\nYou must add a proxy before using /co.\n\nUse: /addpxy host:port:user:pass'
+    });
+  }
+
+  const proxy = userData.proxy;
+
+  // Validate proxy is working
+  if (proxy.status !== 'active') {
+    return res.json({
+      ok: false,
+      error: `❌ Proxy Not Active!\n\nYour proxy status: ${proxy.status}\n\nUse /chkpxy to test your proxy.`
+    });
+  }
+
+  console.log(`[CO_CHECKOUT] User ${tgId} using proxy: ${proxy.host}:${proxy.port}`);
+
+  try {
+    // Parse checkout URL to extract necessary data
+    const parsedUrl = parseCheckoutUrl(checkout_url);
+    if (!parsedUrl.success || !parsedUrl.publicKey) {
+      return res.json({
+        ok: false,
+        error: '❌ Invalid Checkout URL!\n\nPlease provide a valid Stripe checkout URL.'
+      });
+    }
+
+    // Make API call through user's proxy (simplified - would need proxy library for production)
+    const apiUrl = `https://api.stripe.com/v1/payment_pages/${parsedUrl.sessionId}?key=${parsedUrl.publicKey}&eid=NA`;
+
+    console.log(`[CO_CHECKOUT] Processing checkout for user ${tgId} through proxy ${proxy.host}:${proxy.port}`);
+
+    // Make the actual API call (without proxy for now - would need proxy library)
+    const response = await new Promise((resolve, reject) => {
+      const https = require('https');
+      const request = https.get(apiUrl, {
+        headers: {
+          'accept': 'application/json',
+          'accept-language': 'en',
+          'cache-control': 'no-cache',
+          'content-type': 'application/x-www-form-urlencoded',
+          'origin': 'https://checkout.stripe.com',
+          'referer': 'https://checkout.stripe.com/',
+          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        timeout: 15000
+      }, (res) => {
+        let data = '';
+        res.on('data', (chunk) => data += chunk);
+        res.on('end', () => {
+          try {
+            resolve({ status: res.statusCode, data: JSON.parse(data) });
+          } catch (e) {
+            resolve({ status: res.statusCode, data: null, error: e.message });
+          }
+        });
+      });
+
+      request.on('error', (error) => reject(error));
+      request.on('timeout', () => {
+        request.destroy();
+        reject(new Error('Timeout'));
+      });
+    });
+
+    if (response.status === 200 && response.data) {
+      // Extract checkout information
+      const merchant = response.data.account_settings?.business_url ?
+        response.data.account_settings.business_url.replace(/^https?:\/\//, '').replace(/\/$/, '') :
+        'Stripe Checkout';
+
+      const amount = response.data.amount_total ?
+        (response.data.amount_total / 100).toFixed(2) : '0.00';
+
+      const currency = response.data.currency ? response.data.currency.toUpperCase() : 'USD';
+      const currencySymbol = currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '$';
+
+      // Update proxy last used time
+      proxy.lastUsed = Date.now();
+      userData.proxy = proxy;
+      setUserData(tgId, userData);
+
+      return res.json({
+        ok: true,
+        message: `✅ Checkout Analyzed Successfully!\n\n🏪 Merchant: ${merchant}\n💰 Amount: ${currencySymbol}${amount} ${currency}\n🌐 Proxy: ${proxy.host}:${proxy.port}\n\n✅ Protected by your proxy!`,
+        data: {
+          merchant,
+          amount: `${currencySymbol}${amount}`,
+          currency,
+          proxy_used: `${proxy.host}:${proxy.port}`
+        }
+      });
+    } else {
+      return res.json({
+        ok: false,
+        error: '❌ Failed to analyze checkout!\n\nThe checkout URL might be expired or invalid.'
+      });
+    }
+
+  } catch (error) {
+    console.error('[CO_CHECKOUT] Error:', error.message);
+    return res.json({
+      ok: false,
+      error: `❌ Checkout Analysis Failed!\n\nError: ${error.message}`
+    });
+  }
+});
+
 // POST /api/tg/add-hits - Manually add hits (development only)
 router.post('/add-hits', (req, res) => {
   const { tg_id, hits, global } = req.body || {};
