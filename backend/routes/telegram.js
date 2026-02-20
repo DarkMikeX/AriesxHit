@@ -1353,48 +1353,113 @@ router.post('/add-proxy', (req, res) => {
   });
 });
 
-// DELETE /api/tg/del-proxy - Delete specific proxy by ID
-router.delete('/del-proxy', (req, res) => {
-  const { tg_id, proxy_id } = req.body || {};
-  const tgId = String(tg_id || '').trim();
+// POST /api/tg/delete-proxy - Delete specific proxy by ID (using POST for compatibility)
+router.post('/delete-proxy', (req, res) => {
+  try {
+    const { tg_id, proxy_id } = req.body;
+    const tgId = String(tg_id || '').trim();
 
-  if (!tgId || !/^\d{5,15}$/.test(tgId)) {
-    return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
-  }
-
-  const userData = getUserData(tgId);
-  if (!userData?.proxies || !Array.isArray(userData.proxies)) {
-    return res.status(404).json({ ok: false, error: 'No proxies found for user' });
-  }
-
-  if (proxy_id) {
-    // Delete specific proxy
-    const originalLength = userData.proxies.length;
-    userData.proxies = userData.proxies.filter(p => p.id !== proxy_id);
-
-    if (userData.proxies.length === originalLength) {
-      return res.status(404).json({ ok: false, error: 'Proxy not found' });
+    if (!tgId || !/^\d{5,15}$/.test(tgId)) {
+      return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
     }
-  } else {
-    // Delete first proxy (backward compatibility)
-    if (userData.proxies.length === 0) {
+
+    const userData = getUserData(tgId);
+    if (!userData?.proxies || !Array.isArray(userData.proxies)) {
       return res.status(404).json({ ok: false, error: 'No proxies found for user' });
     }
-    userData.proxies.shift();
+
+    if (proxy_id) {
+      // Delete specific proxy by ID
+      const originalLength = userData.proxies.length;
+      userData.proxies = userData.proxies.filter(p => String(p.id) !== String(proxy_id));
+
+      if (userData.proxies.length === originalLength) {
+        return res.status(404).json({ ok: false, error: 'Proxy not found' });
+      }
+    } else {
+      // Delete first proxy (backward compatibility)
+      if (userData.proxies.length === 0) {
+        return res.status(404).json({ ok: false, error: 'No proxies found for user' });
+      }
+      userData.proxies.shift();
+    }
+
+    setUserData(tgId, userData);
+    console.log(`[DEL_PROXY] Proxy deleted for user ${tgId}`);
+
+    return res.json({
+      ok: true,
+      message: `✅ Proxy deleted successfully!\n\nRemaining proxies: ${userData.proxies.length}`,
+      remaining: userData.proxies.length
+    });
+  } catch (error) {
+    console.error('[DELETE_PROXY] Error:', error);
+    return res.status(500).json({ ok: false, error: 'Internal server error' });
   }
-
-  setUserData(tgId, userData);
-  console.log(`[DEL_PROXY] Proxy deleted for user ${tgId}`);
-
-  return res.json({
-    ok: true,
-    message: `✅ Proxy deleted successfully!\n\nRemaining proxies: ${userData.proxies.length}`,
-    remaining: userData.proxies.length
-  });
 });
 
-// DELETE /api/tg/del-all-proxies - Delete all user's proxies
-router.delete('/del-all-proxies', (req, res) => {
+// POST /api/tg/delete-proxy-by-string - Delete proxy by full proxy string
+router.post('/delete-proxy-by-string', (req, res) => {
+  try {
+    const { tg_id, proxy_string } = req.body;
+    const tgId = String(tg_id || '').trim();
+
+    if (!tgId || !/^\d{5,15}$/.test(tgId)) {
+      return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
+    }
+
+    if (!proxy_string) {
+      return res.status(400).json({ ok: false, error: 'Proxy string is required' });
+    }
+
+    const userData = getUserData(tgId);
+    if (!userData?.proxies || !Array.isArray(userData.proxies)) {
+      return res.status(404).json({ ok: false, error: 'No proxies found for user' });
+    }
+
+    // Parse the proxy string to match against stored proxies
+    const proxyParts = proxy_string.split(':');
+    if (proxyParts.length !== 4) {
+      return res.status(400).json({ ok: false, error: 'Invalid proxy format. Expected: host:port:user:pass' });
+    }
+
+    const [host, portStr, user, pass] = proxyParts;
+    const port = parseInt(portStr);
+
+    if (isNaN(port) || port < 1 || port > 65535) {
+      return res.status(400).json({ ok: false, error: 'Invalid port number' });
+    }
+
+    // Find and remove the exact proxy match
+    const originalLength = userData.proxies.length;
+    userData.proxies = userData.proxies.filter(p =>
+      !(p.host === host && p.port === port && p.user === user && p.pass === pass)
+    );
+
+    if (userData.proxies.length === originalLength) {
+      return res.status(404).json({
+        ok: false,
+        error: `Proxy not found: ${host}:${port}:${user}:***\n\nUse /seepxy to see your current proxies.`
+      });
+    }
+
+    setUserData(tgId, userData);
+    console.log(`[DEL_PROXY_BY_STRING] Proxy deleted for user ${tgId}: ${host}:${port}:${user}:***`);
+
+    return res.json({
+      ok: true,
+      message: `✅ Proxy deleted successfully!\n\n🗑️ Deleted: ${host}:${port}:${user}:***\n📊 Remaining proxies: ${userData.proxies.length}`,
+      deleted_proxy: `${host}:${port}:${user}:***`,
+      remaining: userData.proxies.length
+    });
+  } catch (error) {
+    console.error('[DELETE_PROXY_BY_STRING] Error:', error);
+    return res.status(500).json({ ok: false, error: 'Internal server error' });
+  }
+});
+
+// POST /api/tg/del-all-proxies - Delete all user's proxies
+router.post('/del-all-proxies', (req, res) => {
   const { tg_id } = req.body || {};
   const tgId = String(tg_id || '').trim();
 
@@ -1886,7 +1951,7 @@ router.post('/webhook', async (req, res) => {
             `🔍 <b>Manage Proxies:</b>\n` +
             `• <code>/seepxy</code> - View all proxies\n` +
             `• <code>/chkpxy</code> - Test all proxies\n` +
-            `• <code>/delpxy [id]</code> - Delete proxy\n` +
+            `• <code>/delpxy host:port:user:pass</code> - Delete proxy\n` +
             `• <code>/delallpxy</code> - Delete all proxies\n\n` +
             `🔎 <b>Find Proxies:</b>\n` +
             `• Reply to message with <code>/flpxy</code>\n\n` +
@@ -1996,7 +2061,7 @@ router.post('/webhook', async (req, res) => {
 
     // Debug command to check user ID (/debug)
     if (msg?.text && msg.text === '/debug') {
-      await sendMessage(BOT_TOKEN, chatId, `🔧 <b>BOT DEBUG INFO</b>\n\n📊 <b>Your Telegram ID:</b> <code>${tgId}</code>\n🤖 <b>Bot Status:</b> Online\n📡 <b>Server:</b> Connected\n\n💡 <b>Commands Available:</b>\n• /co - Checkout hitter\n• /addpxy - Add proxy\n• /seepxy - View proxies\n• /chkpxy - Test proxies\n• /delpxy - Delete proxy\n• /start - Main menu\n• /debug - This info`);
+      await sendMessage(BOT_TOKEN, chatId, `🔧 <b>BOT DEBUG INFO</b>\n\n📊 <b>Your Telegram ID:</b> <code>${tgId}</code>\n🤖 <b>Bot Status:</b> Online\n📡 <b>Server:</b> Connected\n\n💡 <b>Commands Available:</b>\n• /co - Checkout hitter\n• /addpxy - Add proxy\n• /seepxy - View proxies\n• /chkpxy - Test proxies\n• /delpxy - Delete proxy\n• /delallpxy - Delete all proxies\n• /start - Main menu\n• /debug - This info`);
       return;
     }
 
@@ -2060,18 +2125,29 @@ router.post('/webhook', async (req, res) => {
       return;
     }
 
-    // Delete proxy command (/delpxy [proxy_id])
+    // Delete proxy command (/delpxy <proxy_string>)
     if (msg?.text && (msg.text.startsWith('/delpxy') || msg.text.startsWith('/delproxy'))) {
       try {
-        const parts = msg.text.split(/\s+/);
-        const proxyId = parts[1]; // Optional proxy ID
+        const commandText = msg.text.substring(msg.text.indexOf(' ') + 1).trim();
 
-        // Make API call to delete proxy
-        const apiUrl = `${process.env.API_BASE_URL || 'http://localhost:3001'}/api/tg/del-proxy`;
+        if (!commandText) {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Invalid Format</b>\n\nUsage: <code>/delpxy host:port:user:pass</code>\n\nExample:\n<code>/delpxy 192.168.1.100:8080:myuser:mypass123</code>`);
+          return;
+        }
+
+        // Validate proxy format
+        const proxyParts = commandText.split(':');
+        if (proxyParts.length !== 4) {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Invalid Proxy Format</b>\n\nFormat: <code>host:port:user:pass</code>\n\nExample:\n<code>/delpxy 192.168.1.100:8080:myuser:mypass123</code>`);
+          return;
+        }
+
+        // Make API call to delete proxy by string
+        const apiUrl = `${process.env.API_BASE_URL || 'http://localhost:3001'}/api/tg/delete-proxy-by-string`;
         const response = await fetch(apiUrl, {
-          method: 'DELETE',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tg_id: tgId, proxy_id: proxyId })
+          body: JSON.stringify({ tg_id: tgId, proxy_string: commandText })
         });
 
         const result = await response.json();
@@ -2093,10 +2169,10 @@ router.post('/webhook', async (req, res) => {
     // Delete all proxies command (/delallpxy)
     if (msg?.text && (msg.text === '/delallpxy' || msg.text === '/delallproxy')) {
       try {
-        // Make API call to delete all proxies
+        // Make API call to delete all proxies (using POST for compatibility)
         const apiUrl = `${process.env.API_BASE_URL || 'http://localhost:3001'}/api/tg/del-all-proxies`;
         const response = await fetch(apiUrl, {
-          method: 'DELETE',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tg_id: tgId })
         });
