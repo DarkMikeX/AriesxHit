@@ -2103,13 +2103,18 @@ router.post('/webhook', async (req, res) => {
 
         // Make API call to add proxy
         const apiUrl = `${process.env.API_BASE_URL || 'http://localhost:3001'}/api/tg/add-proxy`;
+        console.log('[ADD_PROXY_COMMAND] Making API call to:', apiUrl, 'with data:', { tg_id: tgId, proxy: proxyData });
+
         const response = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tg_id: tgId, proxy: proxyData })
         });
 
+        console.log('[ADD_PROXY_COMMAND] API response status:', response.status);
+
         const result = await response.json();
+        console.log('[ADD_PROXY_COMMAND] API response:', result);
 
         if (result.ok) {
           await sendMessage(BOT_TOKEN, chatId, `✅ <b>Proxy Added!</b>\n\n${result.message}`);
@@ -2119,7 +2124,13 @@ router.post('/webhook', async (req, res) => {
 
       } catch (error) {
         console.error('[ADD_PROXY_COMMAND] Error:', error);
-        await sendMessage(BOT_TOKEN, chatId, `❌ <b>Error</b>\n\nFailed to process proxy addition. Please try again.`);
+        console.error('[ADD_PROXY_COMMAND] Error details:', {
+          message: error.message,
+          stack: error.stack,
+          code: error.code,
+          errno: error.errno
+        });
+        await sendMessage(BOT_TOKEN, chatId, `❌ <b>Error</b>\n\nFailed to process proxy addition: ${error.message}`);
       }
 
       return;
@@ -2274,13 +2285,18 @@ router.post('/webhook', async (req, res) => {
 
         // Make API call to check proxies
         const apiUrl = `${process.env.API_BASE_URL || 'http://localhost:3001'}/api/tg/check-proxy`;
+        console.log('[CHK_PROXY_COMMAND] Making API call to:', apiUrl, 'with data:', { tg_id: tgId, ...(proxiesToCheck && { proxies: proxiesToCheck }) });
+
         const response = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tg_id: tgId, ...(proxiesToCheck && { proxies: proxiesToCheck }) })
         });
 
+        console.log('[CHK_PROXY_COMMAND] API response status:', response.status);
+
         const result = await response.json();
+        console.log('[CHK_PROXY_COMMAND] API response:', result);
 
         if (result.ok) {
           let checkResult = `🔍 <b>Proxy Check Results</b>\n═════════════════════════════════\n\n`;
@@ -2313,7 +2329,13 @@ router.post('/webhook', async (req, res) => {
 
       } catch (error) {
         console.error('[CHK_PROXY_COMMAND] Error:', error);
-        await sendMessage(BOT_TOKEN, chatId, `❌ <b>Error</b>\n\nFailed to check proxies. Please try again.`);
+        console.error('[CHK_PROXY_COMMAND] Error details:', {
+          message: error.message,
+          stack: error.stack,
+          code: error.code,
+          errno: error.errno
+        });
+        await sendMessage(BOT_TOKEN, chatId, `❌ <b>Error</b>\n\nFailed to check proxies: ${error.message}`);
       }
 
       return;
