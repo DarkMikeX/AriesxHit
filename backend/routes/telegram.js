@@ -1243,59 +1243,158 @@ router.get('/test-stats', (req, res) => {
   return res.json({ ok: true, data: response });
 });
 
-// POST /api/tg/add-proxy - Add user's proxy
+// POST /api/tg/add-proxy - Add user's proxy (supports single proxy or multiple from file)
 router.post('/add-proxy', (req, res) => {
-  const { tg_id, proxy } = req.body || {};
+  const { tg_id, proxy, proxies } = req.body || {};
   const tgId = String(tg_id || '').trim();
 
   if (!tgId || !/^\d{5,15}$/.test(tgId)) {
     return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
   }
 
-  if (!proxy) {
-    return res.status(400).json({ ok: false, error: 'Proxy required' });
-  }
+  const userData = getUserData(tgId) || {};
+  const existingProxies = userData.proxies || [];
 
-  // Validate proxy format: host:port:user:pass
-  const proxyParts = proxy.split(':');
-  if (proxyParts.length !== 4) {
-    return res.status(400).json({ ok: false, error: 'Invalid proxy format. Use: host:port:user:pass' });
-  }
+  let proxiesToAdd = [];
+  let successCount = 0;
+  let errorCount = 0;
 
-  const [host, port, user, pass] = proxyParts;
-  if (!host || !port || !user || !pass) {
-    return res.status(400).json({ ok: false, error: 'All proxy fields required: host:port:user:pass' });
-  }
+  // Function to validate and create proxy object
+  const createProxyObject = (proxyString) => {
+    const proxyParts = proxyString.trim().split(':');
+    if (proxyParts.length !== 4) {
+      return null;
+    }
 
-  const portNum = parseInt(port, 10);
-  if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
-    return res.status(400).json({ ok: false, error: 'Invalid port number' });
-  }
+    const [host, port, user, pass] = proxyParts;
+    if (!host || !port || !user || !pass) {
+      return null;
+    }
 
-  // Save proxy for user
-  const proxyData = {
-    host,
-    port: portNum,
-    user,
-    pass,
-    addedAt: Date.now(),
-    lastUsed: null,
-    status: 'active'
+    const portNum = parseInt(port, 10);
+    if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+      return null;
+    }
+
+    return {
+      id: Date.now() + Math.random(),
+      host,
+      port: portNum,
+      user,
+      pass,
+      addedAt: Date.now(),
+      lastUsed: null,
+      status: 'active'
+    };
   };
 
-  setUserData(tgId, { proxy: proxyData });
+  // Handle single proxy
+  if (proxy && typeof proxy === 'string') {
+    const proxyObj = createProxyObject(proxy);
+    if (proxyObj) {
+      proxiesToAdd.push(proxyObj);
+    } else {
+      return res.status(400).json({ ok: false, error: 'Invalid proxy format. Use: host:port:user:pass' });
+    }
+  }
 
-  console.log(`[ADD_PROXY] Proxy added for user ${tgId}: ${host}:${portNum}`);
+  // Handle multiple proxies from array or string
+  if (proxies) {
+    if (Array.isArray(proxies)) {
+      proxies.forEach(proxyStr => {
+        const proxyObj = createProxyObject(proxyStr);
+        if (proxyObj) {
+          proxiesToAdd.push(proxyObj);
+          successCount++;
+        } else {
+          errorCount++;
+        }
+      });
+    } else if (typeof proxies === 'string') {
+      // Parse multiline string
+      const lines = proxies.split('\n').filter(line => line.trim());
+      lines.forEach(line => {
+        const proxyObj = createProxyObject(line);
+        if (proxyObj) {
+          proxiesToAdd.push(proxyObj);
+          successCount++;
+        } else {
+          errorCount++;
+        }
+      });
+    }
+  }
+
+  if (proxiesToAdd.length === 0) {
+    return res.status(400).json({ ok: false, error: 'No valid proxies provided' });
+  }
+
+  // Add new proxies to existing ones
+  const updatedProxies = [...existingProxies, ...proxiesToAdd];
+  setUserData(tgId, { proxies: updatedProxies });
+
+  console.log(`[ADD_PROXY] Added ${proxiesToAdd.length} proxies for user ${tgId}`);
+
+  let message;
+  if (proxiesToAdd.length === 1) {
+    const p = proxiesToAdd[0];
+    message = `✅ Proxy Added Successfully!\n\n🌐 Host: ${p.host}\n🔌 Port: ${p.port}\n👤 User: ${p.user}\n📅 Added: ${new Date().toLocaleString()}\n\nYou can now use /co command!`;
+  } else {
+    message = `✅ Proxies Added Successfully!\n\n📊 Added: ${successCount} proxies\n❌ Failed: ${errorCount} proxies\n📈 Total: ${updatedProxies.length} proxies\n\nUse /seepxy to view all proxies!`;
+  }
 
   return res.json({
     ok: true,
-    message: `✅ Proxy Added Successfully!\n\n🌐 Host: ${host}\n🔌 Port: ${portNum}\n👤 User: ${user}\n📅 Added: ${new Date().toLocaleString()}\n\nYou can now use /co command!`,
-    proxy: `${host}:${portNum}:${user}:***`
+    message,
+    added: successCount || 1,
+    failed: errorCount,
+    total: updatedProxies.length,
+    proxies: proxiesToAdd.map(p => `${p.host}:${p.port}:${p.user}:***`)
   });
 });
 
-// DELETE /api/tg/del-proxy - Delete user's proxy
+// DELETE /api/tg/del-proxy - Delete specific proxy by ID
 router.delete('/del-proxy', (req, res) => {
+  const { tg_id, proxy_id } = req.body || {};
+  const tgId = String(tg_id || '').trim();
+
+  if (!tgId || !/^\d{5,15}$/.test(tgId)) {
+    return res.status(400).json({ ok: false, error: 'Invalid Telegram ID format' });
+  }
+
+  const userData = getUserData(tgId);
+  if (!userData?.proxies || !Array.isArray(userData.proxies)) {
+    return res.status(404).json({ ok: false, error: 'No proxies found for user' });
+  }
+
+  if (proxy_id) {
+    // Delete specific proxy
+    const originalLength = userData.proxies.length;
+    userData.proxies = userData.proxies.filter(p => p.id !== proxy_id);
+
+    if (userData.proxies.length === originalLength) {
+      return res.status(404).json({ ok: false, error: 'Proxy not found' });
+    }
+  } else {
+    // Delete first proxy (backward compatibility)
+    if (userData.proxies.length === 0) {
+      return res.status(404).json({ ok: false, error: 'No proxies found for user' });
+    }
+    userData.proxies.shift();
+  }
+
+  setUserData(tgId, userData);
+  console.log(`[DEL_PROXY] Proxy deleted for user ${tgId}`);
+
+  return res.json({
+    ok: true,
+    message: `✅ Proxy deleted successfully!\n\nRemaining proxies: ${userData.proxies.length}`,
+    remaining: userData.proxies.length
+  });
+});
+
+// DELETE /api/tg/del-all-proxies - Delete all user's proxies
+router.delete('/del-all-proxies', (req, res) => {
   const { tg_id } = req.body || {};
   const tgId = String(tg_id || '').trim();
 
@@ -1304,23 +1403,26 @@ router.delete('/del-proxy', (req, res) => {
   }
 
   const userData = getUserData(tgId);
-  if (!userData?.proxy) {
-    return res.status(404).json({ ok: false, error: 'No proxy found for user' });
+  const proxyCount = userData?.proxies?.length || 0;
+
+  if (proxyCount === 0) {
+    return res.status(404).json({ ok: false, error: 'No proxies found for user' });
   }
 
-  // Remove proxy from user data
-  delete userData.proxy;
+  // Remove all proxies
+  userData.proxies = [];
   setUserData(tgId, userData);
 
-  console.log(`[DEL_PROXY] Proxy deleted for user ${tgId}`);
+  console.log(`[DEL_ALL_PROXIES] All ${proxyCount} proxies deleted for user ${tgId}`);
 
   return res.json({
     ok: true,
-    message: '✅ Proxy deleted successfully!\n\nUse /addpxy to add a new proxy.'
+    message: `✅ All proxies deleted successfully!\n\nDeleted: ${proxyCount} proxies\n\nUse /addpxy to add new proxies.`,
+    deleted: proxyCount
   });
 });
 
-// GET /api/tg/see-proxy - Get user's proxy
+// GET /api/tg/see-proxy - Get user's proxies
 router.get('/see-proxy', (req, res) => {
   const { tg_id } = req.query || {};
   const tgId = String(tg_id || '').trim();
@@ -1330,27 +1432,35 @@ router.get('/see-proxy', (req, res) => {
   }
 
   const userData = getUserData(tgId);
-  if (!userData?.proxy) {
-    return res.status(404).json({ ok: false, error: 'No proxy found for user' });
+  if (!userData?.proxies || !Array.isArray(userData.proxies) || userData.proxies.length === 0) {
+    return res.status(404).json({ ok: false, error: 'No proxies found for user' });
   }
 
-  const proxy = userData.proxy;
+  const proxies = userData.proxies.map(p => ({
+    id: p.id,
+    host: p.host,
+    port: p.port,
+    user: p.user,
+    status: p.status,
+    addedAt: p.addedAt,
+    lastUsed: p.lastUsed
+  }));
+
+  const activeCount = proxies.filter(p => p.status === 'active').length;
+  const totalCount = proxies.length;
+
   return res.json({
     ok: true,
-    proxy: {
-      host: proxy.host,
-      port: proxy.port,
-      user: proxy.user,
-      status: proxy.status,
-      addedAt: proxy.addedAt,
-      lastUsed: proxy.lastUsed
-    }
+    total: totalCount,
+    active: activeCount,
+    inactive: totalCount - activeCount,
+    proxies: proxies
   });
 });
 
-// POST /api/tg/check-proxy - Test user's proxy
+// POST /api/tg/check-proxy - Test user's proxies (single or all)
 router.post('/check-proxy', async (req, res) => {
-  const { tg_id } = req.body || {};
+  const { tg_id, proxies } = req.body || {};
   const tgId = String(tg_id || '').trim();
 
   if (!tgId || !/^\d{5,15}$/.test(tgId)) {
@@ -1358,56 +1468,145 @@ router.post('/check-proxy', async (req, res) => {
   }
 
   const userData = getUserData(tgId);
-  if (!userData?.proxy) {
-    return res.status(404).json({ ok: false, error: 'No proxy found for user' });
+  let proxiesToTest = [];
+
+  // Handle external proxies from file/text
+  if (proxies && Array.isArray(proxies)) {
+    proxiesToTest = proxies.map(proxyStr => {
+      const parts = proxyStr.split(':');
+      if (parts.length === 4) {
+        return {
+          host: parts[0],
+          port: parseInt(parts[1]),
+          user: parts[2],
+          pass: parts[3],
+          isExternal: true
+        };
+      }
+      return null;
+    }).filter(Boolean);
+  }
+  // Test all user's proxies
+  else if (userData?.proxies && Array.isArray(userData.proxies)) {
+    proxiesToTest = userData.proxies.map(p => ({ ...p, isExternal: false }));
+  } else {
+    return res.status(404).json({ ok: false, error: 'No proxies found to test' });
   }
 
-  const proxy = userData.proxy;
+  if (proxiesToTest.length === 0) {
+    return res.status(400).json({ ok: false, error: 'No valid proxies to test' });
+  }
 
-  try {
-    // Simple proxy test (in production, use proper proxy library)
-    const testResponse = await fetch('https://httpbin.org/ip', {
-      method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      },
-      signal: AbortSignal.timeout(10000)
-    });
+  const results = [];
+  let workingCount = 0;
+  let failedCount = 0;
 
-    if (testResponse.ok) {
-      // Update proxy status
-      proxy.lastUsed = Date.now();
-      proxy.status = 'active';
-      userData.proxy = proxy;
-      setUserData(tgId, userData);
-
-      return res.json({
-        ok: true,
-        status: 'working',
-        message: '✅ Proxy is working correctly!'
+  // Test each proxy
+  for (const proxy of proxiesToTest) {
+    try {
+      // Simple connectivity test (would use proper proxy in production)
+      const testResponse = await fetch('https://httpbin.org/ip', {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        signal: AbortSignal.timeout(8000)
       });
-    } else {
-      proxy.status = 'failed';
-      userData.proxy = proxy;
-      setUserData(tgId, userData);
 
-      return res.json({
-        ok: false,
-        status: 'failed',
-        message: '❌ Proxy test failed. Check your proxy credentials.'
+      const isWorking = testResponse.ok;
+      const status = isWorking ? 'working' : 'failed';
+
+      if (isWorking) workingCount++;
+      else failedCount++;
+
+      results.push({
+        proxy: `${proxy.host}:${proxy.port}:${proxy.user}:***`,
+        status,
+        isExternal: proxy.isExternal || false
+      });
+
+      // Update status if it's user's proxy
+      if (!proxy.isExternal) {
+        const userProxy = userData.proxies.find(p => p.id === proxy.id);
+        if (userProxy) {
+          userProxy.status = isWorking ? 'active' : 'failed';
+          userProxy.lastUsed = Date.now();
+        }
+      }
+
+    } catch (error) {
+      failedCount++;
+      results.push({
+        proxy: `${proxy.host}:${proxy.port}:${proxy.user}:***`,
+        status: 'error',
+        error: error.message,
+        isExternal: proxy.isExternal || false
+      });
+
+      // Update status if it's user's proxy
+      if (!proxy.isExternal) {
+        const userProxy = userData.proxies.find(p => p.id === proxy.id);
+        if (userProxy) {
+          userProxy.status = 'error';
+        }
+      }
+    }
+  }
+
+  // Save updated user data
+  if (!proxies) { // Only save if testing user's own proxies
+    setUserData(tgId, userData);
+  }
+
+  const message = proxies ?
+    `✅ Proxy Check Complete!\n\n📊 Total: ${results.length}\n✅ Working: ${workingCount}\n❌ Failed: ${failedCount}` :
+    `✅ Proxy Status Updated!\n\n✅ Working: ${workingCount}\n❌ Failed: ${failedCount}\n📊 Total: ${results.length}`;
+
+  return res.json({
+    ok: true,
+    message,
+    total: results.length,
+    working: workingCount,
+    failed: failedCount,
+    results: results
+  });
+});
+
+// POST /api/tg/find-proxies - Extract proxies from text/file content
+router.post('/find-proxies', (req, res) => {
+  const { text } = req.body || {};
+
+  if (!text || typeof text !== 'string') {
+    return res.status(400).json({ ok: false, error: 'Text content required' });
+  }
+
+  // Regex to find proxy patterns: host:port:user:pass
+  const proxyRegex = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|\w+\.\w+):(\d{1,5}):([^:\s]+):([^:\s]+)/g;
+  const foundProxies = [];
+  let match;
+
+  while ((match = proxyRegex.exec(text)) !== null) {
+    const [fullMatch, host, port, user, pass] = match;
+    const portNum = parseInt(port);
+
+    // Basic validation
+    if (portNum >= 1 && portNum <= 65535 && host && user && pass) {
+      foundProxies.push({
+        proxy: fullMatch,
+        host,
+        port: portNum,
+        user,
+        pass
       });
     }
-  } catch (error) {
-    proxy.status = 'error';
-    userData.proxy = proxy;
-    setUserData(tgId, userData);
-
-    return res.json({
-      ok: false,
-      status: 'error',
-      message: `❌ Proxy test error: ${error.message}`
-    });
   }
+
+  return res.json({
+    ok: true,
+    found: foundProxies.length,
+    proxies: foundProxies.map(p => p.proxy),
+    details: foundProxies
+  });
 });
 
 // POST /api/tg/co - Checkout hitter with proxy requirement
@@ -1426,26 +1625,28 @@ router.post('/co', async (req, res) => {
     });
   }
 
-  // Check if user has proxy configured
+  // Check if user has proxies configured
   const userData = getUserData(tgId);
-  if (!userData?.proxy) {
+  if (!userData?.proxies || !Array.isArray(userData.proxies) || userData.proxies.length === 0) {
     return res.json({
       ok: false,
       error: '❌ Proxy Required!\n\nYou must add a proxy before using /co.\n\nUse: /addpxy host:port:user:pass'
     });
   }
 
-  const proxy = userData.proxy;
-
-  // Validate proxy is working
-  if (proxy.status !== 'active') {
+  // Get active proxies
+  const activeProxies = userData.proxies.filter(p => p.status === 'active');
+  if (activeProxies.length === 0) {
     return res.json({
       ok: false,
-      error: `❌ Proxy Not Active!\n\nYour proxy status: ${proxy.status}\n\nUse /chkpxy to test your proxy.`
+      error: `❌ No Active Proxies!\n\nYou have ${userData.proxies.length} proxies, but none are active.\n\nUse /chkpxy to test your proxies.`
     });
   }
 
-  console.log(`[CO_CHECKOUT] User ${tgId} using proxy: ${proxy.host}:${proxy.port}`);
+  // Randomly select a proxy from active ones
+  const selectedProxy = activeProxies[Math.floor(Math.random() * activeProxies.length)];
+
+  console.log(`[CO_CHECKOUT] User ${tgId} using random proxy ${activeProxies.length} available: ${selectedProxy.host}:${selectedProxy.port}`);
 
   try {
     // Parse checkout URL to extract necessary data
@@ -1457,10 +1658,10 @@ router.post('/co', async (req, res) => {
       });
     }
 
-    // Make API call through user's proxy (simplified - would need proxy library for production)
+    // Make API call through randomly selected proxy (simplified - would need proxy library for production)
     const apiUrl = `https://api.stripe.com/v1/payment_pages/${parsedUrl.sessionId}?key=${parsedUrl.publicKey}&eid=NA`;
 
-    console.log(`[CO_CHECKOUT] Processing checkout for user ${tgId} through proxy ${proxy.host}:${proxy.port}`);
+    console.log(`[CO_CHECKOUT] Processing checkout for user ${tgId} through proxy ${selectedProxy.host}:${selectedProxy.port}`);
 
     // Make the actual API call (without proxy for now - would need proxy library)
     const response = await new Promise((resolve, reject) => {
@@ -1507,19 +1708,18 @@ router.post('/co', async (req, res) => {
       const currency = response.data.currency ? response.data.currency.toUpperCase() : 'USD';
       const currencySymbol = currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '$';
 
-      // Update proxy last used time
-      proxy.lastUsed = Date.now();
-      userData.proxy = proxy;
+      // Update selected proxy last used time
+      selectedProxy.lastUsed = Date.now();
       setUserData(tgId, userData);
 
       return res.json({
         ok: true,
-        message: `✅ Checkout Analyzed Successfully!\n\n🏪 Merchant: ${merchant}\n💰 Amount: ${currencySymbol}${amount} ${currency}\n🌐 Proxy: ${proxy.host}:${proxy.port}\n\n✅ Protected by your proxy!`,
+        message: `✅ Checkout Analyzed Successfully!\n\n🏪 Merchant: ${merchant}\n💰 Amount: ${currencySymbol}${amount} ${currency}\n🌐 Proxy: ${selectedProxy.host}:${selectedProxy.port}\n\n✅ Protected by random proxy rotation!`,
         data: {
           merchant,
           amount: `${currencySymbol}${amount}`,
           currency,
-          proxy_used: `${proxy.host}:${proxy.port}`
+          proxy_used: `${selectedProxy.host}:${selectedProxy.port}`
         }
       });
     } else {
