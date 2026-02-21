@@ -2602,17 +2602,6 @@ router.post('/webhook', async (req, res) => {
           return;
         }
 
-        // Send initial processing message with better UI
-        await sendMessage(BOT_TOKEN, chatId,
-          `🔥 <b>ARIESXHIT CHECKOUT TESTER</b> 🔥\n` +
-          `═══════════════════════════════════════\n\n` +
-          `🎯 <b>Target:</b> ${merchantName}\n` +
-          `💳 <b>Cards Loaded:</b> ${validCards.length}\n` +
-          `🔗 <b>Checkout URL:</b> ${checkoutUrl.substring(0, 35)}...\n\n` +
-          `⚡ <b>Starting mass testing...</b>\n` +
-          `📊 <b>Results will be sent individually</b>\n\n` +
-          `═══════════════════════════════════════`
-        );
 
         console.log('[CO_COMMAND] Fetching checkout information for merchant extraction...');
         // Extract session info and fetch checkout details to get accurate merchant name

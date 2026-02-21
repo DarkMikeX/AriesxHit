@@ -147,17 +147,14 @@ class CheckoutService {
     };
   }
 
-  // Make HTTP request (no proxy for now)
+  // Make HTTP request with proxy support
   async makeRequest(url, data, options = {}) {
     return new Promise((resolve, reject) => {
       const urlObj = new URL(url);
       const postData = new URLSearchParams(data).toString();
 
-      const requestOptions = {
-        hostname: urlObj.hostname,
-        port: urlObj.protocol === 'https:' ? 443 : 80,
-        path: urlObj.pathname + urlObj.search,
-        method: 'POST',
+      // Proxy support
+      let requestOptions = {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'Content-Length': Buffer.byteLength(postData),
@@ -167,8 +164,54 @@ class CheckoutService {
           'User-Agent': options.userAgent || this.USER_AGENTS[0],
           ...options.headers
         },
-        timeout: options.timeout || 30000,
-        ...options.requestOptions
+        timeout: options.timeout || 30000
+      };
+
+      // If proxy is provided, use it
+      if (options.proxy && options.proxy.host) {
+        const proxy = options.proxy;
+        console.log(`[REQUEST] Using proxy: ${proxy.host}:${proxy.port}`);
+
+        // For HTTPS requests through HTTP proxy, we need to use CONNECT tunneling
+        if (urlObj.protocol === 'https:') {
+          // Create tunnel through HTTP proxy for HTTPS
+          const tunnelOptions = {
+            host: proxy.host,
+            port: proxy.port,
+            proxyAuth: `${proxy.user}:${proxy.pass}`,
+            headers: {
+              'Proxy-Authorization': `Basic ${Buffer.from(`${proxy.user}:${proxy.pass}`).toString('base64')}`
+            }
+          };
+
+          const agent = require('https-proxy-agent');
+          requestOptions.agent = new agent(`http://${proxy.host}:${proxy.port}`, {
+            auth: `${proxy.user}:${proxy.pass}`
+          });
+        } else {
+          // For HTTP requests, route through proxy
+          requestOptions.hostname = proxy.host;
+          requestOptions.port = proxy.port;
+          requestOptions.path = url; // Use full URL as path for proxy
+          requestOptions.headers['Proxy-Authorization'] = `Basic ${Buffer.from(`${proxy.user}:${proxy.pass}`).toString('base64')}`;
+        }
+      } else {
+        // No proxy - direct connection
+        requestOptions.hostname = urlObj.hostname;
+        requestOptions.port = urlObj.protocol === 'https:' ? 443 : 80;
+        requestOptions.path = urlObj.pathname + urlObj.search;
+      }
+
+      requestOptions.method = 'POST';
+      requestOptions.headers = {
+        ...requestOptions.headers,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData),
+        'Accept': 'application/json',
+        'Origin': 'https://checkout.stripe.com',
+        'Referer': 'https://checkout.stripe.com/',
+        'User-Agent': options.userAgent || this.USER_AGENTS[0],
+        ...options.headers
       };
 
       const req = (urlObj.protocol === 'https:' ? https : http).request(requestOptions, (res) => {
@@ -212,7 +255,7 @@ class CheckoutService {
       browser_locale: ''
     };
 
-    return this.makeRequest(url, data);
+    return this.makeRequest(url, data, { proxy });
   }
 
   // Create payment method
@@ -239,11 +282,11 @@ class CheckoutService {
       payment_user_agent: 'stripe.js/90ba939846; stripe-js-v3/90ba939846; checkout'
     };
 
-    return this.makeRequest(url, data);
+    return this.makeRequest(url, data, { proxy });
   }
 
   // Confirm payment
-  async confirmPayment(paymentMethodId, sessionId, publicKey, expectedAmount, initChecksum) {
+  async confirmPayment(paymentMethodId, sessionId, publicKey, expectedAmount, initChecksum, proxy = null) {
     const url = `${this.STRIPE_API}/v1/payment_pages/${sessionId}/confirm`;
 
     // Generate bypass browser data
@@ -265,7 +308,7 @@ class CheckoutService {
       init_checksum: initChecksum || ''
     };
 
-    return this.makeRequest(url, data);
+    return this.makeRequest(url, data, { proxy });
   }
 
   // Handle 3DS challenge (simplified version)
@@ -642,7 +685,8 @@ class CheckoutService {
               parsed.sessionId,
               parsed.publicKey,
               trialAmount,
-              info.init_checksum
+              info.init_checksum,
+              proxy
             );
 
             // Check if payment succeeded
@@ -679,7 +723,8 @@ class CheckoutService {
         parsed.sessionId,
         parsed.publicKey,
         amount,
-        info.init_checksum
+        info.init_checksum,
+        proxy
       );
 
       // Check result
