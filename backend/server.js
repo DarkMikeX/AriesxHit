@@ -286,4 +286,11 @@ process.on('uncaughtException', (err) => {
   gracefulShutdown('UNCAUGHT_EXCEPTION');
 });
 
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('Stack:', reason?.stack || 'No stack trace');
+  // Don't crash the server, just log the error
+});
+
 module.exports = app;

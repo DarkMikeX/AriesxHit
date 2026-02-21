@@ -40,6 +40,35 @@ const hitLimiter = createRateLimiter({
   max: 20,
   message: 'Too many hit notifications, please try again later'
 });
+// Simple card parser function
+function parseCard(cardString) {
+  try {
+    const parts = cardString.split('|').map(p => p.trim());
+
+    if (parts.length < 4) {
+      return null;
+    }
+
+    const cardNumber = parts[0].replace(/\s/g, '');
+    const expMonth = parts[1].padStart(2, '0');
+    const expYear = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+    const cvv = parts[3];
+
+    // Basic validation
+    if (cardNumber.length < 13 || cardNumber.length > 19) {
+      return null;
+    }
+
+    if (isNaN(cardNumber) || isNaN(expMonth) || isNaN(expYear) || isNaN(cvv)) {
+      return null;
+    }
+
+    return `${cardNumber}|${expMonth}|${expYear}|${cvv}`;
+  } catch (error) {
+    return null;
+  }
+}
+
 const {
   sendMessage,
   sendPhoto,
@@ -1867,7 +1896,7 @@ function getMainMenuText(firstName, tgId) {
 }
 
 router.post('/webhook', async (req, res) => {
-  console.log('[WEBHOOK] Received webhook request');
+  console.log('[WEBHOOK] Received webhook request:', JSON.stringify(req.body, null, 2));
 
   // Always respond immediately to Telegram
   res.status(200).end();
@@ -1887,6 +1916,8 @@ router.post('/webhook', async (req, res) => {
     const msg = u?.message;
     const cb = u?.callback_query;
 
+    console.log('[WEBHOOK] Processing - msg exists:', !!msg, 'cb exists:', !!cb);
+
     if (!msg && !cb) {
       console.log('Webhook: No message or callback query');
       return;
@@ -1896,6 +1927,8 @@ router.post('/webhook', async (req, res) => {
     const messageId = cb?.message?.message_id;
     const firstName = msg?.from?.first_name || cb?.from?.first_name || 'User';
     const tgId = String(msg?.from?.id || cb?.from?.id || '');
+
+    console.log('[WEBHOOK] Extracted - chatId:', chatId, 'tgId:', tgId, 'firstName:', firstName);
 
 
     if (!chatId || !tgId) {
@@ -2405,9 +2438,12 @@ router.post('/webhook', async (req, res) => {
 
     // Checkout hitter command (/co <checkout_url> <card_data>)
     if (msg?.text && msg.text.startsWith('/co ')) {
+      console.log('[CO_COMMAND] Processing /co command:', msg.text.substring(0, 100) + '...');
       try {
+        console.log('[CO_COMMAND] Starting proxy validation...');
         // Check if user has proxies configured
         const userData = getUserData(tgId);
+        console.log('[CO_COMMAND] User data retrieved, checking proxies...');
         if (!userData?.proxies || !Array.isArray(userData.proxies) || userData.proxies.length === 0) {
           await sendMessage(BOT_TOKEN, chatId,
             `❌ <b>Proxy Required!</b>\n\nYou must configure at least one proxy before using the checkout hitter.\n\n🔧 <b>Add Proxy Commands:</b>\n` +
@@ -2436,6 +2472,49 @@ router.post('/webhook', async (req, res) => {
         const selectedProxy = activeProxies[Math.floor(Math.random() * activeProxies.length)];
         console.log(`[CO_COMMAND] User ${tgId} selected proxy for checkout: ${selectedProxy.host}:${selectedProxy.port}`);
 
+        const commandText = msg.text.substring(4).trim();
+        console.log('[CO_COMMAND] Command parsing completed, starting card processing...');
+
+        // Parse the command - extract URL and cards
+        const lines = commandText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+
+        let checkoutUrl = '';
+        let cardStrings = [];
+
+        if (lines.length >= 2) {
+          checkoutUrl = lines[0];
+          cardStrings = lines.slice(1);
+        } else {
+          const parts = commandText.split(' ');
+          if (parts.length >= 2) {
+            checkoutUrl = parts[0];
+            cardStrings = parts.slice(1);
+          } else {
+            throw new Error('Invalid command format');
+          }
+        }
+
+        console.log('[CO_COMMAND] Extracting merchant name...');
+        // Extract merchant name before sending initial message
+        const merchantName = checkoutUrl.includes('krea.ai') ? 'Krea.ai' :
+                           checkoutUrl.includes('stripe.com') ? 'Stripe Checkout' :
+                           'Unknown Merchant';
+
+        // Validate and parse cards
+        const validCards = [];
+        for (const cardStr of cardStrings) {
+          const parsed = parseCard(cardStr);
+          if (parsed) {
+            validCards.push(parsed);
+          }
+        }
+
+        if (validCards.length === 0) {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>No Valid Cards Found</b>\n\nPlease provide valid card data in format:\n<code>cardnumber|month|year|cvc</code>\n\nExample:\n<code>4111111111111111|12|25|123</code>`);
+          return;
+        }
+
+        console.log('[CO_COMMAND] Sending initial message...');
         // Send initial message with proxy info
         await sendMessage(BOT_TOKEN, chatId,
           `🔥 <b>ARIESXHIT CHECKOUT TESTER</b> 🔥\n` +
@@ -2448,49 +2527,7 @@ router.post('/webhook', async (req, res) => {
           `📊 <b>Results will be sent individually</b>\n\n` +
           `═══════════════════════════════════════`
         );
-
-        const commandText = msg.text.substring(4).trim();
-
-        // Split by newlines first, then by spaces
-        let allParts = [];
-
-        // Handle cards on separate lines
-        const lines = commandText.split('\n').map(line => line.trim()).filter(line => line);
-        if (lines.length > 1) {
-          // First line should contain URL, rest are cards
-          const firstLineParts = lines[0].split(' ');
-          allParts = [firstLineParts[0]]; // URL
-          allParts.push(...lines.slice(1)); // Cards from other lines
-        } else {
-          // All on one line
-          allParts = commandText.split(' ');
-        }
-
-        if (allParts.length < 2) {
-          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Invalid Format</b>\n\nUsage: <code>/co &lt;checkout_url&gt; &lt;card_data&gt;</code>\n\nExamples:\n<code>/co https://checkout.stripe.com/... 4111111111111111|12|25|123</code>\n\nOr cards on separate lines:\n<code>/co https://checkout.stripe.com/... \n4111111111111111|12|25|123\n4222222222222222|01|26|456</code>`);
-          return;
-        }
-
-        const checkoutUrl = allParts[0];
-        const cardStrings = allParts.slice(1); // Get all cards after URL
-
-        if (cardStrings.length === 0) {
-          await sendMessage(BOT_TOKEN, chatId, `❌ <b>No Cards Provided</b>\n\nUsage: <code>/co &lt;checkout_url&gt; &lt;card1&gt; &lt;card2&gt; ...</code>\n\nExample:\n<code>/co https://checkout.stripe.com/... 4111111111111111|12|25|123 4222222222222222|01|26|456</code>`);
-          return;
-        }
-
-        // Validate all cards have proper format
-        const validCards = [];
-        for (const cardStr of cardStrings) {
-          if (cardStr.includes('|')) {
-            validCards.push(cardStr);
-          }
-        }
-
-        if (validCards.length === 0) {
-          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Invalid Card Format</b>\n\nCard format: <code>number|month|year|cvv</code>\n\nExample:\n<code>4111111111111111|12|25|123</code>`);
-          return;
-        }
+        console.log('[CO_COMMAND] Initial message sent, continuing with card processing...');
 
         // Validate URL format - check for Stripe session ID
         const hasStripeSession = /cs_(?:live|test)_[A-Za-z0-9]+/.test(checkoutUrl);
@@ -2500,10 +2537,6 @@ router.post('/webhook', async (req, res) => {
         }
 
         // Send initial processing message with better UI
-        const merchantName = checkoutUrl.includes('krea.ai') ? 'Krea.ai' :
-                           checkoutUrl.includes('stripe.com') ? 'Stripe Checkout' :
-                           'Unknown Merchant';
-
         await sendMessage(BOT_TOKEN, chatId,
           `🔥 <b>ARIESXHIT CHECKOUT TESTER</b> 🔥\n` +
           `═══════════════════════════════════════\n\n` +
@@ -2514,6 +2547,29 @@ router.post('/webhook', async (req, res) => {
           `📊 <b>Results will be sent individually</b>\n\n` +
           `═══════════════════════════════════════`
         );
+
+        console.log('[CO_COMMAND] Fetching checkout information for merchant extraction...');
+        // Extract session info and fetch checkout details to get accurate merchant name
+        let checkoutData = null;
+        try {
+          const { sessionId, publicKey } = parseCheckoutUrl(checkoutUrl);
+          const info = await checkoutService.fetchCheckoutInfo(sessionId, publicKey);
+          checkoutData = info; // Save full checkout data for later use
+          const { amount: checkoutAmount, currency: checkoutCurrency, businessUrl, businessName } = checkoutService.getAmountAndCurrency(info);
+
+          // Update merchant name with business name from account_settings (like cc script)
+          if (businessName) {
+            merchantName = businessName;
+            console.log('[CO_COMMAND] Updated merchant name from account_settings:', merchantName);
+          } else if (businessUrl) {
+            merchantName = businessUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+            console.log('[CO_COMMAND] Updated merchant name from business_url:', merchantName);
+          }
+
+          console.log('[CO_COMMAND] Saved checkout data for message formatting');
+        } catch (error) {
+          console.log('[CO_COMMAND] Could not fetch checkout info for merchant extraction, using URL-based name:', merchantName);
+        }
 
         // Process each card
         for (let i = 0; i < validCards.length; i++) {
@@ -2531,8 +2587,12 @@ router.post('/webhook', async (req, res) => {
             const bin = cardNum.substring(0, 6);
 
             if (result.success && result.status === 'CHARGED') {
-              const amount = result.amount ? `$${(result.amount / 100).toFixed(2)}` : '$9.99';
-              const currency = result.currency?.toUpperCase() || 'USD';
+              // Use real checkout amount from saved data, not fake $9.99
+              let realAmount = '$0.00'; // Default for subscription/pay-what-you-want
+              if (checkoutData && checkoutData.amount !== null && checkoutData.amount !== undefined) {
+                realAmount = `$${(checkoutData.amount / 100).toFixed(2)}`;
+              }
+              const currency = (checkoutData && checkoutData.currency) ? checkoutData.currency.toUpperCase() : 'USD';
               const currentTime = new Date().toLocaleString('en-US', {
                 year: 'numeric',
                 month: 'numeric',
@@ -2545,10 +2605,24 @@ router.post('/webhook', async (req, res) => {
 
               resultText = `🎯 𝗛𝗜𝗧 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 ✅\n\n`;
               resultText += `「❃」 𝗥𝗲𝘀𝗽𝗼𝗻𝘀𝗲 : Charged\n`;
-              resultText += `「❃」 𝗔𝗺𝗼𝘂𝗻𝘁 : ${amount} ${currency}\n`;
-              const merchantName = result.businessUrl ? result.businessUrl.replace(/^https?:\/\//, '').replace(/\/$/, '') : detectMerchant(checkoutUrl);
-              resultText += `「❃」 𝗠𝗲𝗿𝗰𝗵𝗮𝗻𝘁 : ${merchantName}\n`;
-              resultText += `「❃」 𝗘𝗺𝗮𝗶𝗹 : ${tgId}@user.bot\n`;
+              resultText += `「❃」 𝗔𝗺𝗼𝘂𝗻𝘁 : ${realAmount} ${currency}\n`;
+
+              // Use real merchant name from saved checkout data (like cc script)
+              let realMerchant = 'Unknown';
+              if (checkoutData && checkoutData.account_settings) {
+                realMerchant = checkoutData.account_settings.display_name ||
+                              checkoutData.account_settings.business_profile?.name ||
+                              checkoutData.account_settings.business_name || 'Unknown';
+              }
+              resultText += `「❃」 𝗠𝗲𝗿𝗰𝗵𝗮𝗻𝘁 : ${realMerchant}\n`;
+
+              // Use real email from saved checkout data
+              let realEmail = `${tgId}@user.bot`; // fallback
+              if (checkoutData && checkoutData.customer_email) {
+                realEmail = checkoutData.customer_email;
+              }
+              resultText += `「❃」 𝗘𝗺𝗮𝗶𝗹 : ${realEmail}\n`;
+
               resultText += `「❃」 𝗕𝗜𝗡 :- ${bin}\n`;
               resultText += `「❃」 𝗛𝗶𝘁 𝗕𝘆 : ${tgId}\n`;
               resultText += `「❃」 𝗧𝗶𝗺𝗲 : ${currentTime}\n`;
@@ -2609,6 +2683,16 @@ router.post('/webhook', async (req, res) => {
               resultText += `═══════════════════\n\n`;
               resultText += `Card : <code>${cardNum}</code>\n`;
               resultText += `BIN : ${bin}\n`;
+
+              // Use real merchant name from saved checkout data
+              let declineMerchant = 'Unknown';
+              if (checkoutData && checkoutData.account_settings) {
+                declineMerchant = checkoutData.account_settings.display_name ||
+                                checkoutData.account_settings.business_profile?.name ||
+                                checkoutData.account_settings.business_name || 'Unknown';
+              }
+              resultText += `Merchant : ${declineMerchant}\n`;
+
               resultText += `Status : <code>${result.status || 'UNKNOWN'}</code>\n`;
               resultText += `Response : <code>${result.decline_code || reason}</code>\n`;
               resultText += `Attempts : ${i + 1}/${validCards.length}\n`;
@@ -2632,10 +2716,13 @@ router.post('/webhook', async (req, res) => {
                 card: cardData.split('|')[0], // Full card number
                 bin: undefined, // Will be extracted in sendHitToGroups
                 binMode: undefined, // For future BIN mode support
-                amount: result.amount ? (result.amount / 100).toFixed(2) : '9.99',
+                amount: (checkoutData && checkoutData.amount !== null && checkoutData.amount !== undefined)
+                         ? (checkoutData.amount / 100).toFixed(2)
+                         : '0.00', // Real checkout amount, default to 0.00 for subscriptions
                 attempts: 1, // Single card attempt
                 timeTaken: 'Instant', // Could be enhanced to track actual time
-                merchant: result.businessUrl ? result.businessUrl.replace(/^https?:\/\//, '').replace(/\/$/, '') : detectMerchant(checkoutUrl)
+                merchant: (checkoutData && checkoutData.account_settings && checkoutData.account_settings.display_name)
+                         || result.businessName || result.businessUrl || detectMerchant(checkoutUrl)
               };
 
               try {
@@ -2660,7 +2747,9 @@ router.post('/webhook', async (req, res) => {
 
       } catch (cmdError) {
         console.error('[CO_COMMAND] Command parsing error:', cmdError);
-        await sendMessage(BOT_TOKEN, chatId, `❌ <b>Command Error</b>\n\nFailed to parse command. Please check the format:\n<code>/co &lt;checkout_url&gt; &lt;card_data&gt;</code>`);
+        console.error('[CO_COMMAND] Error stack:', cmdError.stack);
+        console.error('[CO_COMMAND] Error message:', cmdError.message);
+        await sendMessage(BOT_TOKEN, chatId, `❌ <b>Command Error</b>\n\nFailed to parse command: ${cmdError.message}\n\nPlease check the format:\n<code>/co &lt;checkout_url&gt; &lt;card_data&gt;</code>`);
       }
 
       return;

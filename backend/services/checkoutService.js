@@ -147,18 +147,11 @@ class CheckoutService {
     };
   }
 
-  // Make HTTP request
+  // Make HTTP request (no proxy for now)
   async makeRequest(url, data, options = {}) {
     return new Promise((resolve, reject) => {
       const urlObj = new URL(url);
       const postData = new URLSearchParams(data).toString();
-
-      // Log proxy usage if provided
-      if (options.proxy) {
-        console.log(`[*] Making request through proxy: ${options.proxy.host}:${options.proxy.port}`);
-        // TODO: Implement actual proxy support with https-proxy-agent
-        // For now, requests will go through normal connection but proxy is logged
-      }
 
       const requestOptions = {
         hostname: urlObj.hostname,
@@ -172,13 +165,6 @@ class CheckoutService {
           'Origin': 'https://checkout.stripe.com',
           'Referer': 'https://checkout.stripe.com/',
           'User-Agent': options.userAgent || this.USER_AGENTS[0],
-          // Add proxy headers for basic proxy support
-          ...(options.proxy && {
-            'X-Proxy-Host': options.proxy.host,
-            'X-Proxy-Port': options.proxy.port.toString(),
-            'X-Proxy-User': options.proxy.user,
-            'X-Proxy-Pass': options.proxy.pass
-          }),
           ...options.headers
         },
         timeout: options.timeout || 30000,
@@ -226,7 +212,7 @@ class CheckoutService {
       browser_locale: ''
     };
 
-    return this.makeRequest(url, data, { proxy });
+    return this.makeRequest(url, data);
   }
 
   // Create payment method
@@ -253,7 +239,7 @@ class CheckoutService {
       payment_user_agent: 'stripe.js/90ba939846; stripe-js-v3/90ba939846; checkout'
     };
 
-    return this.makeRequest(url, data, { proxy });
+    return this.makeRequest(url, data);
   }
 
   // Confirm payment
@@ -329,6 +315,32 @@ class CheckoutService {
     let amount = null;
     let gotFromPrimary = false;
     let businessUrl = info.business_url || null;
+    let businessName = null;
+
+    // Extract business information from account_settings (like cc script)
+    if (info.account_settings) {
+      const acc = info.account_settings;
+
+      // Get business name (like cc script does: acc.get('display_name', 'N/A'))
+      if (acc.display_name) {
+        businessName = acc.display_name;
+      } else if (acc.business_profile && acc.business_profile.name) {
+        businessName = acc.business_profile.name;
+      } else if (acc.business_name) {
+        businessName = acc.business_name;
+      }
+
+      // Get business URL (this is what user wants extracted like cc script)
+      if (!businessUrl) {
+        if (acc.business_profile && acc.business_profile.url) {
+          businessUrl = acc.business_profile.url;
+        } else if (acc.business_url) {
+          businessUrl = acc.business_url;
+        } else if (acc.website) {
+          businessUrl = acc.website;
+        }
+      }
+    }
 
     // Priority 1: line_item_group.due (contains correct multi-currency presentment amount)
     if (info.line_item_group && typeof info.line_item_group === 'object') {
@@ -544,7 +556,7 @@ class CheckoutService {
       }
     }
 
-    return { amount, currency, businessUrl };
+    return { amount, currency, businessUrl, businessName };
   }
 
   // Main checkout processing function
@@ -589,7 +601,7 @@ class CheckoutService {
         };
       }
 
-      let { amount, currency, businessUrl } = this.getAmountAndCurrency(info);
+      let { amount, currency, businessUrl, businessName } = this.getAmountAndCurrency(info);
       const email = info.customer_email || 'test@example.com';
 
       // Convert cents to dollars for display
