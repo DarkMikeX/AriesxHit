@@ -2125,26 +2125,92 @@ router.post('/webhook', async (req, res) => {
           return;
         }
 
-        // Make API call to add proxy
-        const apiUrl = `${process.env.API_BASE_URL || 'http://localhost:3001'}/api/tg/add-proxy`;
-        console.log('[ADD_PROXY_COMMAND] Making API call to:', apiUrl, 'with data:', { tg_id: tgId, proxy: proxyData });
+        // Add proxy directly (no API call needed since we're already in the backend)
+        console.log('[ADD_PROXY_COMMAND] Adding proxy directly for user:', tgId, 'proxy data:', proxyData);
 
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tg_id: tgId, proxy: proxyData })
-        });
+        const userData = getUserData(tgId) || {};
+        const existingProxies = userData.proxies || [];
 
-        console.log('[ADD_PROXY_COMMAND] API response status:', response.status);
+        let proxiesToAdd = [];
+        let successCount = 0;
+        let errorCount = 0;
 
-        const result = await response.json();
-        console.log('[ADD_PROXY_COMMAND] API response:', result);
+        // Function to validate and create proxy object
+        const createProxyObject = (proxyString) => {
+          const proxyParts = proxyString.trim().split(':');
+          if (proxyParts.length !== 4) {
+            return null;
+          }
 
-        if (result.ok) {
-          await sendMessage(BOT_TOKEN, chatId, `✅ <b>Proxy Added!</b>\n\n${result.message}`);
-        } else {
-          await sendMessage(BOT_TOKEN, chatId, `❌ <b>Failed to Add Proxy</b>\n\n${result.error}`);
+          const [host, port, user, pass] = proxyParts;
+          if (!host || !port || !user || !pass) {
+            return null;
+          }
+
+          const portNum = parseInt(port, 10);
+          if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+            return null;
+          }
+
+          return {
+            id: Date.now() + Math.random(),
+            host,
+            port: portNum,
+            user,
+            pass,
+            addedAt: Date.now(),
+            lastUsed: null,
+            status: 'active'
+          };
+        };
+
+        // Handle single proxy
+        if (proxyData && typeof proxyData === 'string') {
+          // Check if it's multiple proxies (contains newlines)
+          const lines = proxyData.split('\n').filter(line => line.trim());
+          if (lines.length > 1) {
+            // Multiple proxies
+            lines.forEach(line => {
+              const proxyObj = createProxyObject(line);
+              if (proxyObj) {
+                proxiesToAdd.push(proxyObj);
+                successCount++;
+              } else {
+                errorCount++;
+              }
+            });
+          } else {
+            // Single proxy
+            const proxyObj = createProxyObject(proxyData);
+            if (proxyObj) {
+              proxiesToAdd.push(proxyObj);
+            } else {
+              await sendMessage(BOT_TOKEN, chatId, `❌ <b>Invalid Proxy Format!</b>\n\nUse format: <code>host:port:user:pass</code>\n\nExample: <code>p.webshare.io:80:user:pass</code>`);
+              return;
+            }
+          }
         }
+
+        if (proxiesToAdd.length === 0) {
+          await sendMessage(BOT_TOKEN, chatId, `❌ <b>No Valid Proxies Found!</b>\n\nCheck your proxy format and try again.`);
+          return;
+        }
+
+        // Add new proxies to existing ones
+        const updatedProxies = [...existingProxies, ...proxiesToAdd];
+        setUserData(tgId, { proxies: updatedProxies });
+
+        console.log(`[ADD_PROXY_COMMAND] Added ${proxiesToAdd.length} proxies for user ${tgId}`);
+
+        // Send success message
+        let message;
+        if (proxiesToAdd.length === 1) {
+          const p = proxiesToAdd[0];
+          message = `✅ <b>Proxy Added Successfully!</b>\n\n🌐 Host: ${p.host}\n🔌 Port: ${p.port}\n👤 User: ${p.user}\n📅 Added: ${new Date().toLocaleString()}\n\nYou can now use /co command!`;
+        } else {
+          message = `✅ <b>Proxies Added Successfully!</b>\n\n📊 Added: ${successCount} proxies\n❌ Failed: ${errorCount} proxies\n📈 Total: ${updatedProxies.length} proxies\n\nUse /seepxy to view all proxies!`;
+        }
+        await sendMessage(BOT_TOKEN, chatId, message);
 
       } catch (error) {
         console.error('[ADD_PROXY_COMMAND] Error:', error);
