@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AriesxHit - Layout Dashboard</title>
+  <link rel="stylesheet" href="assets/styles/dashboard3.css">
+  <link rel="stylesheet" href="assets/styles/modals.css">
+  <script src="scripts/autohitter/tg-config.js"></script>
+</head>
+<body>
+  <style>
+    #ax3-login-overlay { position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px); }
+  </style>
+  <div id="ax3-login-overlay" style="display:none;">
+    <div style="max-width:360px;margin:auto;padding:32px;background:rgba(18,18,22,0.9);backdrop-filter:blur(24px);border-radius:20px;border:1px solid rgba(255,255,255,0.08);text-align:center;">
+      <div style="margin-bottom:24px;"><img src="assets/images/logo.png" alt="AriesxHit" style="height:48px;width:auto;object-fit:contain;" /></div>
+      <p style="color:#a1a1aa;font-size:14px;margin-bottom:20px;">Please log in first. Redirecting...</p>
+      <a href="dashboard.html" style="display:inline-block;padding:12px 24px;background:rgba(99,102,241,0.3);border:1px solid rgba(99,102,241,0.5);border-radius:10px;color:#818cf8;text-decoration:none;font-weight:600;">Go to Login</a>
+    </div>
+  </div>
+
+  <div class="ax3-layout" id="ax3-app">
+    <aside class="ax3-sidebar">
+      <div class="ax3-sidebar-logo"><img src="assets/images/logo.png" alt="AriesxHit" /></div>
+      <div class="ax3-nav-item active" title="Dashboard">◉</div>
+      <div class="ax3-nav-item ax3-config-nav" data-modal="bin" title="BIN">▤</div>
+      <div class="ax3-nav-item ax3-config-nav" data-modal="cc" title="CC">💳</div>
+      <div class="ax3-nav-item ax3-config-nav" data-modal="email" title="Email">✉</div>
+      <div class="ax3-nav-item ax3-config-nav" data-modal="telegram" title="Telegram">📱</div>
+      <div class="ax3-nav-item ax3-config-nav" data-modal="proxy" title="Proxy">◇</div>
+      <div class="ax3-nav-item ax3-config-nav" data-modal="autofill" title="Autofill">✎</div>
+      <div class="ax3-nav-item ax3-config-nav" data-modal="settings" title="Settings" id="ax3-nav-settings">⚙</div>
+    </aside>
+
+    <main class="ax3-main">
+      <header class="ax3-topbar glass-highlight">
+        <div>
+          <h1><img src="assets/images/logo.png" alt="AriesxHit" style="height:28px;width:auto;object-fit:contain;vertical-align:middle;" /><span class="ver">v2</span></h1>
+        </div>
+        <div class="ax3-topbar-right">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="ax3-status-dot" id="ax3-status-dot"></div>
+            <span style="font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.05em;" id="ax3-status-text">--</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:11px;color:#71717a;" id="ax3-tg-text">--</span>
+          </div>
+          <div class="ax3-clock">
+            <div class="ax3-clock-time" id="ax3-clock-time">--:--:--</div>
+            <div class="ax3-clock-date" id="ax3-clock-date">--</div>
+          </div>
+          <div class="ax-bypass-toggle-container">
+            <span class="ax-bypass-status">🛡️</span>
+            <label class="ax-bypass-toggle">
+              <input type="checkbox" id="ax-bypass-master-toggle" checked>
+              <span class="ax-bypass-slider"></span>
+            </label>
+            <span class="ax-bypass-label" id="ax-bypass-status-text">ON</span>
+          </div>
+          <div style="position:relative;">
+            <button class="ax3-btn-icon" id="ax3-settings" title="Config">⚙</button>
+            <div class="ax-config-menu" id="ax-config-menu">
+              <button class="ax-config-menu-item" data-modal="bin">BIN</button>
+              <button class="ax-config-menu-item" data-modal="cc">CC</button>
+              <button class="ax-config-menu-item" data-modal="email">Email</button>
+              <button class="ax-config-menu-item" data-modal="telegram">Telegram</button>
+              <button class="ax-config-menu-item" data-modal="proxy">Proxy</button>
+              <button class="ax-config-menu-item" data-modal="autofill">Autofill</button>
+              <button class="ax-config-menu-item" data-modal="settings">Settings</button>
+            </div>
+          </div>
+          <button class="ax3-btn-icon" id="ax3-change-dash" title="Switch layout">⇄</button>
+          <button class="ax3-btn-icon" id="ax3-logout" title="Logout">⎋</button>
+        </div>
+      </header>
+
+      <div class="ax3-content">
+        <section class="ax3-hit-log-stream hover-lift">
+          <div class="ax3-hit-log-header">
+            <div class="ax3-hit-log-header-left">
+              <svg class="ax3-hit-log-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              <h2 class="ax3-hit-log-title">Hit Logs</h2>
+              <span class="ax3-hit-log-badge" id="ax3-logs-count">0 entries</span>
+            </div>
+            <div class="ax3-hit-log-actions">
+              <button class="ax3-hit-log-btn" id="ax3-copy-logs">Copy</button>
+              <button class="ax3-hit-log-btn danger" id="ax3-clear-logs">Clear</button>
+            </div>
+          </div>
+          <div class="ax3-hit-log-list" id="ax3-logs"></div>
+        </section>
+
+        <div class="ax3-stats">
+          <div class="ax3-stats-header">
+            <h2 class="ax3-stats-title">Statistics</h2>
+            <button class="ax3-btn-icon" id="ax3-reset-stats" title="Reset">↻</button>
+          </div>
+          <div class="ax3-stat-cards">
+            <div class="ax3-stat-card hover-lift">
+              <div class="ax3-stat-card-header">
+                <span class="ax3-stat-card-label">Successes</span>
+                <svg class="ax3-stat-icon green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>
+              </div>
+              <div class="ax3-stat-card-value green" id="ax3-stat-hits">0</div>
+            </div>
+            <div class="ax3-stat-card hover-lift">
+              <div class="ax3-stat-card-header">
+                <span class="ax3-stat-card-label">Declines</span>
+                <svg class="ax3-stat-icon red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/></svg>
+              </div>
+              <div class="ax3-stat-card-value red" id="ax3-stat-declines">0</div>
+            </div>
+          </div>
+          <div class="ax3-stat-overview hover-lift">
+            <div class="ax3-stat-overview-top">
+              <div>
+                <div class="ax3-stat-overview-label">Total Attempts</div>
+                <div class="ax3-stat-overview-value" id="ax3-stat-attempts">0</div>
+              </div>
+              <div class="ax3-mini-pie" id="ax3-mini-pie"></div>
+            </div>
+            <div class="ax3-rate-row">
+              <span class="ax3-rate-label">Success Rate</span>
+              <span class="rate" id="ax3-stat-rate">0%</span>
+            </div>
+            <div class="ax3-rate-bar">
+              <div class="ax3-rate-fill" id="ax3-rate-fill" style="width:0%;"></div>
+            </div>
+          </div>
+
+          <div class="ax3-status-card hover-lift">
+            <h3 class="ax3-status-card-title"><svg class="ax3-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/></svg> System Status</h3>
+            <div class="ax3-status-row"><span class="ax3-status-key">Mode</span><span class="ax3-status-val yellow" id="ax3-mode">--</span></div>
+            <div class="ax3-status-row"><span class="ax3-status-key">Telegram</span><span class="ax3-status-val" id="ax3-tg">--</span></div>
+            <div class="ax3-status-row"><span class="ax3-status-key">Status</span><span class="ax3-status-val" id="ax3-active">--</span></div>
+            <div class="ax3-status-row"><span class="ax3-status-key">Last Hit</span><span class="ax3-status-val" id="ax3-last-hit">--</span></div>
+          </div>
+
+          <div class="ax3-status-card hover-lift">
+            <h3 class="ax3-status-card-title"><svg class="ax3-status-icon teal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Active Configuration</h3>
+            <div class="ax3-status-row"><span class="ax3-status-key">BIN</span><span class="ax3-status-val" id="ax3-bin">--</span></div>
+            <div class="ax3-status-row"><span class="ax3-status-key">CC List</span><span class="ax3-status-val" id="ax3-cc">--</span></div>
+            <div class="ax3-status-row"><span class="ax3-status-key">Proxy</span><span class="ax3-status-val" id="ax3-proxy">--</span></div>
+            <div class="ax3-status-row"><span class="ax3-status-key">Email</span><span class="ax3-status-val" id="ax3-email">--</span></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="ax-modal-backdrop" id="ax-modal-backdrop"></div>
+  <!-- BIN Modal -->
+  <div class="ax-modal" id="ax-modal-bin" data-modal="bin"><div class="ax-modal-inner"><div class="ax-modal-title">BIN</div><p class="ax-modal-desc">Enter one or more BINs (one per line)</p><div id="ax-dash-bin-inputs"></div><div class="ax-modal-actions-styled"><button class="ax-btn-save" id="ax-dash-save-bin"><span class="ax-btn-icon">💾</span> Save BIN Settings</button><div class="ax-modal-actions-row"><button class="ax-btn-secondary" id="ax-dash-switch-bin"><span class="ax-btn-icon">↻</span> Switch BIN</button><button class="ax-btn-reset" id="ax-dash-reset-bin"><span class="ax-btn-icon">↻</span> Reset to Default</button></div></div></div></div>
+  <!-- CC Modal -->
+  <div class="ax-modal" id="ax-modal-cc" data-modal="cc"><div class="ax-modal-inner"><div class="ax-modal-title">CC</div><p class="ax-modal-desc">Enter cards (one per line, max 20). Format: number|month|year|cvv</p><textarea id="ax-dash-cc-input" class="ax-dash-textarea" rows="6" placeholder="Enter cards here (one per line)"></textarea><div class="ax-modal-actions-styled"><button class="ax-btn-save" id="ax-dash-save-cc"><span class="ax-btn-icon">💾</span> Save Card List</button><button class="ax-btn-reset" id="ax-dash-reset-cc"><span class="ax-btn-icon">↻</span> Reset to Default</button></div></div></div>
+  <!-- Email Modal -->
+  <div class="ax-modal" id="ax-modal-email" data-modal="email"><div class="ax-modal-inner"><div class="ax-modal-title">Email Settings</div><p class="ax-modal-desc">Configure your email for checkout forms</p><div class="ax-modal-row"><input type="text" id="ax-dash-email" class="ax-dash-input" placeholder="user@example.com"><button class="ax-btn-secondary" id="ax-dash-generate-email">Generate</button></div><div class="ax-modal-actions-styled"><button class="ax-btn-save" id="ax-dash-save-email"><span class="ax-btn-icon">💾</span> Save Email</button><button class="ax-btn-reset" id="ax-dash-reset-email"><span class="ax-btn-icon">↻</span> Reset to Default</button></div></div></div>
+  <!-- Telegram Modal -->
+  <div class="ax-modal" id="ax-modal-telegram" data-modal="telegram"><div class="ax-modal-inner"><div class="ax-modal-title">Telegram</div><p class="ax-modal-desc">Enter your Telegram ID. OTP from our bot – enter below and verify.</p><input type="text" id="ax-dash-tg-id" class="ax-dash-input" placeholder="Enter your Telegram ID"><input type="text" id="ax-dash-tg-otp" class="ax-dash-input" placeholder="Enter OTP code"><div class="ax-modal-row"><button class="ax-btn-secondary ax-btn-green" id="ax-dash-send-code">Send Code</button><button class="ax-btn-secondary" id="ax-dash-verify-tg">Verify</button></div><div class="ax-modal-actions-styled"><button class="ax-btn-save" id="ax-dash-save-tg"><span class="ax-btn-icon">💾</span> Save Telegram</button><button class="ax-btn-reset" id="ax-dash-reset-tg"><span class="ax-btn-icon">↻</span> Reset</button></div></div></div>
+  <!-- Proxy Modal -->
+  <div class="ax-modal" id="ax-modal-proxy" data-modal="proxy"><div class="ax-modal-inner"><div class="ax-modal-title">Proxy Settings</div><p class="ax-modal-desc">Add proxies (one per line). <code>host:port</code> <code>host:port:user:pass</code> <code>user:pass@host:port</code></p><div class="ax-modal-toggle"><span>Enable Proxy</span><label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-proxy-enabled"><span class="ax-toggle-slider"></span></label></div><textarea id="ax-dash-proxy" class="ax-dash-textarea" rows="6" placeholder="127.0.0.1:8080"></textarea><div class="ax-modal-actions-styled"><button class="ax-btn-save" id="ax-dash-save-proxy"><span class="ax-btn-icon">💾</span> Save & Apply</button><div class="ax-modal-actions-row"><button class="ax-btn-secondary" id="ax-dash-rotate-proxy">↻ Rotate</button><button class="ax-btn-reset" id="ax-dash-reset-proxy">↻ Reset</button></div></div><p class="ax-modal-hint" id="ax-proxy-status">Proxy applies when enabled.</p></div></div>
+  <!-- Autofill Modal -->
+  <div class="ax-modal" id="ax-modal-autofill" data-modal="autofill"><div class="ax-modal-inner ax-modal-autofill-inner"><div class="ax-modal-title">Autofill Settings</div><p class="ax-modal-desc">Customize autofill for payment forms</p><div class="ax-modal-field"><label>Auto Delay (seconds)</label><input type="number" id="ax-dash-autodelay" class="ax-dash-input" min="1" max="30" value="7" placeholder="1-30"></div><div class="ax-modal-section">Name, Address & Card</div><div class="ax-modal-field"><label>Full Name</label><input type="text" id="ax-dash-autofill-name" class="ax-dash-input" placeholder="ARIESxHIT"></div><div class="ax-modal-field"><label>Street Address 1</label><input type="text" id="ax-dash-autofill-street1" class="ax-dash-input" placeholder="152 Forest Avenue"></div><div class="ax-modal-field"><label>Street Address 2</label><input type="text" id="ax-dash-autofill-street2" class="ax-dash-input"></div><div class="ax-modal-field"><label>Locality (City)</label><input type="text" id="ax-dash-autofill-locality" class="ax-dash-input"></div><div class="ax-modal-row"><div class="ax-modal-field ax-modal-field-half"><label>Card CVC</label><input type="text" id="ax-dash-autofill-cvv" class="ax-dash-input" placeholder="000" maxlength="4"></div><div class="ax-modal-field ax-modal-field-half"><label>Expiry (MM/YY)</label><input type="text" id="ax-dash-autofill-expiry" class="ax-dash-input" placeholder="09/29" maxlength="5"></div></div><div class="ax-modal-field"><label>Card Number (placeholder)</label><input type="text" id="ax-dash-autofill-card" class="ax-dash-input" placeholder="0000000000000000" maxlength="16"></div><div class="ax-modal-section">Random Options</div><div class="ax-modal-toggle-group"><div class="ax-modal-toggle"><div class="ax-modal-toggle-content"><span class="ax-modal-toggle-label">Random Names</span></div><label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-random-names" checked><span class="ax-toggle-slider"></span></label></div><div class="ax-modal-toggle"><div class="ax-modal-toggle-content"><span class="ax-modal-toggle-label">Random Address</span></div><label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-random-addr" checked><span class="ax-toggle-slider"></span></label></div></div><div class="ax-modal-actions-styled"><button class="ax-btn-save" id="ax-dash-save-autofill"><span class="ax-btn-icon">💾</span> Save Autofill</button><button class="ax-btn-reset" id="ax-dash-reset-autofill">↻ Reset</button></div></div></div>
+  <!-- Settings Modal -->
+  <div class="ax-modal" id="ax-modal-settings" data-modal="settings"><div class="ax-modal-inner ax-modal-settings-inner"><div class="ax-modal-title">Settings</div><p class="ax-modal-desc">Additional options</p><div class="ax-settings-card"><div class="ax-modal-section ax-modal-section-icon"><span class="ax-section-icon">♪</span> Sound</div><div class="ax-modal-toggle"><span>Background Music</span><label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-bg-music"><span class="ax-toggle-slider"></span></label></div><div class="ax-modal-field"><label>Custom Music</label><div class="ax-sound-file-row"><input type="file" id="ax-dash-custom-music" accept="audio/mp3,audio/mpeg" hidden><button type="button" class="ax-btn-choose-file" id="ax-dash-choose-music">Choose File</button><span class="ax-sound-file-status" id="ax-dash-music-status">No file</span></div></div></div><div class="ax-modal-section">Notifications</div><div class="ax-modal-toggle-group"><div class="ax-modal-toggle"><span>Send Hits To Telegram</span><label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-tg-hits" checked><span class="ax-toggle-slider"></span></label></div><div class="ax-modal-toggle"><span>Auto Screenshot on Success</span><label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-auto-screenshot" checked><span class="ax-toggle-slider"></span></label></div><div class="ax-modal-toggle"><span>Send Screenshots to TG</span><label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-screenshot-tg"><span class="ax-toggle-slider"></span></label></div></div><div class="ax-modal-section">Appearance</div><div class="ax-settings-card"><div class="ax-modal-field"><label>Stripe BG Color</label><div class="ax-color-row"><input type="color" id="ax-dash-stripe-bg" class="ax-dash-color-picker" value="#0a0a0b"><input type="text" id="ax-dash-stripe-bg-hex" class="ax-dash-input ax-color-hex" placeholder="#0a0a0b" maxlength="9"><button type="button" class="ax-btn-reset-color" id="ax-dash-reset-stripe-bg">↻</button></div></div></div><div class="ax-modal-section">Screenshot</div><div class="ax-modal-field"><label>Screenshot Format</label><input type="text" id="ax-dash-screenshot-format" class="ax-dash-input" placeholder="ARIESxHit_{timestamp}"></div><div class="ax-modal-toggle"><span>Blur Email</span><label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-blur-email"><span class="ax-toggle-slider"></span></label></div><div class="ax-modal-field"><label>Screenshot Keybind</label><div class="ax-modal-row"><input type="text" id="ax-dash-screenshot-keybind" class="ax-dash-input" placeholder="Click to set" readonly><button class="ax-btn-secondary ax-btn-icon-only" id="ax-dash-reset-keybind">↻</button></div></div><div class="ax-modal-section">Security</div><div class="ax-modal-toggle"><span>Remove Payment Agent</span><label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-remove-agent"><span class="ax-toggle-slider"></span></label></div><div class="ax-modal-actions-styled"><button class="ax-btn-save" id="ax-dash-save-settings"><span class="ax-btn-icon">💾</span> Save Settings</button><button class="ax-btn-reset" id="ax-dash-reset-settings">↻ Reset</button></div></div></div>
+
+  <script src="scripts/dashboard/classic-modals.js"></script>
+  <script src="scripts/dashboard/dashboard3.js"></script>
+</body>
+</html>
