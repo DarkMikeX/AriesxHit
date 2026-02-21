@@ -398,7 +398,7 @@ class CheckoutService {
       amount = info.amount;
     }
 
-    // Check invoice data
+    // Check invoice data - especially important for trial subscriptions
     if (amount === null && info.invoice && typeof info.invoice === 'object') {
       const invoice = info.invoice;
       if (invoice.total !== null && invoice.total !== undefined) {
@@ -406,6 +406,25 @@ class CheckoutService {
       } else if (invoice.amount_due !== null && invoice.amount_due !== undefined) {
         amount = invoice.amount_due;
       }
+
+      // For trial subscriptions, check line items for recurring amounts
+      if (amount === null || amount === 0) {
+        if (invoice.lines && invoice.lines.data && Array.isArray(invoice.lines.data)) {
+          for (const lineItem of invoice.lines.data) {
+            // Check recurring_amount first (like cc script)
+            if (lineItem.recurring_amount !== null && lineItem.recurring_amount !== undefined) {
+              amount = lineItem.recurring_amount;
+              break;
+            }
+            // Fallback to price.unit_amount
+            if (lineItem.price && lineItem.price.unit_amount !== null && lineItem.price.unit_amount !== undefined) {
+              amount = lineItem.price.unit_amount;
+              break;
+            }
+          }
+        }
+      }
+
       if (invoice.currency) {
         currency = invoice.currency;
       }
