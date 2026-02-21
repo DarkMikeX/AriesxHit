@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AriesxHit - Dashboard</title>
+  <link rel="stylesheet" href="assets/styles/dashboard.css">
+  <link rel="stylesheet" href="assets/styles/dashboard-selector.css">
+  <script src="scripts/autohitter/tg-config.js"></script>
+</head>
+<body>
+  <!-- Dashboard selector - shown after login when no dashboard chosen -->
+  <div class="ax-selector-overlay hidden" id="ax-selector-overlay">
+    <div class="ax-selector-card">
+      <div class="ax-selector-header">
+        <h1 class="ax-selector-title">Choose Your Dashboard</h1>
+        <p class="ax-selector-subtitle">Pick the layout that works best for you</p>
+      </div>
+      <div class="ax-selector-grid">
+        <div class="ax-selector-option" data-dashboard="1" title="Classic layout">
+          <div class="ax-selector-icon">◉</div>
+          <span class="ax-selector-name">Classic</span>
+          <span class="ax-selector-desc">Default layout with sidebar menu</span>
+        </div>
+        <div class="ax-selector-option" data-dashboard="2" title="Professional layout">
+          <div class="ax-selector-icon">✦</div>
+          <span class="ax-selector-name">Professional</span>
+          <span class="ax-selector-desc">Sleek dark theme, glass widgets</span>
+        </div>
+        <div class="ax-selector-option" data-dashboard="3" title="Layout dashboard">
+          <div class="ax-selector-icon">◈</div>
+          <span class="ax-selector-name">Layout</span>
+          <span class="ax-selector-desc">Sidebar + HitLogStream, stats</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login overlay - UsagiAutoX style -->
+  <div class="ax-login-overlay" id="ax-login-overlay">
+    <div class="ax-login-card">
+      <div class="ax-login-header">
+        <img src="assets/images/logo.png" alt="AriesxHit" class="ax-login-logo-img" />
+        <span class="ax-dash-ver">V2</span>
+      </div>
+      <div class="ax-login-body">
+        <div class="ax-login-lock">🔐</div>
+        <h2 class="ax-login-title">Login Required</h2>
+        <p class="ax-login-desc">Enter your 12-character login code</p>
+        <input type="text" id="ax-login-code" class="ax-dash-input" placeholder="e.g. ABCDEFGHIJKL" maxlength="12" autocomplete="off">
+        <div class="ax-login-msg" id="ax-login-msg" aria-live="polite"></div>
+        <button type="button" class="ax-login-send-otp" id="ax-login-verify">Login</button>
+        <a href="#" class="ax-login-otp-bot" id="ax-login-otp-bot" target="_blank" rel="noopener">Get Code from Bot →</a>
+      </div>
+    </div>
+  </div>
+  <header class="ax-dash-header">
+    <button class="ax-dash-tg">✔ Join Telegram</button>
+    <div class="ax-dash-logo"><img src="assets/images/logo.png" alt="AriesxHit" class="ax-dash-logo-img" /><span class="ax-dash-ver">V2</span></div>
+    <div class="ax-bypass-toggle-container">
+      <span class="ax-bypass-status">🛡️</span>
+      <label class="ax-bypass-toggle">
+        <input type="checkbox" id="ax-bypass-master-toggle" checked>
+        <span class="ax-bypass-slider"></span>
+      </label>
+      <span class="ax-bypass-label" id="ax-bypass-status-text">ON</span>
+    </div>
+    <button class="ax-dash-btn ax-dash-switch-dash" id="ax-dash-switch-dash" title="Switch layout">⇄ Dashboard</button>
+    <button class="ax-dash-settings" id="ax-dash-settings" title="Settings">⚙</button>
+    <button class="ax-dash-btn ax-dash-logout" id="ax-dash-logout" title="Logout">⎋ Logout</button>
+  </header>
+
+  <main class="ax-dash-main">
+    <div class="ax-dash-col">
+      <div class="ax-dash-nav">
+        <button class="ax-dash-hover-btn" id="ax-dash-hover-btn" title="Menu">✦</button>
+        <div class="ax-dash-menu" id="ax-dash-menu">
+          <button class="ax-dash-menu-item" data-modal="bin">BIN</button>
+          <button class="ax-dash-menu-item" data-modal="cc">CC</button>
+          <button class="ax-dash-menu-item" data-modal="email">Email</button>
+          <button class="ax-dash-menu-item" data-modal="telegram">Telegram</button>
+          <button class="ax-dash-menu-item" data-modal="proxy">Proxy</button>
+          <button class="ax-dash-menu-item" data-modal="autofill">Autofill</button>
+          <button class="ax-dash-menu-item" data-modal="settings">Settings</button>
+        </div>
+      </div>
+      <div class="ax-dash-panel">
+        <div class="ax-dash-panel-head"><span class="ax-dash-icon">🕐</span><span>Real Time Clock</span></div>
+        <div class="ax-dash-clock-time" id="ax-clock-time">--:--:--</div>
+        <div class="ax-dash-clock-date" id="ax-clock-date">--</div>
+      </div>
+      <div class="ax-dash-panel">
+        <div class="ax-dash-panel-head"><span class="ax-dash-icon">ℹ</span><span>System Status</span></div>
+        <div class="ax-dash-status-row"><span class="ax-dash-label">Mode</span><span class="ax-dash-badge orange" id="ax-status-mode">AUTOHIT</span></div>
+        <div class="ax-dash-status-row"><span class="ax-dash-label">Telegram</span><span class="ax-dash-badge red" id="ax-status-tg">Not Connected</span></div>
+        <div class="ax-dash-status-row"><span class="ax-dash-label">Status</span><span class="ax-dash-badge green" id="ax-status-active">Paused</span></div>
+        <div class="ax-dash-status-row"><span class="ax-dash-label">Last Hit</span><span class="ax-dash-value" id="ax-last-hit">--</span></div>
+        <div class="ax-dash-status-row ax-dash-tg-notify-warn hidden" id="ax-tg-notify-warn"><span class="ax-dash-label">TG Notify</span><span class="ax-dash-value ax-dash-value-error" id="ax-tg-notify-error"></span></div>
+      </div>
+    </div>
+
+    <div class="ax-dash-col ax-dash-col-wide">
+      <div class="ax-dash-panel ax-dash-logs-panel">
+        <div class="ax-dash-panel-head ax-dash-panel-head-row">
+          <span class="ax-dash-icon">📋</span><span>Hit Logs</span>
+          <div class="ax-dash-panel-actions">
+            <button class="ax-dash-btn blue" id="ax-copy-cards">Copy Cards</button>
+            <button class="ax-dash-btn red" id="ax-clear-logs">Clear</button>
+          </div>
+        </div>
+        <div class="ax-dash-logs" id="ax-dash-logs"></div>
+      </div>
+    </div>
+
+    <div class="ax-dash-col">
+      <div class="ax-dash-panel ax-dash-stats-panel">
+        <div class="ax-dash-panel-head ax-dash-panel-head-row">
+          <span class="ax-dash-icon ax-dash-icon-list">≡</span><span>Hit Statistics</span>
+          <button class="ax-dash-btn red" id="ax-reset-stats"><span class="ax-dash-icon-refresh">↻</span> Reset</button>
+        </div>
+        <div class="ax-dash-stats">
+          <div class="ax-dash-stat-row"><span class="ax-dash-stat-label">Successes</span><span class="ax-dash-stat-val green" id="ax-stat-hits">0</span></div>
+          <div class="ax-dash-stat-row"><span class="ax-dash-stat-label">Declines</span><span class="ax-dash-stat-val red" id="ax-stat-declines">0</span></div>
+          <div class="ax-dash-stat-row"><span class="ax-dash-stat-label">Attempts</span><span class="ax-dash-stat-val orange" id="ax-stat-attempts">0</span></div>
+          <div class="ax-dash-stat-row"><span class="ax-dash-stat-label">Success Rate</span><span class="ax-dash-stat-val blue" id="ax-stat-rate">0%</span></div>
+        </div>
+      </div>
+      <div class="ax-dash-panel ax-dash-settings-panel">
+        <div class="ax-dash-panel-head ax-dash-panel-head-row">
+          <span class="ax-dash-icon ax-dash-icon-gear">⚙</span><span>Current Settings</span>
+          <button class="ax-dash-toggle-vis" id="ax-toggle-vis" title="Show/hide values">👁</button>
+        </div>
+        <div class="ax-dash-settings-list masked">
+          <div class="ax-dash-setting-row ax-dash-setting-bin">
+            <span class="ax-dash-setting-icon">▤</span>
+            <div class="ax-dash-setting-content">
+              <span class="ax-dash-label">Current BIN</span>
+              <span class="ax-dash-value ax-dash-value-mask" id="ax-setting-bin" data-mask="(No BIN configured)">(No BIN configured)</span>
+            </div>
+          </div>
+          <div class="ax-dash-setting-row ax-dash-setting-cc">
+            <span class="ax-dash-setting-icon">💳</span>
+            <div class="ax-dash-setting-content">
+              <span class="ax-dash-label">Current CC List</span>
+              <span class="ax-dash-value ax-dash-value-mask" id="ax-setting-cc" data-mask="(No CC list configured)">(No CC list configured)</span>
+            </div>
+          </div>
+          <div class="ax-dash-setting-row ax-dash-setting-proxy">
+            <span class="ax-dash-setting-icon">◇</span>
+            <div class="ax-dash-setting-content">
+              <span class="ax-dash-label">Current Proxy</span>
+              <span class="ax-dash-value ax-dash-value-mask" id="ax-setting-proxy" data-mask="—">—</span>
+            </div>
+          </div>
+          <div class="ax-dash-setting-row ax-dash-setting-email">
+            <span class="ax-dash-setting-icon">✉</span>
+            <div class="ax-dash-setting-content">
+              <span class="ax-dash-label">Current Email</span>
+              <span class="ax-dash-value ax-dash-value-mask" id="ax-setting-email" data-mask="—">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal overlay - click outside to close -->
+  <div class="ax-modal-backdrop" id="ax-modal-backdrop"></div>
+
+  <!-- BIN Modal -->
+  <div class="ax-modal" id="ax-modal-bin" data-modal="bin">
+    <div class="ax-modal-inner">
+      <div class="ax-modal-title">BIN</div>
+      <p class="ax-modal-desc">Enter one or more BINs (one per line)</p>
+      <div id="ax-dash-bin-inputs"></div>
+      <div class="ax-modal-actions-styled">
+        <button class="ax-btn-save" id="ax-dash-save-bin"><span class="ax-btn-icon">💾</span> Save BIN Settings</button>
+        <div class="ax-modal-actions-row">
+          <button class="ax-btn-secondary" id="ax-dash-switch-bin"><span class="ax-btn-icon">↻</span> Switch BIN</button>
+          <button class="ax-btn-reset" id="ax-dash-reset-bin"><span class="ax-btn-icon">↻</span> Reset to Default</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CC Modal -->
+  <div class="ax-modal" id="ax-modal-cc" data-modal="cc">
+    <div class="ax-modal-inner">
+      <div class="ax-modal-title">CC</div>
+      <p class="ax-modal-desc">Enter cards (one per line, max 20). Format: number|month|year|cvv</p>
+      <textarea id="ax-dash-cc-input" class="ax-dash-textarea" rows="6" placeholder="Enter cards here (one per line)"></textarea>
+      <div class="ax-modal-actions-styled">
+        <button class="ax-btn-save" id="ax-dash-save-cc"><span class="ax-btn-icon">💾</span> Save Card List</button>
+        <button class="ax-btn-reset" id="ax-dash-reset-cc"><span class="ax-btn-icon">↻</span> Reset to Default</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Email Modal -->
+  <div class="ax-modal" id="ax-modal-email" data-modal="email">
+    <div class="ax-modal-inner">
+      <div class="ax-modal-title">Email Settings</div>
+      <p class="ax-modal-desc">Configure your email for checkout forms</p>
+      <div class="ax-modal-row">
+        <input type="text" id="ax-dash-email" class="ax-dash-input" placeholder="user@example.com">
+        <button class="ax-btn-secondary" id="ax-dash-generate-email">Generate</button>
+      </div>
+      <div class="ax-modal-actions-styled">
+        <button class="ax-btn-save" id="ax-dash-save-email"><span class="ax-btn-icon">💾</span> Save Email</button>
+        <button class="ax-btn-reset" id="ax-dash-reset-email"><span class="ax-btn-icon">↻</span> Reset to Default</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Telegram Modal -->
+  <div class="ax-modal" id="ax-modal-telegram" data-modal="telegram">
+    <div class="ax-modal-inner">
+      <div class="ax-modal-title">Telegram</div>
+      <p class="ax-modal-desc">Enter your Telegram ID. You'll receive an OTP from our bot – enter it below and verify. After that, hits will automatically be sent to your Telegram.</p>
+      <input type="text" id="ax-dash-tg-id" class="ax-dash-input" placeholder="Enter your Telegram ID">
+      <input type="text" id="ax-dash-tg-otp" class="ax-dash-input" placeholder="Enter OTP code (you'll receive this from our bot)">
+      <div class="ax-modal-row">
+        <button class="ax-btn-secondary ax-btn-green" id="ax-dash-send-code">Send Code</button>
+        <button class="ax-btn-secondary" id="ax-dash-verify-tg">Verify</button>
+      </div>
+      <div class="ax-modal-actions-styled">
+        <button class="ax-btn-save" id="ax-dash-save-tg"><span class="ax-btn-icon">💾</span> Save Telegram Settings</button>
+        <button class="ax-btn-reset" id="ax-dash-reset-tg"><span class="ax-btn-icon">↻</span> Reset to Default</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Proxy Modal -->
+  <div class="ax-modal" id="ax-modal-proxy" data-modal="proxy">
+    <div class="ax-modal-inner">
+      <div class="ax-modal-title">Proxy Settings</div>
+      <p class="ax-modal-desc">Add proxies (one per line). Supported formats:<br>
+        <code>host:port</code> &nbsp; <code>host:port:user:pass</code> &nbsp; <code>user:pass@host:port</code>
+      </p>
+      <div class="ax-modal-toggle"><span>Enable Proxy</span><label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-proxy-enabled"><span class="ax-toggle-slider"></span></label></div>
+      <textarea id="ax-dash-proxy" class="ax-dash-textarea" rows="6" placeholder="127.0.0.1:8080&#10;proxy.example.com:3128:myuser:mypass&#10;user:pass@proxy2.com:8080"></textarea>
+      <div class="ax-modal-actions-styled">
+        <button class="ax-btn-save" id="ax-dash-save-proxy"><span class="ax-btn-icon">💾</span> Save & Apply</button>
+        <div class="ax-modal-actions-row">
+          <button class="ax-btn-secondary" id="ax-dash-rotate-proxy" title="Switch to next proxy"><span class="ax-btn-icon">↻</span> Rotate</button>
+          <button class="ax-btn-reset" id="ax-dash-reset-proxy"><span class="ax-btn-icon">↻</span> Reset to Default</button>
+        </div>
+      </div>
+      <p class="ax-modal-hint" id="ax-proxy-status">Proxy applies to all browser traffic when enabled.</p>
+    </div>
+  </div>
+
+  <!-- Autofill Modal -->
+  <div class="ax-modal" id="ax-modal-autofill" data-modal="autofill">
+    <div class="ax-modal-inner ax-modal-autofill-inner">
+      <div class="ax-modal-title">Autofill Settings</div>
+      <p class="ax-modal-desc">Customize autofill preferences for payment forms</p>
+      <div class="ax-modal-field">
+        <label>Auto Delay (seconds)</label>
+        <input type="number" id="ax-dash-autodelay" class="ax-dash-input" min="1" max="30" value="7" placeholder="1-30">
+        <span class="ax-modal-hint">Set the delay before autofill starts (1-30 seconds)</span>
+      </div>
+      <div class="ax-modal-section">Name, Address &amp; Card</div>
+      <div class="ax-modal-field">
+        <label>Full Name</label>
+        <input type="text" id="ax-dash-autofill-name" class="ax-dash-input" placeholder="ARIESxHIT">
+      </div>
+      <div class="ax-modal-field">
+        <label>Street Address 1</label>
+        <input type="text" id="ax-dash-autofill-street1" class="ax-dash-input" placeholder="152 Forest Avenue">
+      </div>
+      <div class="ax-modal-field">
+        <label>Street Address 2</label>
+        <input type="text" id="ax-dash-autofill-street2" class="ax-dash-input" placeholder="Optional">
+      </div>
+      <div class="ax-modal-field">
+        <label>Locality (City)</label>
+        <input type="text" id="ax-dash-autofill-locality" class="ax-dash-input" placeholder="Optional – Macao needs none">
+      </div>
+      <div class="ax-modal-row">
+        <div class="ax-modal-field ax-modal-field-half">
+          <label>Card CVC (3 digits)</label>
+          <input type="text" id="ax-dash-autofill-cvv" class="ax-dash-input" placeholder="000" maxlength="4">
+        </div>
+        <div class="ax-modal-field ax-modal-field-half">
+          <label>Card Expiry (MM/YY)</label>
+          <input type="text" id="ax-dash-autofill-expiry" class="ax-dash-input" placeholder="09/29" maxlength="5">
+        </div>
+      </div>
+      <div class="ax-modal-field">
+        <label>Card Number (16 digits)</label>
+        <input type="text" id="ax-dash-autofill-card" class="ax-dash-input" placeholder="0000000000000000" maxlength="16">
+        <span class="ax-modal-hint">Placeholder shown on form – actual card comes from BIN/CC</span>
+      </div>
+      <div class="ax-modal-section">↻ Random Autofill Options</div>
+      <div class="ax-modal-toggle-group">
+        <div class="ax-modal-toggle">
+          <div class="ax-modal-toggle-content">
+            <span class="ax-modal-toggle-label">Use Random Names</span>
+            <span class="ax-modal-hint">Generate random names for each checkout</span>
+          </div>
+          <label class="ax-toggle-switch">
+            <input type="checkbox" id="ax-dash-random-names" checked>
+            <span class="ax-toggle-slider"></span>
+          </label>
+        </div>
+        <div class="ax-modal-toggle">
+          <div class="ax-modal-toggle-content">
+            <span class="ax-modal-toggle-label">Use Random Address</span>
+            <span class="ax-modal-hint">Generate random address for each checkout</span>
+          </div>
+          <label class="ax-toggle-switch">
+            <input type="checkbox" id="ax-dash-random-addr" checked>
+            <span class="ax-toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="ax-modal-actions-styled">
+        <button class="ax-btn-save" id="ax-dash-save-autofill"><span class="ax-btn-icon">💾</span> Save Autofill Settings</button>
+        <button class="ax-btn-reset" id="ax-dash-reset-autofill"><span class="ax-btn-icon">↻</span> Reset to Default</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="ax-modal" id="ax-modal-settings" data-modal="settings">
+    <div class="ax-modal-inner ax-modal-settings-inner">
+      <div class="ax-modal-title">Settings</div>
+      <p class="ax-modal-desc">Configure additional options and preferences</p>
+      <div class="ax-settings-card">
+        <div class="ax-modal-section ax-modal-section-icon">
+          <span class="ax-section-icon">♪</span> Sound Settings
+        </div>
+        <div class="ax-modal-toggle ax-sound-toggle">
+          <span>Background Music</span>
+          <label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-bg-music"><span class="ax-toggle-slider"></span></label>
+        </div>
+        <div class="ax-modal-field ax-sound-custom">
+          <label>Custom Music</label>
+          <div class="ax-sound-file-row">
+            <input type="file" id="ax-dash-custom-music" accept="audio/mp3,audio/mpeg,audio/mp4,video/mp4" hidden>
+            <button type="button" class="ax-btn-choose-file" id="ax-dash-choose-music">Choose File</button>
+            <span class="ax-sound-file-status" id="ax-dash-music-status">No file chosen</span>
+          </div>
+          <span class="ax-modal-hint">Upload your own MP3/MP4 or use the bundled default</span>
+          <span class="ax-sound-status-italic" id="ax-dash-music-status-italic">No custom music set</span>
+        </div>
+      </div>
+      <div class="ax-modal-section">Notification Settings</div>
+      <div class="ax-modal-toggle-group">
+        <div class="ax-modal-toggle">
+          <span>Send Hits To Telegram</span>
+          <label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-tg-hits" checked><span class="ax-toggle-slider"></span></label>
+        </div>
+        <div class="ax-modal-toggle">
+          <span>Auto Screenshot on Success</span>
+          <label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-auto-screenshot" checked><span class="ax-toggle-slider"></span></label>
+        </div>
+        <div class="ax-modal-toggle">
+          <span>Send Screenshots to Telegram</span>
+          <label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-screenshot-tg"><span class="ax-toggle-slider"></span></label>
+        </div>
+      </div>
+      <span class="ax-modal-hint">Saves checkout screenshot to Downloads/AriesxHit/ when payment succeeds</span>
+      <div class="ax-modal-section ax-modal-section-icon">
+        <span class="ax-section-icon">🎨</span> Appearance Settings
+      </div>
+      <div class="ax-settings-card ax-appearance-card">
+        <div class="ax-modal-field">
+          <label>Stripe Background Color</label>
+          <div class="ax-color-row">
+            <input type="color" id="ax-dash-stripe-bg" class="ax-dash-color-picker" value="#0a0a0b" title="Pick color">
+            <input type="text" id="ax-dash-stripe-bg-hex" class="ax-dash-input ax-color-hex" placeholder="#0a0a0b" maxlength="9">
+            <button type="button" class="ax-btn-reset-color" id="ax-dash-reset-stripe-bg" title="Reset to default">↻</button>
+          </div>
+          <span class="ax-modal-hint">Customize the Stripe checkout background color overlay</span>
+        </div>
+      </div>
+      <div class="ax-modal-section">Screenshot Settings</div>
+      <div class="ax-modal-field">
+        <label>Screenshot Name Format</label>
+        <input type="text" id="ax-dash-screenshot-format" class="ax-dash-input" placeholder="e.g., ARIESxHit_{timestamp}">
+        <span class="ax-modal-hint">Use {timestamp} to include date/time in the filename</span>
+      </div>
+      <div class="ax-modal-toggle">
+        <span>Blur Email in Screenshots</span>
+        <label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-blur-email"><span class="ax-toggle-slider"></span></label>
+      </div>
+      <div class="ax-modal-field">
+        <label>Screenshot Keybind</label>
+        <div class="ax-modal-row">
+          <input type="text" id="ax-dash-screenshot-keybind" class="ax-dash-input" placeholder="Click to set keybind" readonly>
+          <button class="ax-btn-secondary ax-btn-icon-only" id="ax-dash-reset-keybind" title="Reset keybind">↻</button>
+        </div>
+      </div>
+      <div class="ax-modal-section">Security Settings</div>
+      <div class="ax-modal-toggle">
+        <span>Remove Payment Agent</span>
+        <label class="ax-toggle-switch"><input type="checkbox" id="ax-dash-remove-agent"><span class="ax-toggle-slider"></span></label>
+      </div>
+      <div class="ax-modal-actions-styled">
+        <button class="ax-btn-save" id="ax-dash-save-settings"><span class="ax-btn-icon">💾</span> Save Settings</button>
+        <button class="ax-btn-reset" id="ax-dash-reset-settings"><span class="ax-btn-icon">↻</span> Reset to Default</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="scripts/dashboard/dashboard.js"></script>
+</body>
+</html>
