@@ -1,6 +1,6 @@
 // ARIESXHIT 3DS BYPASS INJECTOR
-// Updated for CheckoutBoost v4.0 - Device Trust Bypass
-// Injects bypass logic on ALL pages
+// Based on ABUSE BYPASSER v4.1
+// Injects bypass logic on ALL pages (like original ABUSE BYPASSER)
 
 (function() {
   'use strict';
@@ -11,17 +11,16 @@
   script.onload = () => script.remove();
   (document.head || document.documentElement).appendChild(script);
 
-  // Listen for bypass notifications from the new CheckoutBoost system
+  // Listen for logs from bypass script via postMessage
   window.addEventListener('message', (event) => {
-    if (event.data?.type === 'aries-3ds-bypass') {
-      // Forward bypass events to background script
+    if (event.data?.source === 'aries-3ds-bypass' && event.data.log) {
+      // Use try-catch and don't expect response
       try {
         chrome.runtime.sendMessage({
           type: 'LOG',
-          logType: event.data.subtype || 'info',
-          message: event.data.message || '',
-          url: event.data.url || window.location.href,
-          timestamp: event.data.timestamp
+          logType: event.data.log.type || 'info',
+          message: event.data.log.message || '',
+          url: event.data.log.url || ''
         }).catch(() => {});
       } catch(e) {
         // Extension context may be invalidated - ignore
@@ -29,5 +28,5 @@
     }
   });
 
-  console.log('[AriesxHit] 3DS injector loaded with CheckoutBoost v4.0');
+  console.log('[AriesxHit] 3DS injector loaded');
 })();

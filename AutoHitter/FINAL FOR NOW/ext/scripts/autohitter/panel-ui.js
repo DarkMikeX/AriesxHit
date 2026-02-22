@@ -58,7 +58,7 @@
     }
   });
 
-  const DEFAULT_NAME = 'ARIESxHIT';
+  const DEFAULT_NAME = 'MIKEY FRR';
   const DEFAULT_EMAILS = ['itzmi3xel@gmail.com', 'user@example.com', 'test@gmail.com'];
   const DEFAULT_ADDRESS = '152 Forest Avenue';
   const DEFAULT_COUNTRY = 'Macao SAR China';
@@ -405,16 +405,7 @@
       }
     });
     const mask = state.maskData || { number: '0000000000000000', month: '01', year: '30', cvv: '000' };
-
-    // Get user name from storage and add to card data
-    chrome.storage.local.get(['ax_fill_name'], (result) => {
-      const userName = result.ax_fill_name?.trim();
-      const cardDataWithName = { ...mask, name: userName || mask.name };
-
-      if (typeof window.autoFillCard === 'function') {
-        window.autoFillCard(cardDataWithName, false);
-      }
-    });
+    if (typeof window.autoFillCard === 'function') window.autoFillCard(mask, false);
     if (typeof window.autoFillBillingStepByStep === 'function') {
       window.autoFillBillingStepByStep(billingData, () => {
         if (state.addressKeeper) state.addressKeeper();
@@ -473,79 +464,61 @@
     const cardStr = data.card || '';
     const copyBtn = cardStr ? `<button type="button" class="ax-toast-copy" title="Copy CC">📋</button>` : '';
     if (type === 'error') {
-      box.className = 'ax-glassmorphism-error';
+      box.className = 'ax-toast-error';
       const decline_code = data.decline_code || data.code || 'unknown';
+      const desc = DECLINE_DESCRIPTIONS[decline_code] || 'The card was declined.';
       box.innerHTML = `
-        <div class="ax-glassmorphism-content">
-          <div class="ax-error-badge">
-            <div class="ax-error-icon">🚫</div>
-            <div class="ax-error-pulse"></div>
-            <div class="ax-error-wave"></div>
-            <div class="ax-error-spark"></div>
-          </div>
-          <div class="ax-error-text-content">
-            <div class="ax-error-code">${esc(decline_code.toUpperCase())}</div>
-          </div>
-          <div class="ax-error-actions">
-            ${copyBtn}
-            <button class="ax-glassmorphism-close">×</button>
-          </div>
+        <div class="ax-toast-error-header">
+          <span class="ax-toast-error-icon">×</span>
+          <span class="ax-toast-error-type">ERROR</span>
+          <button class="ax-toast-error-close">×</button>
         </div>
-        <div class="ax-glassmorphism-reflection"></div>
+        <div class="ax-toast-error-body">
+          <div class="ax-toast-error-title">Payment Declined</div>
+          <div class="ax-toast-error-code"><span class="label">Error Code:</span><span class="value">${esc(decline_code)}</span></div>
+          <div class="ax-toast-error-desc">This error typically means: ${desc}</div>
+        </div>
       `;
     } else if (type === 'trying') {
-      box.className = 'ax-glassmorphism-trying-rectangular';
-      const attemptNum = data.attempt || state.cardsTried || 1;
-      const cardDisplay = cardStr || 'Processing...';
-
+      box.className = 'ax-toast-trying';
       box.innerHTML = `
-        <div class="ax-trying-rectangular-content">
-          <div class="ax-trying-header">
-            <div class="ax-card-icon-large">💳</div>
-            <div class="ax-trying-title">TESTING CARD</div>
-            <div class="ax-trying-attempt-badge">Attempt #${attemptNum}</div>
-            <button class="ax-glassmorphism-close">×</button>
-          </div>
-          <div class="ax-card-details-rectangular">
-            <div class="ax-card-number-row">
-              <span class="ax-card-label">CC:</span>
-              <span class="ax-card-value">${esc(cardDisplay)}</span>
-            </div>
-          </div>
-          <div class="ax-card-animations">
-            <div class="ax-card-pulse"></div>
-            <div class="ax-card-orbit"></div>
-            <div class="ax-card-stars"></div>
-          </div>
+        <div class="ax-toast-trying-header">
+          <span class="ax-toast-trying-icon">i</span>
+          <span class="ax-toast-trying-type">INFO</span>
+          <button class="ax-toast-trying-close">×</button>
         </div>
-        <div class="ax-glassmorphism-reflection"></div>
+        <div class="ax-toast-trying-body">
+          <div class="ax-toast-trying-label">Trying Card:</div>
+          <div class="ax-toast-trying-cardbox">${esc(cardStr)} ${copyBtn}</div>
+          <span class="ax-toast-trying-attempt">Attempt: ${data.attempt || 1}</span>
+        </div>
       `;
     } else if (type === 'hit') {
-      box.className = 'ax-glassmorphism-success';
-      const fullCardDisplay = cardStr ? cardStr.split('|')[0] : '';
+      const attempt = data.attempt ?? 1;
+      const timeTaken = state.lastTryingAt ? Math.max(1, Math.round((Date.now() - state.lastTryingAt) / 1000)) : 0;
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+      const dateStr = (now.getMonth() + 1) + '/' + now.getDate() + '/' + now.getFullYear();
+      box.className = 'ax-toast-success';
       box.innerHTML = `
-        <div class="ax-glassmorphism-content">
-          <div class="ax-success-badge">
-            <div class="ax-success-icon">🎯</div>
-            <div class="ax-success-ripple"></div>
-            <div class="ax-success-burst"></div>
-            <div class="ax-success-confetti"></div>
-            <div class="ax-success-glow"></div>
-          </div>
-          <div class="ax-success-text-content">
-            <div class="ax-success-main-text">HIT DETECTED</div>
-            ${fullCardDisplay ? `<div class="ax-success-card">${esc(fullCardDisplay)}</div>` : ''}
-          </div>
-          <div class="ax-success-actions">
-            ${copyBtn}
-            <button class="ax-glassmorphism-close">×</button>
-          </div>
+        <div class="ax-success-dots"></div>
+        <div class="ax-success-header">
+          <span class="ax-success-header-icon">✓</span>
+          <span class="ax-success-header-type">SUCCESS</span>
+          <button class="ax-success-close">×</button>
         </div>
-        <div class="ax-glassmorphism-reflection"></div>
+        <div class="ax-success-body">
+          <span class="ax-success-icon-large">✓</span>
+          <span class="ax-success-title">Payment Processed Successfully</span>
+        </div>
+        <div class="ax-success-footer">
+          <span class="ax-success-time">${timeStr} ${dateStr}</span>
+          ${cardStr ? `<button type="button" class="ax-toast-copy" title="Copy CC">📋</button>` : ''}
+        </div>
       `;
     } else return;
     const removeAndNext = () => { if (box.parentNode) box.remove(); onDismiss?.(); };
-    box.querySelector('.ax-glassmorphism-close, .ax-toast-error-close, .ax-toast-trying-close, .ax-success-close')?.addEventListener?.('click', removeAndNext);
+    box.querySelector('.ax-toast-error-close, .ax-toast-trying-close, .ax-success-close')?.addEventListener?.('click', removeAndNext);
     wrap.innerHTML = '';
     wrap.appendChild(box);
     box.querySelectorAll('.ax-toast-copy, .ax-copy-btn').forEach((btn) => {
@@ -674,18 +647,6 @@
     if (e.source !== window || !e.data || e.data.__ax_screenshot === undefined) return;
     if (e.data.__ax_screenshot && e.data.data) {
       send('SCREENSHOT_DATA', { dataUrl: e.data.data });
-    }
-  });
-
-  // Listen for 3DS bypass events
-  window.addEventListener('message', function(e) {
-    if (e.data?.type === 'aries-3ds-bypass') {
-      const { subtype, message } = e.data;
-      if (subtype === 'bypass') {
-        showInfoToastStyled('🔒 3D Security Bypassing...', 'ax-toast-3ds-bypass');
-      } else if (subtype === 'retry') {
-        showInfoToastStyled('🔄 Retrying after 3DS challenge...', 'ax-toast-3ds-retry');
-      }
     }
   });
 

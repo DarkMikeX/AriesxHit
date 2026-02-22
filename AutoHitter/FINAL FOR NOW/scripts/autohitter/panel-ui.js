@@ -478,68 +478,44 @@
       box.innerHTML = `
         <div class="ax-glassmorphism-content">
           <div class="ax-error-badge">
-            <div class="ax-error-icon">🚫</div>
-            <div class="ax-error-pulse"></div>
-            <div class="ax-error-wave"></div>
-            <div class="ax-error-spark"></div>
+            <div class="ax-error-icon">❌</div>
           </div>
           <div class="ax-error-text-content">
-            <div class="ax-error-code">${esc(decline_code.toUpperCase())}</div>
+            <div class="ax-error-main-text">DECLINE</div>
+            <div class="ax-error-code">${esc(decline_code)}</div>
           </div>
-          <div class="ax-error-actions">
-            ${copyBtn}
-            <button class="ax-glassmorphism-close">×</button>
-          </div>
+          <button class="ax-glassmorphism-close">×</button>
         </div>
         <div class="ax-glassmorphism-reflection"></div>
       `;
     } else if (type === 'trying') {
-      box.className = 'ax-glassmorphism-trying-rectangular';
-      const attemptNum = data.attempt || state.cardsTried || 1;
-      const cardDisplay = cardStr || 'Processing...';
-
+      box.className = 'ax-glassmorphism-trying';
       box.innerHTML = `
-        <div class="ax-trying-rectangular-content">
-          <div class="ax-trying-header">
-            <div class="ax-card-icon-large">💳</div>
-            <div class="ax-trying-title">TESTING CARD</div>
-            <div class="ax-trying-attempt-badge">Attempt #${attemptNum}</div>
-            <button class="ax-glassmorphism-close">×</button>
+        <div class="ax-glassmorphism-content">
+          <div class="ax-card-badge">
+            <div class="ax-card-icon">💳</div>
           </div>
-          <div class="ax-card-details-rectangular">
-            <div class="ax-card-number-row">
-              <span class="ax-card-label">CC:</span>
-              <span class="ax-card-value">${esc(cardDisplay)}</span>
-            </div>
+          <div class="ax-trying-text-content">
+            <div class="ax-trying-simple">trying card</div>
           </div>
-          <div class="ax-card-animations">
-            <div class="ax-card-pulse"></div>
-            <div class="ax-card-orbit"></div>
-            <div class="ax-card-stars"></div>
-          </div>
+          <button class="ax-glassmorphism-close">×</button>
         </div>
         <div class="ax-glassmorphism-reflection"></div>
       `;
     } else if (type === 'hit') {
+      const attempt = data.attempt ?? 1;
+      const timeTaken = state.lastTryingAt ? Math.max(1, Math.round((Date.now() - state.lastTryingAt) / 1000)) : 0;
       box.className = 'ax-glassmorphism-success';
-      const fullCardDisplay = cardStr ? cardStr.split('|')[0] : '';
       box.innerHTML = `
         <div class="ax-glassmorphism-content">
-          <div class="ax-success-badge">
-            <div class="ax-success-icon">🎯</div>
-            <div class="ax-success-ripple"></div>
-            <div class="ax-success-burst"></div>
-            <div class="ax-success-confetti"></div>
-            <div class="ax-success-glow"></div>
+          <div class="ax-checkmark-badge">
+            <div class="ax-checkmark-icon">✓</div>
           </div>
           <div class="ax-success-text-content">
             <div class="ax-success-main-text">HIT DETECTED</div>
-            ${fullCardDisplay ? `<div class="ax-success-card">${esc(fullCardDisplay)}</div>` : ''}
+            <div class="ax-success-meta">Attempt #${attempt} • ${timeTaken}s</div>
           </div>
-          <div class="ax-success-actions">
-            ${copyBtn}
-            <button class="ax-glassmorphism-close">×</button>
-          </div>
+          <button class="ax-glassmorphism-close">×</button>
         </div>
         <div class="ax-glassmorphism-reflection"></div>
       `;
@@ -674,18 +650,6 @@
     if (e.source !== window || !e.data || e.data.__ax_screenshot === undefined) return;
     if (e.data.__ax_screenshot && e.data.data) {
       send('SCREENSHOT_DATA', { dataUrl: e.data.data });
-    }
-  });
-
-  // Listen for 3DS bypass events
-  window.addEventListener('message', function(e) {
-    if (e.data?.type === 'aries-3ds-bypass') {
-      const { subtype, message } = e.data;
-      if (subtype === 'bypass') {
-        showInfoToastStyled('🔒 3D Security Bypassing...', 'ax-toast-3ds-bypass');
-      } else if (subtype === 'retry') {
-        showInfoToastStyled('🔄 Retrying after 3DS challenge...', 'ax-toast-3ds-retry');
-      }
     }
   });
 

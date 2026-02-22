@@ -379,48 +379,8 @@
   function getNextCard() {
     if (!state.cardList?.length) return null;
     state.hitSent = false;
-
-    // Find next unused card in current checkout session
-    let attempts = 0;
-    const maxAttempts = state.cardList.length * 2; // Prevent infinite loops
-
-    while (attempts < maxAttempts) {
-      const candidate = state.cardList[state.currentIndex % state.cardList.length];
-      state.currentIndex++;
-
-      // Check if this card has been used in current session
-      // We'll use a simple approach: check localStorage for session tracking
-      try {
-        const sessionKey = 'checkout_session_used_cards';
-        const usedCards = JSON.parse(localStorage.getItem(sessionKey) || '[]');
-
-        if (!usedCards.includes(candidate)) {
-          // Card not used yet, mark it as used and return it
-          usedCards.push(candidate);
-          localStorage.setItem(sessionKey, JSON.stringify(usedCards));
-
-          if (typeof candidate === 'string') {
-            const [n, m, y, cvv] = candidate.split('|');
-            return { number: n, month: m || '12', year: (y || '28').slice(-2), cvv: cvv || '123' };
-          }
-          return candidate;
-        }
-        // Card already used, try next one
-        attempts++;
-      } catch(e) {
-        // Fallback to original logic if localStorage fails
-        console.warn('[getNextCard] localStorage error:', e);
-        break;
-      }
-    }
-
-    // Fallback: return any card if we've exhausted all options
-    console.warn('[getNextCard] All cards used in session, resetting...');
-    try {
-      localStorage.removeItem('checkout_session_used_cards');
-    } catch(e) {}
-
-    const card = state.cardList[0]; // Reset to first card
+    const card = state.cardList[state.currentIndex % state.cardList.length];
+    state.currentIndex++;
     if (typeof card === 'string') {
       const [n, m, y, cvv] = card.split('|');
       return { number: n, month: m || '12', year: (y || '28').slice(-2), cvv: cvv || '123' };
