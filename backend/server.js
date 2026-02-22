@@ -31,8 +31,8 @@ const app = express();
 // ===================================
 
 const PORT = process.env.PORT || 3000;
-// Bind to 0.0.0.0 so Render/Heroku etc can reach the server (localhost blocks external traffic)
-const HOST = '0.0.0.0';
+// Bind to localhost for development (0.0.0.0 can cause issues on Windows)
+const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const API_PREFIX = process.env.API_PREFIX || '/api';
 
@@ -183,20 +183,32 @@ app.get('/favicon.ico', (req, res) => {
 // ===================================
 
 async function startServer() {
-  // Wait for database to be ready
-  console.log('⏳ Waiting for database initialization...');
-  await db.initPromise;
-  console.log('✅ Database ready!');
+  // Initialize database asynchronously (don't block server startup)
+  console.log('⏳ Initializing database...');
+  try {
+    await db.initPromise;
+    console.log('✅ Database ready!');
+  } catch (error) {
+    console.error('❌ Database initialization failed:', error.message);
+    console.log('⚠️ Server will start without database - some features may not work');
+  }
 
-  // Inject database into telegram service
-  const { setDatabase } = require('./services/telegramService');
-  setDatabase(db);
+  // Inject database into telegram service (if available)
+  if (db && db.ready) {
+    const { setDatabase } = require('./services/telegramService');
+    setDatabase(db);
+    console.log('✅ Database injected into services');
+  }
 
-  // Now load routes (they depend on db)
-  routes = require('./routes');
-  
-  // API routes
-  app.use(API_PREFIX, routes);
+  // Load routes (some features may work without database)
+  try {
+    routes = require('./routes');
+    // API routes
+    app.use(API_PREFIX, routes);
+    console.log('✅ Routes loaded successfully');
+  } catch (error) {
+    console.error('❌ Failed to load routes:', error.message);
+  }
   
   // 404 handler
   app.use(notFoundHandler);

