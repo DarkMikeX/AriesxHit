@@ -155,7 +155,15 @@ def see_proxy():
         if not tg_id:
             return jsonify({"ok": False, "error": "Missing tg_id"}), 400
 
-        user_data = db_module.db.get_user_data(tg_id)
+        try:
+            user_data = db.get_user_data(tg_id)
+            print(f"[DEBUG] Retrieved user data: {user_data is not None}")
+            if user_data and user_data.get('proxies'):
+                print(f"[DEBUG] User has {len(user_data['proxies'])} proxies")
+        except Exception as db_error:
+            print(f"[DEBUG] Database error getting user data: {db_error}")
+            return jsonify({"ok": False, "error": f"Database error: {str(db_error)}"}), 500
+
         if not user_data or not user_data.get('proxies'):
             return jsonify({
                 "ok": True,
@@ -204,15 +212,24 @@ def add_proxy():
             'pass': parts[3] if len(parts) > 3 else None
         }
 
-        proxy_id = db.add_proxy(tg_id, proxy_data)
+        print(f"[DEBUG] Parsed proxy data: {proxy_data}")
+
+        try:
+            proxy_id = db.add_proxy(tg_id, proxy_data)
+            print(f"[DEBUG] Proxy added successfully: {proxy_id}")
+        except Exception as db_error:
+            print(f"[DEBUG] Database error adding proxy: {db_error}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({"ok": False, "error": f"Database error: {str(db_error)}"}), 500
 
         return jsonify({
             "ok": True,
             "added": 1,
             "failed": 0,
-            "total": len(db.get_user_data(tg_id).get('proxies', [])),
+            "total": len((db.get_user_data(tg_id) or {}).get('proxies', [])),
             "proxies": [proxy],
-            "message": f"✅ Proxy Added Successfully!\n\n🌐 Host: {proxy_data['host']}\n🔌 Port: {proxy_data['port']}\n👤 User: {proxy_data['user'] or 'None'}\n📅 Added: {datetime.now().strftime('%m/%d/%Y %I:%M:%S %p')}\n\nYou can now use /co command!"
+            "message": f"SUCCESS: Proxy Added Successfully!\n\nHost: {proxy_data['host']}\nPort: {proxy_data['port']}\nUser: {proxy_data['user'] or 'None'}\nAdded: {datetime.now().strftime('%m/%d/%Y %I:%M:%S %p')}\n\nYou can now use /co command!"
         })
 
     except Exception as e:
@@ -252,7 +269,7 @@ def check_proxy():
             "working": len([r for r in results if r['status'] == 'working']),
             "failed": len([r for r in results if r['status'] == 'failed']),
             "results": results,
-            "message": f"✅ Proxy Status Updated!\n\n✅ Working: {len(results)}\n❌ Failed: 0\n📊 Total: {len(results)}"
+            "message": f"SUCCESS: Proxy Status Updated!\n\nWorking: {len(results)}\nFailed: 0\nTotal: {len(results)}"
         })
 
     except Exception as e:
@@ -278,7 +295,7 @@ def checkout():
         if not user_data or not user_data.get('proxies'):
             return jsonify({
                 "ok": False,
-                "error": "❌ Proxy Required!\n\nYou must add a proxy before using /co.\n\nUse: /addpxy host:port:user:pass"
+                "error": "Proxy Required!\n\nYou must add a proxy before using /co.\n\nUse: /addpxy host:port:user:pass"
             })
 
         proxies = user_data['proxies']
@@ -287,7 +304,7 @@ def checkout():
         if not active_proxies:
             return jsonify({
                 "ok": False,
-                "error": f"❌ No Active Proxies!\n\nYou have {len(proxies)} proxies, but none are active.\n\nUse /chkpxy to test your proxies."
+                "error": f"No Active Proxies!\n\nYou have {len(proxies)} proxies, but none are active.\n\nUse /chkpxy to test your proxies."
             })
 
         # Select random proxy
@@ -301,7 +318,7 @@ def checkout():
         if not parsed['sessionId'] or not parsed['publicKey']:
             return jsonify({
                 "ok": False,
-                "error": "❌ Invalid Checkout URL!\n\nPlease provide a valid Stripe checkout URL."
+                "error": "Invalid Checkout URL!\n\nPlease provide a valid Stripe checkout URL."
             })
 
         # Fetch checkout info
@@ -315,7 +332,7 @@ def checkout():
         if info.get('error'):
             return jsonify({
                 "ok": False,
-                "error": "❌ Failed to analyze checkout!\n\nThe checkout URL might be expired or invalid."
+                "error": "Failed to analyze checkout!\n\nThe checkout URL might be expired or invalid."
             })
 
         # Extract amount and currency
@@ -342,7 +359,7 @@ def checkout():
 
         return jsonify({
             "ok": True,
-            "message": f"✅ Checkout Analyzed Successfully!\n\n🏪 Merchant: {merchant}\n💰 Amount: {currency_symbol}{display_amount} {currency}\n🌐 Proxy: {selected_proxy['host']}:{selected_proxy['port']}\n\n✅ Protected by random proxy rotation!",
+            "message": f"SUCCESS: Checkout Analyzed Successfully!\n\nMerchant: {merchant}\nAmount: {currency_symbol}{display_amount} {currency}\nProxy: {selected_proxy['host']}:{selected_proxy['port']}\n\nProtected by random proxy rotation!",
             "data": {
                 "merchant": merchant,
                 "amount": f"{currency_symbol}{display_amount}",
@@ -354,13 +371,13 @@ def checkout():
     except Exception as e:
         print(f"Checkout error: {e}")
         traceback.print_exc()
-        return jsonify({"ok": False, "error": f"❌ Checkout processing failed: {str(e)}"}), 500
+        return jsonify({"ok": False, "error": f"Checkout processing failed: {str(e)}"}), 500
 
 # Notify hit endpoint
 @app.route('/api/tg/notify-hit', methods=['POST'])
 def notify_hit():
     """Handle hit notifications from extension"""
-    print("[HIT_NOTIFICATION] 🚨🚨🚨 ENDPOINT CALLED! 🚨🚨🚨")
+    print("[HIT_NOTIFICATION] ENDPOINT CALLED!")
     print(f"[HIT_NOTIFICATION] Timestamp: {datetime.now().isoformat()}")
 
     try:
@@ -369,7 +386,7 @@ def notify_hit():
         print(f"[HIT_NOTIFICATION] Full payload: {json.dumps(data, indent=2)}")
 
         if not Config.TELEGRAM_BOT_TOKEN:
-            print("[HIT_NOTIFICATION] ❌ Bot token not configured")
+            print("[HIT_NOTIFICATION] Bot token not configured")
             return jsonify({"ok": False, "error": "Bot not configured"}), 500
 
         # Extract data
@@ -390,8 +407,13 @@ def notify_hit():
         db.increment_user_hits(tg_id)
 
         # Send hit notification to Telegram groups
-        import asyncio
         try:
+            # Check if bot is initialized
+            if not hasattr(bot, 'application') or not bot.application:
+                print("[HIT_NOTIFICATION] Bot not initialized, skipping Telegram notification")
+                return jsonify({"ok": True, "message": "Hit recorded (Telegram bot not ready)"})
+
+            import asyncio
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
@@ -400,14 +422,14 @@ def notify_hit():
             bin_code = card[:6] if card and len(card) >= 6 else 'Unknown'
 
             hit_message = (
-                "🎯 𝗛𝗜𝗧 𝗖𝗛𝗔𝗥𝗚𝗘𝗗 ✅\n\n"
-                "「❃」 𝗥𝗲𝘀𝗽𝗼𝗻𝘀𝗲 : Charged\n"
-                f"「❃」 𝗔𝗺𝗼𝘂𝗻𝘁 : {amount}\n"
-                f"「❃」 𝗠𝗲𝗿𝗰𝗵𝗮𝗻𝘁 : {data.get('business_name', 'Unknown')}\n"
-                f"「❃」 𝗘𝗺𝗮𝗶𝗹 : {data.get('email', 'Unknown')}\n"
-                f"「❃」 𝗕𝗜𝗡 :- {bin_code}\n"
-                f"「❃」 𝗛𝗶𝘁 𝗕𝘆 : {tg_id}\n"
-                f"「❃」 𝗧𝗶𝗺𝗲 : {current_time}\n"
+                "HIT CHARGED SUCCESS\n\n"
+                f"Response: Charged\n"
+                f"Amount: {amount}\n"
+                f"Merchant: {data.get('business_name', 'Unknown')}\n"
+                f"Email: {data.get('email', 'Unknown')}\n"
+                f"BIN: {bin_code}\n"
+                f"Hit By: {tg_id}\n"
+                f"Time: {current_time}\n"
             )
 
             # Send to groups
@@ -419,7 +441,7 @@ def notify_hit():
                         parse_mode='HTML'
                     )
                 )
-                print(f"[HIT_NOTIFICATION] ✅ Sent to group 1: {Config.TELEGRAM_GROUP_1}")
+                print(f"[HIT_NOTIFICATION] Sent to group 1: {Config.TELEGRAM_GROUP_1}")
 
             if Config.TELEGRAM_GROUP_2:
                 loop.run_until_complete(
@@ -429,17 +451,18 @@ def notify_hit():
                         parse_mode='HTML'
                     )
                 )
-                print(f"[HIT_NOTIFICATION] ✅ Sent to group 2: {Config.TELEGRAM_GROUP_2}")
+                print(f"[HIT_NOTIFICATION] Sent to group 2: {Config.TELEGRAM_GROUP_2}")
 
             loop.close()
 
         except Exception as e:
-            print(f"[HIT_NOTIFICATION] ❌ Error sending to Telegram: {e}")
+            print(f"[HIT_NOTIFICATION] Error sending to Telegram: {e}")
+            # Don't fail the request if Telegram fails, just log it
 
         return jsonify({"ok": True, "message": "Hit notification processed"})
 
     except Exception as e:
-        print(f"[HIT_NOTIFICATION] ❌ Error processing hit notification: {e}")
+        print(f"[HIT_NOTIFICATION] Error processing hit notification: {e}")
         traceback.print_exc()
         return jsonify({"ok": False, "error": str(e)}), 500
 

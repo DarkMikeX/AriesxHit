@@ -18,18 +18,18 @@ class TelegramBot:
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command"""
         keyboard = [
-            [InlineKeyboardButton("🔑 Generate Token", callback_data="token")],
-            [InlineKeyboardButton("📈 My Stats", callback_data="stats")],
-            [InlineKeyboardButton("🏆 Scoreboard", callback_data="leaderboard")],
-            [InlineKeyboardButton("👤 Profile", callback_data="profile")],
-            [InlineKeyboardButton("❓ Help", callback_data="help")]
+            [InlineKeyboardButton("Generate Token", callback_data="token")],
+            [InlineKeyboardButton("My Stats", callback_data="stats")],
+            [InlineKeyboardButton("Scoreboard", callback_data="leaderboard")],
+            [InlineKeyboardButton("Profile", callback_data="profile")],
+            [InlineKeyboardButton("Help", callback_data="help")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         welcome_text = (
-            "🎯 <b>ARIESxHIT</b>\n\n"
+            "<b>ARIESxHIT</b>\n\n"
             "Welcome to the most advanced Stripe checkout hitter!\n\n"
-            "⚡ <b>Features:</b>\n"
+            "<b>Features:</b>\n"
             "• Lightning-fast card testing\n"
             "• Advanced proxy rotation\n"
             "• Real-time hit notifications\n"
@@ -43,11 +43,11 @@ class TelegramBot:
         """Handle /debug command"""
         tg_id = str(update.effective_user.id)
         text = (
-            f"🔧 <b>BOT DEBUG INFO</b>\n\n"
-            f"📊 <b>Your Telegram ID:</b> <code>{tg_id}</code>\n"
-            f"🤖 <b>Bot Status:</b> Online\n"
-            f"📡 <b>Server:</b> Connected\n\n"
-            f"💡 <b>Commands Available:</b>\n"
+            f"<b>BOT DEBUG INFO</b>\n\n"
+            f"<b>Your Telegram ID:</b> <code>{tg_id}</code>\n"
+            f"<b>Bot Status:</b> Online\n"
+            f"<b>Server:</b> Connected\n\n"
+            f"<b>Commands Available:</b>\n"
             f"• /co - Checkout hitter\n"
             f"• /addpxy - Add proxy\n"
             f"• /seepxy - View proxies\n"
@@ -71,14 +71,14 @@ class TelegramBot:
             # Generate login token
             token = db.generate_login_token(tg_id, first_name)
             text = (
-                f"🔑 <b>LOGIN TOKEN GENERATED</b>\n\n"
-                f"📋 <b>Token:</b> <code>{token}</code>\n\n"
-                f"🌐 <b>Use this token to login to the AriesxHit extension</b>\n\n"
-                f"📝 <b>Steps:</b>\n"
+                f"<b>LOGIN TOKEN GENERATED</b>\n\n"
+                f"<b>Token:</b> <code>{token}</code>\n\n"
+                f"<b>Use this token to login to the AriesxHit extension</b>\n\n"
+                f"<b>Steps:</b>\n"
                 f"1. Open AriesxHit extension\n"
                 f"2. Click 'Login with Token'\n"
                 f"3. Enter the token above\n\n"
-                f"⚠️ <b>This token expires in 24 hours</b>"
+                f"<b>This token expires in 24 hours</b>"
             )
             await query.edit_message_text(text, parse_mode='HTML')
 
@@ -90,20 +90,20 @@ class TelegramBot:
             rank = db.get_user_rank(tg_id)
 
             text = (
-                f"📊 <b>YOUR STATISTICS</b>\n\n"
-                f"🎯 <b>Hits:</b> {hits}\n"
-                f"🧪 <b>Total Tests:</b> {total_tests}\n"
-                f"🏆 <b>Rank:</b> #{rank or 'N/A'}\n\n"
-                f"Keep hitting to climb the leaderboard! 🚀"
+                f"<b>YOUR STATISTICS</b>\n\n"
+                f"<b>Hits:</b> {hits}\n"
+                f"<b>Total Tests:</b> {total_tests}\n"
+                f"<b>Rank:</b> #{rank or 'N/A'}\n\n"
+                f"Keep hitting to climb the leaderboard!"
             )
             await query.edit_message_text(text, parse_mode='HTML')
 
         elif query.data == "leaderboard":
             # Show leaderboard (simplified)
             text = (
-                f"🏆 <b>SCOREBOARD</b>\n\n"
+                f"<b>SCOREBOARD</b>\n\n"
                 f"Coming soon! Top users will be displayed here.\n\n"
-                f"Keep hitting to get on the leaderboard! 🎯"
+                f"Keep hitting to get on the leaderboard!"
             )
             await query.edit_message_text(text, parse_mode='HTML')
 
@@ -115,18 +115,18 @@ class TelegramBot:
             token = db.get_login_token_for_user(tg_id)
 
             text = (
-                f"👤 <b>PROFILE</b>\n"
-                f"─────────────────\n"
+                f"<b>PROFILE</b>\n"
+                f"-----------------\n"
                 f"Code :- <code>{token or 'No token generated'}</code>\n\n"
-                f"─────────────────\n"
+                f"-----------------\n"
                 f"Name: {first_name}\n"
                 f"--------------\n"
                 f"Hits: {hits}\n"
                 f"Rank: #{rank or 'N/A'}\n"
                 f"--------------\n"
                 f"Join :- @AriesxHit\n"
-                f"Thanks For Using AriesxHit 💗\n\n"
-                f"─────────────────"
+                f"Thanks For Using AriesxHit\n\n"
+                f"-----------------"
             )
             await query.edit_message_text(text, parse_mode='HTML')
 
