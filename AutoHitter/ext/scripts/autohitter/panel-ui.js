@@ -520,36 +520,25 @@
         <div class="ax-glassmorphism-reflection"></div>
       `;
     } else if (type === 'hit') {
-      box.className = 'ax-glassmorphism-success-enhanced';
+      box.className = 'ax-glassmorphism-success';
       box.innerHTML = `
-        <div class="ax-success-enhanced-container">
-          <div class="ax-success-enhanced-glow"></div>
-          <div class="ax-success-enhanced-sparkles">
-            <div class="ax-sparkle sparkle-1">✨</div>
-            <div class="ax-sparkle sparkle-2">💫</div>
-            <div class="ax-sparkle sparkle-3">⭐</div>
-            <div class="ax-sparkle sparkle-4">🌟</div>
+        <div class="ax-glassmorphism-content">
+          <div class="ax-success-badge">
+            <div class="ax-success-icon">🎯</div>
+            <div class="ax-success-ripple"></div>
+            <div class="ax-success-burst"></div>
+            <div class="ax-success-confetti"></div>
+            <div class="ax-success-glow"></div>
           </div>
-          <div class="ax-success-enhanced-content">
-            <div class="ax-success-enhanced-header">
-              <div class="ax-success-enhanced-icon">🎯</div>
-              <div class="ax-success-enhanced-title">HIT DETECTED</div>
-              <div class="ax-success-enhanced-subtitle">by ARIESxHIT</div>
-              <button class="ax-glassmorphism-close">×</button>
-            </div>
-            <div class="ax-success-enhanced-card-section">
-              <div class="ax-success-enhanced-card-label">SUCCESSFUL CARD</div>
-              ${cardStr ? `<div class="ax-success-enhanced-card">${esc(cardStr)}</div>` : ''}
-            </div>
-            <div class="ax-success-enhanced-animations">
-              <div class="ax-success-ripple-large"></div>
-              <div class="ax-success-burst-large"></div>
-              <div class="ax-success-confetti-large"></div>
-              <div class="ax-success-waves"></div>
-            </div>
+          <div class="ax-success-text-content">
+            <div class="ax-success-main-text">HIT DETECTED</div>
+            ${cardStr ? `<div class="ax-success-card">${esc(cardStr)}</div>` : ''}
           </div>
-          <div class="ax-success-enhanced-reflection"></div>
+          <div class="ax-success-actions">
+            <button class="ax-glassmorphism-close">×</button>
+          </div>
         </div>
+        <div class="ax-glassmorphism-reflection"></div>
       `;
     } else return;
     const removeAndNext = () => { if (box.parentNode) box.remove(); onDismiss?.(); };
