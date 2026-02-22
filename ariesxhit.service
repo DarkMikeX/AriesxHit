@@ -1,0 +1,18 @@
+[Unit]
+Description=AriesxHit Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ariesxhit/backend
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=TELEGRAM_BOT_TOKEN=8268278005:AAG49bxahCC_JjC_vG-pE8lv5RqTU0Duh5M
+Environment=TELEGRAM_GROUP_1=-1003835715499
+Environment=TELEGRAM_GROUP_2=-1003750219718
+
+[Install]
+WantedBy=multi-user.target
