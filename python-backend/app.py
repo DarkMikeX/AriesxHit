@@ -4,9 +4,13 @@ import json
 import traceback
 from datetime import datetime
 from config import Config
-from database import db
+import sys
+import os
+sys.path.append(os.path.dirname(__file__))
+from database.database import db
 from checkout_service import CheckoutService
 from telegram_bot import bot
+from utils import validate_telegram_id, sanitize_input
 
 app = Flask(__name__)
 CORS(app, origins=Config.CORS_ORIGINS)
@@ -14,15 +18,18 @@ CORS(app, origins=Config.CORS_ORIGINS)
 checkout_service = CheckoutService()
 
 # Initialize database on startup
-@app.before_first_request
 def initialize_app():
     """Initialize database and create default data"""
     try:
-        db.init_db()
-        db.create_default_admin()
-        print("✅ App initialized successfully")
+        import database.database as db_mod
+        db_mod.db.init_db()
+        db_mod.db.create_default_admin()
+        print("[SUCCESS] App initialized successfully")
     except Exception as e:
-        print(f"❌ App initialization failed: {e}")
+        print(f"[ERROR] App initialization failed: {e}")
+
+# Initialize on import
+initialize_app()
 
 # Health check endpoint
 @app.route('/api/health', methods=['GET'])
@@ -70,7 +77,7 @@ def send_otp():
 
         # Store OTP (in production, use Redis or similar)
         # For now, just return success
-        print(f"📱 OTP generated for {tg_id}: {otp_token}")
+        print(f"OTP generated for {tg_id}: {otp_token}")
 
         # Send OTP via Telegram bot
         try:
@@ -124,8 +131,8 @@ def verify_otp():
             return jsonify({"ok": False, "error": "Invalid OTP format"}), 400
 
         # Create or update user
-        db.set_user_name(tg_id, name)
-        token = db.generate_login_token(tg_id, name)
+        db_module.db.set_user_name(tg_id, name)
+        token = db_module.db.generate_login_token(tg_id, name)
 
         return jsonify({
             "ok": True,
@@ -148,7 +155,7 @@ def see_proxy():
         if not tg_id:
             return jsonify({"ok": False, "error": "Missing tg_id"}), 400
 
-        user_data = db.get_user_data(tg_id)
+        user_data = db_module.db.get_user_data(tg_id)
         if not user_data or not user_data.get('proxies'):
             return jsonify({
                 "ok": True,

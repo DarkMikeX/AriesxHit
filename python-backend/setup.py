@@ -9,13 +9,13 @@ import subprocess
 
 def run_command(command, description):
     """Run a command and return success status"""
-    print(f"🔧 {description}...")
+    print(f"[SETUP] {description}...")
     try:
         result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
-        print(f"✅ {description} completed")
+        print(f"[SUCCESS] {description} completed")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ {description} failed: {e}")
+        print(f"[ERROR] {description} failed: {e}")
         if e.stdout:
             print(f"Output: {e.stdout}")
         if e.stderr:
@@ -24,7 +24,7 @@ def run_command(command, description):
 
 def main():
     """Main setup function"""
-    print("🚀 ARIESXHIT PYTHON BACKEND SETUP")
+    print("ARIESXHIT PYTHON BACKEND SETUP")
     print("=" * 40)
 
     # Check Python version
@@ -33,14 +33,14 @@ def main():
         print(f"❌ Python {python_version.major}.{python_version.minor} is not supported. Please use Python 3.8+")
         return False
 
-    print(f"✅ Python {python_version.major}.{python_version.minor}.{python_version.micro} detected")
+    print(f"[SUCCESS] Python {python_version.major}.{python_version.minor}.{python_version.micro} detected")
 
     # Create virtual environment
     if not os.path.exists('venv'):
         if not run_command("python -m venv venv", "Creating virtual environment"):
             return False
     else:
-        print("⚠️  Virtual environment already exists")
+        print("[INFO] Virtual environment already exists")
 
     # Activate virtual environment and install dependencies
     activate_cmd = "venv\\Scripts\\activate" if os.name == 'nt' else "source venv/bin/activate"
@@ -80,21 +80,21 @@ TELEGRAM_GROUP_2=your_group_chat_id
 """
         with open('.env', 'w') as f:
             f.write(env_content)
-        print("✅ .env file created - please edit it with your actual values")
+        print("[SUCCESS] .env file created - please edit it with your actual values")
     else:
-        print("⚠️  .env file already exists")
+        print("[INFO] .env file already exists")
 
     # Create database directory
     os.makedirs('database', exist_ok=True)
-    print("✅ Database directory created")
+    print("[SUCCESS] Database directory created")
 
     print("\n" + "=" * 40)
-    print("🎉 SETUP COMPLETED SUCCESSFULLY!")
-    print("\n📋 NEXT STEPS:")
+    print("SUCCESS: SETUP COMPLETED SUCCESSFULLY!")
+    print("\nNEXT STEPS:")
     print("1. Edit the .env file with your Telegram bot token and group IDs")
     print("2. Run the application: python run.py")
     print("3. Test the setup: python test_app.py")
-    print("\n📚 DOCUMENTATION:")
+    print("\nDOCUMENTATION:")
     print("- API endpoints: See README.md")
     print("- Configuration: Edit .env file")
     print("- Deployment: Check docker-compose.yml")

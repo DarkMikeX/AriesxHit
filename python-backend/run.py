@@ -7,9 +7,9 @@ from app import app
 from config import Config
 
 if __name__ == '__main__':
-    print("🚀 Starting AriesxHit Python Backend...")
-    print(f"📡 Server: http://{Config.HOST}:{Config.PORT}")
-    print(f"🌍 Environment: {Config.NODE_ENV}")
+    print("Starting AriesxHit Python Backend...")
+    print(f"Server: http://{Config.HOST}:{Config.PORT}")
+    print(f"Environment: {Config.NODE_ENV}")
 
     app.run(
         host=Config.HOST,
