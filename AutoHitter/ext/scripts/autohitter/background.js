@@ -531,7 +531,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
           ax_api_url: r.ax_api_url || 'NO_API_URL',
           full_email_value: r.ax_fill_email
         });
-        const base = (r.ax_api_url || (typeof TGConfig !== 'undefined' ? TGConfig.BOT_URL : 'http://localhost:3000')).replace(/\/$/, '');
+        const base = (typeof TGConfig !== 'undefined' ? TGConfig.BOT_URL : (r.ax_api_url || 'http://localhost:3000')).replace(/\/$/, '');
         console.log('[CARD_HIT] API URL being used:', base);
         console.log('[CARD_HIT] Telegram ID:', r.ax_tg_id);
 

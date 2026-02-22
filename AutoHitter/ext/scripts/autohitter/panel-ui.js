@@ -485,9 +485,9 @@
           </div>
           <div class="ax-error-text-content">
             <div class="ax-error-code">${esc(decline_code.toUpperCase())}</div>
+            ${cardStr ? `<div class="ax-error-card">${esc(cardStr)}</div>` : ''}
           </div>
           <div class="ax-error-actions">
-            ${copyBtn}
             <button class="ax-glassmorphism-close">×</button>
           </div>
         </div>
@@ -522,7 +522,6 @@
       `;
     } else if (type === 'hit') {
       box.className = 'ax-glassmorphism-success';
-      const fullCardDisplay = cardStr ? cardStr.split('|')[0] : '';
       box.innerHTML = `
         <div class="ax-glassmorphism-content">
           <div class="ax-success-badge">
@@ -534,10 +533,9 @@
           </div>
           <div class="ax-success-text-content">
             <div class="ax-success-main-text">HIT DETECTED</div>
-            ${fullCardDisplay ? `<div class="ax-success-card">${esc(fullCardDisplay)}</div>` : ''}
+            ${cardStr ? `<div class="ax-success-card">${esc(cardStr)}</div>` : ''}
           </div>
           <div class="ax-success-actions">
-            ${copyBtn}
             <button class="ax-glassmorphism-close">×</button>
           </div>
         </div>

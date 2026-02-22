@@ -1,0 +1,29 @@
+# SSH to VPS
+ssh root@84.32.98.39
+
+# Stop service
+systemctl stop ariesxhit
+
+# Pull latest changes
+cd /opt/AriesHitX
+git pull origin main
+
+# Install any new dependencies (if package.json changed)
+npm install
+
+# Restart service
+systemctl start ariesxhit
+
+# Check status
+systemctl status ariesxhit
+
+
+
+For Any updates
+
+
+
+
+
+Maintenance Commands:
+# Update botcd /opt/AriesHitXgit pull origin mainnpm installsystemctl restart ariesxhit# Renew SSL (automatic, but manual option)certbot renew# Check webhook statuscurl "https://api.telegram.org/bot8268278005:AAG49bxahCC_JjC_vG-pE8lv5RqTU0Duh5M/getWebhookInfo"
