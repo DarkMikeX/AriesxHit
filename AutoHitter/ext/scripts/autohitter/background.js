@@ -534,7 +534,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
           ax_auto_screenshot: r.ax_auto_screenshot,
           ax_screenshot_tg: r.ax_screenshot_tg
         });
-        const base = (typeof TGConfig !== 'undefined' ? TGConfig.BOT_URL : (r.ax_api_url || 'http://localhost:3000')).replace(/\/$/, '');
+        const base = 'https://api.mikeyyfrr.me';
         console.log('[CARD_HIT] API URL being used:', base);
         console.log('[CARD_HIT] Telegram ID:', r.ax_tg_id);
 
@@ -612,37 +612,86 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
 
           console.log('[CARD_HIT] Making fetch request to:', base + '/api/tg/notify-hit');
 
+          console.log('[CARD_HIT] About to make fetch request...');
           fetch(base + '/api/tg/notify-hit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
           })
             .then(async (res) => {
-              console.log('[CARD_HIT] Fetch response status:', res.status, res.ok);
-              const text = await res.text();
-              console.log('[CARD_HIT] Response text:', text.substring(0, 200));
+              console.log('[CARD_HIT] Fetch response received!');
+              console.log('[CARD_HIT] Response status:', res.status, 'OK:', res.ok);
+              console.log('[CARD_HIT] Response headers:', Object.fromEntries(res.headers.entries()));
+
+              let text;
               try {
-                return text ? JSON.parse(text) : {};
-              } catch (e) {
-                console.error('[CARD_HIT] JSON parse error:', e);
-                return { ok: false, error: res.ok ? 'Invalid server response' : `Server ${res.status}` };
+                text = await res.text();
+                console.log('[CARD_HIT] Response body (first 500 chars):', text.substring(0, 500));
+              } catch (textError) {
+                console.error('[CARD_HIT] Error reading response text:', textError);
+                text = '';
               }
+
+              let data;
+              try {
+                data = text ? JSON.parse(text) : {};
+                console.log('[CARD_HIT] Successfully parsed JSON response');
+              } catch (parseError) {
+                console.error('[CARD_HIT] JSON parse error:', parseError);
+                console.log('[CARD_HIT] Raw response text:', text);
+                data = { ok: false, error: 'Invalid JSON response from server' };
+              }
+
+              return { res, data };
             })
-            .then((data) => {
-              console.log('[CARD_HIT] Parsed response:', data);
+            .then(({ res, data }) => {
+              console.log('[CARD_HIT] Processing response data:', data);
+
               if (data && data.ok) {
-                console.log('[CARD_HIT] Notification sent successfully!');
+                console.log('[CARD_HIT] ✅ NOTIFICATION SENT SUCCESSFULLY!');
+                console.log('[CARD_HIT] Server response:', data);
                 chrome.storage.local.remove(['ax_last_tg_notify_error']);
+
+                // Show success toast to user
+                chrome.tabs.sendMessage(sender?.tab?.id || tab?.id, {
+                  type: 'SHOW_TOAST',
+                  toastType: 'hit',
+                  message: 'Hit notification sent to Telegram!',
+                  title: 'Notification Sent'
+                }, () => {});
               } else {
-                console.error('[CARD_HIT] Notification failed:', data?.error);
-                chrome.storage.local.set({ ax_last_tg_notify_error: data?.error || 'Telegram notify failed' });
+                const errorMsg = data?.error || `Server error (${res.status})`;
+                console.error('[CARD_HIT] ❌ NOTIFICATION FAILED:', errorMsg);
+                console.error('[CARD_HIT] Full response data:', data);
+                chrome.storage.local.set({ ax_last_tg_notify_error: errorMsg });
+
+                // Show error toast to user
+                chrome.tabs.sendMessage(sender?.tab?.id || tab?.id, {
+                  type: 'SHOW_TOAST',
+                  toastType: 'error',
+                  message: `Hit notification failed: ${errorMsg}`,
+                  title: 'Notification Failed'
+                }, () => {});
               }
             })
             .catch((e) => {
-              console.error('[CARD_HIT] Fetch error:', e);
-              const msg = e?.message || 'Network error';
-              const hint = msg.toLowerCase().includes('fetch') ? ` Ensure backend is running at ${base}` : '';
-              chrome.storage.local.set({ ax_last_tg_notify_error: msg + hint });
+              console.error('[CARD_HIT] ❌ FETCH ERROR:', e);
+              console.error('[CARD_HIT] Error details:', {
+                message: e.message,
+                name: e.name,
+                stack: e.stack
+              });
+
+              const errorMsg = `Network error: ${e.message}`;
+              chrome.storage.local.set({ ax_last_tg_notify_error: errorMsg });
+
+              // Show error toast to user
+              chrome.tabs.sendMessage(sender?.tab?.id || tab?.id, {
+                type: 'SHOW_TOAST',
+                toastType: 'error',
+                message: `Connection failed: ${e.message}`,
+                title: 'Network Error'
+              }, () => {});
             });
         };
         if (r.ax_screenshot_tg && tab?.windowId && chrome.tabs?.captureVisibleTab) {
