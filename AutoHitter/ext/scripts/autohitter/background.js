@@ -527,21 +527,37 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       chrome.storage.local.get(['ax_tg_id', 'ax_tg_name', 'ax_api_url', 'ax_auto_screenshot', 'ax_screenshot_tg', 'ax_tg_hits', 'ax_fill_email'], (r) => {
         console.log('[CARD_HIT] Retrieved from storage:', {
           ax_tg_id: r.ax_tg_id || 'NO_TG_ID',
+          ax_tg_name: r.ax_tg_name || 'NO_NAME',
           ax_fill_email: r.ax_fill_email || 'NO_EMAIL',
           ax_api_url: r.ax_api_url || 'NO_API_URL',
-          full_email_value: r.ax_fill_email
+          ax_tg_hits: r.ax_tg_hits,
+          ax_auto_screenshot: r.ax_auto_screenshot,
+          ax_screenshot_tg: r.ax_screenshot_tg
         });
         const base = (typeof TGConfig !== 'undefined' ? TGConfig.BOT_URL : (r.ax_api_url || 'http://localhost:3000')).replace(/\/$/, '');
         console.log('[CARD_HIT] API URL being used:', base);
         console.log('[CARD_HIT] Telegram ID:', r.ax_tg_id);
 
-        if (!r.ax_tg_id || !base) {
-          const errorMsg = !r.ax_tg_id ? 'Telegram ID not set. Log in via OTP first.' : 'API URL not configured';
+        if (!r.ax_tg_id) {
+          const errorMsg = '❌ Telegram ID not set! Please log in to AriesxHit extension first via OTP.';
           console.error('[CARD_HIT] NOTIFICATION BLOCKED:', errorMsg);
-          if (!r.ax_tg_id) chrome.storage.local.set({ ax_last_tg_notify_error: errorMsg });
+          chrome.storage.local.set({ ax_last_tg_notify_error: errorMsg });
+
+          // Show toast notification to user
+          chrome.tabs.sendMessage(sender?.tab?.id || tab?.id, {
+            type: 'SHOW_TOAST',
+            toastType: 'error',
+            message: 'Please log in to AriesxHit extension first!',
+            title: 'Login Required'
+          }, () => {});
+
           return;
         }
-        if (r.ax_tg_hits === false) return;
+
+        if (r.ax_tg_hits === false) {
+          console.log('[CARD_HIT] Hit notifications disabled by user setting');
+          return;
+        }
         const tab = sender?.tab;
         const attemptStart = state._attemptStartTime || now;
         const durationSec = Math.round((now - attemptStart) / 1000);
@@ -950,6 +966,28 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         currentProxy: state.proxyList[state.proxyIndex] || null,
       });
       break;
+
+    case 'DEBUG_LOGIN_STATUS':
+      chrome.storage.local.get(['ax_tg_id', 'ax_tg_name', 'ax_api_url', 'ax_tg_hits', 'ax_auto_screenshot', 'ax_screenshot_tg', 'ax_fill_email'], (r) => {
+        const status = {
+          is_logged_in: !!r.ax_tg_id,
+          telegram_id: r.ax_tg_id || null,
+          telegram_name: r.ax_tg_name || null,
+          api_url: r.ax_api_url || 'using TGConfig',
+          tg_hits_enabled: r.ax_tg_hits !== false,
+          auto_screenshot: r.ax_auto_screenshot || false,
+          screenshot_tg: r.ax_screenshot_tg || false,
+          email: r.ax_fill_email || null,
+          last_error: null
+        };
+
+        chrome.storage.local.get(['ax_last_tg_notify_error'], (err) => {
+          status.last_error = err.ax_last_tg_notify_error || null;
+          console.log('[DEBUG] Login Status:', status);
+          respond({ ok: true, status });
+        });
+      });
+      return true;
 
     default:
       respond({ ok: true });
