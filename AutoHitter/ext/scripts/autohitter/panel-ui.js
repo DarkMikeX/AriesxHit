@@ -485,7 +485,6 @@
           </div>
           <div class="ax-error-text-content">
             <div class="ax-error-code">${esc(decline_code.toUpperCase())}</div>
-            ${cardStr ? `<div class="ax-error-card">${esc(cardStr)}</div>` : ''}
           </div>
           <div class="ax-error-actions">
             <button class="ax-glassmorphism-close">×</button>
