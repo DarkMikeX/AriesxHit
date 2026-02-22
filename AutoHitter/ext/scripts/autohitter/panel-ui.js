@@ -532,7 +532,6 @@
           </div>
           <div class="ax-success-text-content">
             <div class="ax-success-main-text">HIT DETECTED</div>
-            ${cardStr ? `<div class="ax-success-card">${esc(cardStr)}</div>` : ''}
           </div>
           <div class="ax-success-actions">
             <button class="ax-glassmorphism-close">×</button>
