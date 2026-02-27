@@ -661,36 +661,39 @@ router.post('/notify-hit', async (req, res) => {
         // Use the extracted key to get merchant info
         const apiUrl = `https://api.stripe.com/v1/payment_pages/${parsedUrl.sessionId}?key=${parsedUrl.publicKey}&eid=NA`;
 
-        const response = await new Promise((resolve, reject) => {
-          const request = https.get(apiUrl, {
-            headers: {
-              'accept': 'application/json',
-              'accept-language': 'en',
-              'cache-control': 'no-cache',
-              'content-type': 'application/x-www-form-urlencoded',
-              'origin': 'https://checkout.stripe.com',
-              'referer': 'https://checkout.stripe.com/',
-              'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            },
-            timeout: 15000
-          }, (res) => {
-            let data = '';
-            res.on('data', (chunk) => data += chunk);
-            res.on('end', () => {
-              try {
-                resolve({ status: res.statusCode, data: JSON.parse(data) });
-              } catch (e) {
-                resolve({ status: res.statusCode, data: null, error: e.message });
-              }
+        const response = await Promise.race([
+          new Promise((resolve, reject) => {
+            const request = https.get(apiUrl, {
+              headers: {
+                'accept': 'application/json',
+                'accept-language': 'en',
+                'cache-control': 'no-cache',
+                'content-type': 'application/x-www-form-urlencoded',
+                'origin': 'https://checkout.stripe.com',
+                'referer': 'https://checkout.stripe.com/',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+              },
+              timeout: 8000  // Reduced timeout
+            }, (res) => {
+              let data = '';
+              res.on('data', (chunk) => data += chunk);
+              res.on('end', () => {
+                try {
+                  resolve({ status: res.statusCode, data: JSON.parse(data) });
+                } catch (e) {
+                  resolve({ status: res.statusCode, data: null, error: e.message });
+                }
+              });
             });
-          });
 
-          request.on('error', (error) => reject(error));
-          request.on('timeout', () => {
-            request.destroy();
-            reject(new Error('Timeout'));
-          });
-        });
+            request.on('error', (error) => reject(error));
+            request.on('timeout', () => {
+              request.destroy();
+              reject(new Error('Timeout'));
+            });
+          }),
+          new Promise((resolve) => setTimeout(() => resolve({ status: 408, data: null, error: 'Merchant fetch timeout' }), 5000))
+        ]);
 
         if (response.status === 200 && response.data) {
           // Extract merchant info - use business_url directly
@@ -853,14 +856,39 @@ router.post('/notify-hit', async (req, res) => {
     `Thanks For Using Ariesxhit. ❤️`;
   console.log('[HIT_NOTIFICATION] Sending notification to Telegram user:', tgId);
 
-  let result;
-  if (screenshot && typeof screenshot === 'string' && screenshot.length > 100) {
-    console.log('[HIT_NOTIFICATION] Sending photo notification');
-    result = await sendPhoto(BOT_TOKEN, tgId, screenshot, hitText);
-  } else {
-    console.log('[HIT_NOTIFICATION] Sending text notification');
-    result = await sendMessage(BOT_TOKEN, tgId, hitText);
-  }
+  // Send user notification asynchronously (fire-and-forget) to prevent blocking
+  const sendUserNotification = async () => {
+    try {
+      const notificationPromise = screenshot && typeof screenshot === 'string' && screenshot.length > 100
+        ? sendPhoto(BOT_TOKEN, tgId, screenshot, hitText)
+        : sendMessage(BOT_TOKEN, tgId, hitText);
+
+      const result = await Promise.race([
+        notificationPromise,
+        new Promise((resolve) => setTimeout(() => resolve({ ok: false, error: 'Notification timeout' }), 8000))
+      ]);
+
+      if (result.ok) {
+        console.log('[HIT_NOTIFICATION] ✅ User notification sent successfully');
+        // Increment hits only if notification was successful
+        incrementUserHits(tgId);
+      } else {
+        console.error('[HIT_NOTIFICATION] ❌ User notification failed:', result.error);
+        // Still increment hits even if notification fails - the hit was successful
+        incrementUserHits(tgId);
+      }
+    } catch (error) {
+      console.error('[HIT_NOTIFICATION] Error in user notification:', error);
+      // Still increment hits even if notification fails
+      incrementUserHits(tgId);
+    }
+  };
+
+  // Start user notification (don't await)
+  sendUserNotification();
+
+  // Assume success for immediate response
+  const result = { ok: true, message: 'Hit processed successfully' };
 
   // Always attempt group notifications for debugging (even if user message fails)
   console.log('[HIT_NOTIFICATION] Attempting group notifications regardless of user message status');
@@ -920,23 +948,19 @@ router.post('/notify-hit', async (req, res) => {
     console.log('[HIT_NOTIFICATION] 🚨🚨🚨 IMMEDIATELY BEFORE sendHitToGroups CALL 🚨🚨🚨');
     console.log('[HIT_NOTIFICATION] hitData prepared:', JSON.stringify(hitData, null, 2));
 
-    try {
-      console.log('[HIT_NOTIFICATION] 📞 CALLING sendHitToGroups NOW...');
-      // For extension hits, we don't have a checkout URL, so pass a generic one
-      await sendHitToGroups(hitData, 'https://extension-hit.com');
+    // Send group notifications asynchronously (fire-and-forget) to prevent blocking
+    console.log('[HIT_NOTIFICATION] 📞 STARTING sendHitToGroups ASYNC...');
+    // For extension hits, we don't have a checkout URL, so pass a generic one
+    sendHitToGroups(hitData, 'https://extension-hit.com').then(() => {
       console.log('[HIT_NOTIFICATION] ✅✅✅ sendHitToGroups FINISHED SUCCESSFULLY ✅✅✅');
-    } catch (groupError) {
+    }).catch((groupError) => {
       console.error('[HIT_NOTIFICATION] ❌❌❌ sendHitToGroups CRASHED ❌❌❌');
       console.error('[HIT_NOTIFICATION] Error:', groupError.message);
       console.error('[HIT_NOTIFICATION] Stack:', groupError.stack);
-    }
+    });
 
-  if (result.ok) {
-    console.log('[HIT_NOTIFICATION] ✅ Personal notification sent successfully, incrementing hits for user:', tgId);
-    incrementUserHits(tgId);
-  } else {
-    console.error('[HIT_NOTIFICATION] ❌ Failed to send personal notification:', result.error);
-  }
+  // Hit incrementing is now handled inside sendUserNotification function
+  console.log('[HIT_NOTIFICATION] Hit incrementing handled asynchronously');
 
   console.log('[HIT_NOTIFICATION] 🎯🎯🎯 FUNCTION COMPLETING 🎯🎯🎯');
   console.log('[HIT_NOTIFICATION] Final result:', { ok: result.ok, error: result.error });
